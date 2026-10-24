@@ -73,7 +73,11 @@ func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{"《光斑》", "第 1 章  雨夜归人", "第 3 章  余烬"} {
+	// store 未显式设语种 → 本 fork 默认越南语：书名不带《》，章标题用 "Chương N"。
+	if !strings.HasPrefix(text, "光斑\n\n") {
+		t.Errorf("missing Vietnamese book title at start:\n%s", text)
+	}
+	for _, want := range []string{"Chương 1  雨夜归人", "Chương 3  余烬"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, text)
 		}
@@ -81,6 +85,30 @@ func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
 	// premise 不进导出（创作蓝图，非读者内容）
 	if strings.Contains(text, "光与影的故事。") {
 		t.Errorf("premise must not appear in export:\n%s", text)
+	}
+}
+
+// TestRun_ZHLanguageUsesChineseLayout 钉死中文作品仍导出中文版式。
+func TestRun_ZHLanguageUsesChineseLayout(t *testing.T) {
+	s, _ := newTestStore(t, "光斑", []int{1})
+	s.SetLanguage("zh")
+	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "雨夜归人"}}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(context.Background(), Deps{Store: s}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(res.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if !strings.HasPrefix(text, "《光斑》\n\n") {
+		t.Errorf("Chinese book title should use 《》: %s", text)
+	}
+	if !strings.Contains(text, "第 1 章  雨夜归人") {
+		t.Errorf("Chinese chapter header missing: %s", text)
 	}
 }
 
@@ -104,7 +132,7 @@ func TestRun_UsesCommittedTitleForCompletedChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "第 1 章  终稿标题") || strings.Contains(text, "计划标题") {
+	if !strings.Contains(text, "Chương 1  终稿标题") || strings.Contains(text, "计划标题") {
 		t.Fatalf("export title projection is wrong:\n%s", text)
 	}
 }
@@ -127,7 +155,7 @@ func TestRun_PremiseNotExported(t *testing.T) {
 	if strings.Contains(text, "不该出现的创作蓝图。") || strings.Contains(text, "目标读者") {
 		t.Errorf("premise must not be exported, got:\n%s", text)
 	}
-	if !strings.Contains(text, "《光斑》") {
+	if !strings.HasPrefix(text, "光斑\n\n") {
 		t.Errorf("book title should remain: %s", text)
 	}
 }

@@ -56,8 +56,10 @@ func buildLocations(volumes []domain.VolumeOutline) map[int]chapterLocation {
 	return locs
 }
 
-// chapterHeaderRe 匹配带章号的 Markdown 标题首行（# 第N章 / ## 第 12 章 ...）。
-var chapterHeaderRe = regexp.MustCompile(`^#+\s+第.+?章`)
+// chapterHeaderRe 匹配带章号的 Markdown 标题首行（# 第N章 / ## 第 12 章 ...
+// / # Chương 3）。同时接受两种语种：正文写作时可能在两种写法间漂移，
+// 导出器都要剥掉，避免与统一生成的章标题重复。
+var chapterHeaderRe = regexp.MustCompile(`(?i)^#+\s+(第.*章|chương\s+\d+)`)
 
 // atxTitleRe 提取 ATX 标题（# 标题）的文字部分。
 var atxTitleRe = regexp.MustCompile(`^#{1,6}\s+(.+?)\s*$`)
@@ -99,13 +101,12 @@ func renderTXT(
 	titleIdx chapterTitleIndex,
 	locations map[int]chapterLocation,
 	bodies map[int]string,
+	texts expTexts,
 ) string {
 	var b strings.Builder
 
 	if name := strings.TrimSpace(novelName); name != "" {
-		b.WriteString("《")
-		b.WriteString(name)
-		b.WriteString("》\n\n")
+		fmt.Fprintf(&b, texts.bookTitle+"\n\n", name)
 	}
 
 	useLayered := len(locations) > 0
@@ -114,16 +115,16 @@ func renderTXT(
 		if useLayered {
 			if loc, ok := locations[ch]; ok && loc.IsFirstOfVolume {
 				b.WriteString("\n═══════════════════════════════════════════\n")
-				fmt.Fprintf(&b, "           第 %d 卷  %s\n", loc.VolumeIdx, strings.TrimSpace(loc.VolumeTitle))
+				fmt.Fprintf(&b, "           "+texts.volumeFmt+"  %s\n", loc.VolumeIdx, strings.TrimSpace(loc.VolumeTitle))
 				b.WriteString("═══════════════════════════════════════════\n\n")
 			}
 		}
 
 		title := strings.TrimSpace(titleIdx[ch])
 		if title != "" {
-			fmt.Fprintf(&b, "第 %d 章  %s\n\n", ch, title)
+			fmt.Fprintf(&b, texts.chapterFmt+"  %s\n\n", ch, title)
 		} else {
-			fmt.Fprintf(&b, "第 %d 章\n\n", ch)
+			fmt.Fprintf(&b, texts.chapterFmt+"\n\n", ch)
 		}
 
 		body := stripChapterTitleHeader(strings.TrimSpace(bodies[ch]), title)

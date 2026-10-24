@@ -29,7 +29,10 @@ func TestBookStorePersistsCanonicalDataAndReadableProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := string(projection); !strings.Contains(text, "《长夜将明》") || !strings.Contains(text, "少年守住最后一盏灯。") {
+	// store 未显式设语种 → 本 fork 默认越南语，派生 Markdown 的标签走 labelsVI。
+	if text := string(projection); !strings.Contains(text, "# 长夜将明") ||
+		!strings.Contains(text, "## Giới thiệu") ||
+		!strings.Contains(text, "少年守住最后一盏灯。") {
 		t.Fatalf("unexpected book projection: %s", text)
 	}
 	if err := s.Book.Save(domain.BookMetadata{Title: "空简介"}); err == nil {

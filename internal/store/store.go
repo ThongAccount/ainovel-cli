@@ -10,6 +10,7 @@ import (
 
 	"github.com/voocel/ainovel-cli/internal/domain"
 	"github.com/voocel/ainovel-cli/internal/errs"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
 // Store 是状态管理的组合根，持有所有子存储。
@@ -85,11 +86,21 @@ func NewStore(dir string) *Store {
 }
 
 // SetLanguage 设定作品语种（"vi" / "zh"），影响所有派生 Markdown 视图的标签。
-// 启动时设一次即可；未调用则按上游默认走中文。
+// 启动时设一次即可；未调用则按本 fork 的默认走越南语。
 func (s *Store) SetLanguage(lang string) {
 	for _, x := range s.ios {
 		x.SetLanguage(lang)
 	}
+}
+
+// Language 返回当前作品语种的规范形式（"vi" / "zh"）。
+// 这是所有"模型面向文本"选择语种的唯一事实源：internal/tools 与
+// internal/host/exp 都从这里读，避免各自维护一套语言判断。
+func (s *Store) Language() string {
+	if len(s.ios) == 0 {
+		return string(i18n.LangVI)
+	}
+	return s.ios[0].Language()
 }
 
 // Dir 返回输出根目录。

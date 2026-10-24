@@ -174,7 +174,7 @@ func TestTimeline_MigratesLegacyAndAppendsProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read timeline.md: %v", err)
 	}
-	if string(markdown) != renderTimeline(loaded, labelsZH) {
+	if string(markdown) != renderTimeline(loaded, labelsVI) {
 		t.Fatalf("timeline projection not synchronized:\n%s", markdown)
 	}
 }

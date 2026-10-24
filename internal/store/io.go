@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
 // IO 封装文件系统读写操作，提供加锁和原子写入。
@@ -17,8 +19,12 @@ type IO struct {
 }
 
 // SetLanguage 设定作品语种（"vi" / "zh"），影响派生 Markdown 视图的标签。
-// 启动时设一次；空值按上游默认走中文。
-func (io *IO) SetLanguage(lang string) { io.lang = lang }
+// 启动时设一次；空值按本 fork 的默认走越南语。
+func (io *IO) SetLanguage(lang string) { io.lang = string(i18n.Normalize(lang)) }
+
+// Language 返回当前作品语种的规范形式（"vi" / "zh"）。
+// 未显式设置过时返回 "vi"——本 fork 以越南语为默认语种。
+func (io *IO) Language() string { return string(i18n.Normalize(io.lang)) }
 
 func (io *IO) labels() mdLabels { return labelsFor(io.lang) }
 

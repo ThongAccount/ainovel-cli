@@ -1,5 +1,7 @@
 package store
 
+import "github.com/voocel/ainovel-cli/internal/i18n"
+
 // mdLabels 是派生 Markdown 视图里的固定标签。
 //
 // 这些 .md 会被 novel_context 读回模型上下文，因此标签语种不只是显示问题：
@@ -29,15 +31,15 @@ type mdLabels struct {
 	hook           string
 	scenes         string
 
-	timeline         string
-	foreshadow       string
-	resolvedAtFmt    string
-	plantedAtFmt     string
-	relationships    string
-	atChapterFmt     string
-	worldRules       string
-	rule             string
-	boundary         string
+	timeline      string
+	foreshadow    string
+	resolvedAtFmt string
+	plantedAtFmt  string
+	relationships string
+	atChapterFmt  string
+	worldRules    string
+	rule          string
+	boundary      string
 }
 
 var labelsZH = mdLabels{
@@ -72,8 +74,5 @@ var labelsVI = mdLabels{
 }
 
 func labelsFor(lang string) mdLabels {
-	if lang == "vi" {
-		return labelsVI
-	}
-	return labelsZH
+	return i18n.Table(labelsVI, labelsZH, i18n.Normalize(lang))
 }

@@ -17,6 +17,8 @@ func TestStripChapterTitleHeader(t *testing.T) {
 		{"plain body untouched", "他望着窗外。", "雨夜归人", "他望着窗外。"},
 		{"strip h1 chinese title", "# 第 1 章  雨夜归人\n\n他望着窗外。", "雨夜归人", "他望着窗外。"},
 		{"strip h2 with chapter token", "## 第二章\n\n他望着窗外。", "", "他望着窗外。"},
+		{"strip h1 vietnamese title", "# Chương 1  Người trở về\n\nAnh nhìn ra cửa sổ.", "Người trở về", "Anh nhìn ra cửa sổ."},
+		{"strip h2 vietnamese chapter token", "## Chương 2\n\nAnh nhìn ra cửa sổ.", "", "Anh nhìn ra cửa sổ."},
 		{"keep body even if no header", "正文第一句。\n第二句。", "", "正文第一句。\n第二句。"},
 		{"do not strip non-chapter heading", "# 序章\n他望着窗外。", "边村浮生", "# 序章\n他望着窗外。"},
 		{"single line header only", "# 第 1 章", "", ""},
@@ -91,6 +93,7 @@ func TestRenderTXT_TitleAndChapter(t *testing.T) {
 			1: "# 第 1 章 雨夜归人\n\n他望着窗外。",
 			2: "她推开门。",
 		},
+		expTextsZH,
 	)
 	if !strings.HasPrefix(got, "《光斑》\n\n") {
 		t.Errorf("missing book title at start:\n%s", got)
@@ -117,6 +120,7 @@ func TestRenderTXT_EmptyBookTitleNoTitleLine(t *testing.T) {
 		chapterTitleIndex{1: "雨夜归人"},
 		nil,
 		map[int]string{1: "正文。"},
+		expTextsZH,
 	)
 	if strings.Contains(got, "《") {
 		t.Errorf("should not contain book title brackets: %s", got)
@@ -138,6 +142,7 @@ func TestRenderTXT_LayeredVolume(t *testing.T) {
 		chapterTitleIndex{1: "A", 2: "B"},
 		locs,
 		map[int]string{1: "正文一。", 2: "正文二。"},
+		expTextsZH,
 	)
 	if !strings.Contains(got, "第 1 卷  起源") {
 		t.Errorf("missing volume header: %s", got)
@@ -151,12 +156,41 @@ func TestRenderTXT_LayeredVolume(t *testing.T) {
 	}
 }
 
+// TestRenderTXT_VietnameseLanguage 钉死越南语版式：书名不用《》，章标题与卷分隔
+// 跟随作品语种，不得残留中文标记。
+func TestRenderTXT_VietnameseLanguage(t *testing.T) {
+	locs := map[int]chapterLocation{
+		1: {VolumeIdx: 1, VolumeTitle: "Khởi nguồn", IsFirstOfVolume: true},
+	}
+	got := renderTXT(
+		"Quang vệ",
+		[]int{1},
+		chapterTitleIndex{1: "Người trở về"},
+		locs,
+		map[int]string{1: "Anh nhìn ra cửa sổ."},
+		expTextsVI,
+	)
+	if !strings.HasPrefix(got, "Quang vệ\n\n") {
+		t.Errorf("Vietnamese book title should not use 《》: %s", got)
+	}
+	if !strings.Contains(got, "Chương 1  Người trở về") {
+		t.Errorf("missing Vietnamese chapter header: %s", got)
+	}
+	if !strings.Contains(got, "Tập 1  Khởi nguồn") {
+		t.Errorf("missing Vietnamese volume header: %s", got)
+	}
+	if strings.Contains(got, "第") || strings.Contains(got, "卷") {
+		t.Errorf("Vietnamese export must not contain Chinese markers: %s", got)
+	}
+}
+
 func TestRenderTXT_ChapterWithoutTitleFallsBackToNumberOnly(t *testing.T) {
 	got := renderTXT(
 		"", []int{5},
 		chapterTitleIndex{}, // 没有标题
 		nil,
 		map[int]string{5: "正文。"},
+		expTextsZH,
 	)
 	if !strings.Contains(got, "第 5 章\n\n") {
 		t.Errorf("expect 'first 5 章' fallback header: %s", got)

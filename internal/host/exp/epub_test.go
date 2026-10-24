@@ -20,6 +20,7 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 			1: "# 第 1 章 雨夜归人\n\n他望着窗外。\n\n第二段。",
 			2: "她推开门。",
 		},
+		expTextsZH,
 	)
 	if err != nil {
 		t.Fatalf("renderEPUB: %v", err)
@@ -135,6 +136,7 @@ func TestRenderEPUB_HTMLEscape(t *testing.T) {
 		chapterTitleIndex{1: "C \"D\""},
 		nil,
 		map[int]string{1: "正文 < & > 内容。"},
+		expTextsZH,
 	)
 	if err != nil {
 		t.Fatalf("renderEPUB: %v", err)
@@ -174,6 +176,7 @@ func TestRenderEPUB_LayeredVolume(t *testing.T) {
 		chapterTitleIndex{1: "A", 2: "B"},
 		locs,
 		map[int]string{1: "正文一。", 2: "正文二。"},
+		expTextsZH,
 	)
 	if err != nil {
 		t.Fatalf("renderEPUB: %v", err)
@@ -207,6 +210,7 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 		chapterTitleIndex{1: "唯一一章"},
 		nil,
 		map[int]string{1: "正文。"},
+		expTextsZH,
 	)
 	if err != nil {
 		t.Fatalf("renderEPUB: %v", err)
@@ -228,6 +232,92 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 		if strings.Contains(string(buf), "cover.xhtml") || strings.Contains(string(buf), `idref="cover"`) {
 			t.Errorf("OPF should not reference cover when there is none: %s", buf)
 		}
+	}
+}
+
+// TestRenderEPUB_VietnameseLanguage 钉死语种落进导出物：xml:lang、dc:language、
+// 章标题、封面与目录标题全部跟随作品语种，越南语作品不得再出现 "第 N 章"。
+func TestRenderEPUB_VietnameseLanguage(t *testing.T) {
+	data, err := renderEPUB(
+		domain.BookMetadata{Title: "Quang vệ", Synopsis: "Một câu chuyện về ánh sáng."},
+		[]int{1},
+		chapterTitleIndex{1: "Người trở về"},
+		nil,
+		map[int]string{1: "# Chương 1  Người trở về\n\nAnh nhìn ra cửa sổ."},
+		expTextsVI,
+	)
+	if err != nil {
+		t.Fatalf("renderEPUB: %v", err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	files := map[string]string{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		buf, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		files[f.Name] = string(buf)
+	}
+
+	ch1 := files["OEBPS/chapter001.xhtml"]
+	if !strings.Contains(ch1, `xml:lang="vi"`) {
+		t.Errorf("chapter xhtml should declare vi: %s", ch1)
+	}
+	if !strings.Contains(ch1, "Chương 1 Người trở về") {
+		t.Errorf("chapter should use Vietnamese heading: %s", ch1)
+	}
+	if strings.Contains(ch1, "第") {
+		t.Errorf("Vietnamian export must not contain Chinese chapter marker: %s", ch1)
+	}
+	if strings.Contains(ch1, "# Chương 1") {
+		t.Errorf("markdown chapter header should be stripped: %s", ch1)
+	}
+
+	opf := files["OEBPS/content.opf"]
+	if !strings.Contains(opf, "<dc:language>vi</dc:language>") {
+		t.Errorf("OPF should declare vi: %s", opf)
+	}
+	if !strings.Contains(opf, `xml:lang="vi"`) {
+		t.Errorf("OPF should declare vi: %s", opf)
+	}
+
+	nav := files["OEBPS/nav.xhtml"]
+	if !strings.Contains(nav, "Mục lục") {
+		t.Errorf("nav should use Vietnamese TOC title: %s", nav)
+	}
+	if !strings.Contains(nav, "Bìa") {
+		t.Errorf("nav should use Vietnamese cover label: %s", nav)
+	}
+	if !strings.Contains(files["OEBPS/cover.xhtml"], "Bìa") {
+		t.Errorf("cover should use Vietnamese label: %s", files["OEBPS/cover.xhtml"])
+	}
+}
+
+// TestRenderEPUB_ZHLanguage 钉死中文作品仍然导出中文版式。
+func TestRenderEPUB_ZHLanguage(t *testing.T) {
+	data, err := renderEPUB(
+		domain.BookMetadata{Title: "光斑", Synopsis: "简介"},
+		[]int{1},
+		chapterTitleIndex{1: "雨夜归人"},
+		nil,
+		map[int]string{1: "正文。"},
+		expTextsZH,
+	)
+	if err != nil {
+		t.Fatalf("renderEPUB: %v", err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	files := map[string]string{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		buf, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		files[f.Name] = string(buf)
+	}
+	if !strings.Contains(files["OEBPS/content.opf"], "<dc:language>zh-CN</dc:language>") {
+		t.Errorf("OPF should declare zh-CN: %s", files["OEBPS/content.opf"])
+	}
+	if !strings.Contains(files["OEBPS/chapter001.xhtml"], "第 1 章 雨夜归人") {
+		t.Errorf("chapter should use Chinese heading: %s", files["OEBPS/chapter001.xhtml"])
 	}
 }
 
