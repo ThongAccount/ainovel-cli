@@ -77,10 +77,10 @@ func testProfile(path, sha, summary string) domain.SimulationProfile {
 		}},
 		Synthesis: domain.SimulationSynthesis{
 			Style: domain.SimulationStyle{
-				NarrativeVoice: []string{"close narration"},
+				NarrativeVoice: []string{"ngôi kể gần"},
 			},
 			RoleGuidance: domain.SimulationRoleGuidance{
-				Writer: []string{"borrow structure only"},
+				Writer: []string{"chỉ mượn cấu trúc"},
 			},
 		},
 	}
