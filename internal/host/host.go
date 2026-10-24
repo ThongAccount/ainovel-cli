@@ -1522,22 +1522,25 @@ func (h *Host) ReplayQueue(afterSeq int64) ([]domain.RuntimeQueueItem, error) {
 
 // ── 共创 ──
 
-// CoCreateStream 冷启动共创：从零澄清需求，产出整本书的创作指令。
+// CoCreateStream đồng sáng tác lạnh: làm rõ nhu cầu từ đầu, sinh chỉ dẫn sáng tác cho cả tác phẩm.
 func (h *Host) CoCreateStream(ctx context.Context, history []CoCreateMessage, onProgress func(kind, text string)) (CoCreateReply, error) {
-	return coCreateStream(ctx, h.models, h.store.Sessions, coCreateSystemPrompt, history, onProgress)
+	t := hostTextsFor(h.store.Language())
+	return coCreateStream(ctx, h.models, h.store.Sessions, t.coCreateSystemPrompt, history, onProgress)
 }
 
-// StageCoCreateStream 阶段共创：在已写内容的基础上规划后续方向。
-// 系统提示 = 阶段 prompt + 当前故事状态摘要，让助手知道"已经写了什么"。
+// StageCoCreateStream đồng sáng tác theo giai đoạn: quy hoạch hướng đi tiếp theo dựa trên nội dung đã viết.
+// System prompt = prompt giai đoạn + tóm tắt trạng thái truyện hiện tại, để trợ lý biết "đã viết được những gì".
 func (h *Host) StageCoCreateStream(ctx context.Context, history []CoCreateMessage, onProgress func(kind, text string)) (CoCreateReply, error) {
-	return coCreateStream(ctx, h.models, h.store.Sessions, stageSystemPrompt(h.store), history, onProgress)
+	t := hostTextsFor(h.store.Language())
+	return coCreateStream(ctx, h.models, h.store.Sessions, stageSystemPrompt(h.store, t), history, onProgress)
 }
 
-// stagePlanPrefix 把共创产出的"后续方向 brief"包装成一条阶段规划干预，交 Arbiter 裁定。
+// stagePlanPrefix 把共创产出的"后续方向 brief"包装成一条阶段规划干预，交 Tài phán 裁定。
 // 只贴 [阶段规划] 事实标记 + 中性陈述，不写死"怎么落地"——具体路由（compass / architect /
 // user_rules）交给 arbiter-intervention.md 的「阶段规划」判据，避免与 prompt 形成第二真相源、
 // 也不堵死风格类要求走 user_rules（守"分类裁定归 LLM"）。Continue 再叠加 [用户干预] 前缀。
-const stagePlanPrefix = "[阶段规划] 我暂停创作，和共创助手一起梳理了下面的后续方向，请按你的干预分类裁定如何落地，然后继续创作。后续方向如下：\n\n"
+//
+// 前缀文本随作品语种走，见 hostTexts.stagePlanPrefix。
 
 // PauseForCoCreate 进入阶段共创：置共创占用标记，运行中则一并暂停 Engine。
 // 返回 false 表示无法进入（全书已完成或已在共创中），调用方忽略即可。
@@ -1588,7 +1591,7 @@ func (h *Host) ResumeFromCoCreate(draft string) error {
 	}
 
 	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "阶段共创完成，已注入后续方向并恢复创作", Level: "info"})
-	return h.Continue(stagePlanPrefix + draft)
+	return h.Continue(hostTextsFor(h.store.Language()).stagePlanPrefix + draft)
 }
 
 // CancelCoCreate 放弃阶段共创：清占用标记，保持暂停态（用户可在输入框继续或重启 Resume）。

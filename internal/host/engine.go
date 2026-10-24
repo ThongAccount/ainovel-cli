@@ -381,12 +381,13 @@ func (e *engine) precheck(inst *flow.Instruction) (*flow.Instruction, error) {
 		return &flow.Instruction{}, nil // 置空:下轮 Route 归 nil 自然停机
 	}
 	if inst.Agent == "writer" {
+		t := hostTextsFor(e.store.Language())
 		if progress == nil || progress.Phase != domain.PhaseWriting {
 			phase := "<nil>"
 			if progress != nil {
 				phase = string(progress.Phase)
 			}
-			return nil, fmt.Errorf("writer 仅能在 writing 阶段派发（当前 phase=%s）: %w", phase, errInvalidWriteTarget)
+			return nil, fmt.Errorf(t.writerPhaseError, phase, errInvalidWriteTarget)
 		}
 		ch, err := writerTargetChapter(e.store)
 		if err != nil {
@@ -401,8 +402,8 @@ func (e *engine) precheck(inst *flow.Instruction) (*flow.Instruction, error) {
 				// 是说给 LLM 的;Engine 直接做正确的事)。
 				return &flow.Instruction{
 					Agent:  "architect_long",
-					Task:   fmt.Sprintf("下一弧为骨架(%s)。调用 save_foundation(type=expand_arc) 展开下一弧;若当前卷已写完,改用 type=append_volume 追加并展开下一卷。", err),
-					Reason: "写作目标章未展开,先展开再续写",
+					Task:   fmt.Sprintf(t.expandArcTask, err),
+					Reason: "chương mục tiêu chưa khai triển, khai triển trước rồi viết tiếp",
 				}, nil
 			}
 		}
@@ -483,7 +484,7 @@ func (e *engine) runWorker(ctx context.Context, inst *flow.Instruction) error {
 			return runErr
 		}
 		if err := e.store.Progress.StartChapter(inst.Chapter); err != nil {
-			runErr := fmt.Errorf("%w: 预标第 %d 章进行中失败: %w", errInvalidWriteTarget, inst.Chapter, err)
+			runErr := fmt.Errorf(hostTextsFor(e.store.Language()).preMarkChapterFailed, errInvalidWriteTarget, inst.Chapter, err)
 			e.observer.dispatchFinish(inst.Agent, runErr)
 			return runErr
 		}
@@ -642,9 +643,15 @@ func contentFilterAdvice(werr error) string {
 var errInvalidWriteTarget = errors.New("非法写作目标")
 
 func (e *engine) failureFacts(kind string, inst *flow.Instruction, workerErr error) arbiter.FailureFacts {
+	t := hostTextsFor(e.store.Language())
 	f := arbiter.FailureFacts{Kind: kind, Agent: inst.Agent, Task: inst.Task, Repeats: e.repeats}
 	if workerErr != nil {
 		f.Error = workerErr.Error()
+		// gói sự thật đi vào prompt của Tài phán nên câu chữ phải theo ngôn ngữ tác phẩm;
+		// sentinel errInvalidWriteTarget dùng cho errors.Is nên giữ văn bản cố định.
+		if errors.Is(workerErr, errInvalidWriteTarget) {
+			f.Error = strings.Replace(f.Error, errInvalidWriteTarget.Error(), t.invalidWriteTarget, 1)
+		}
 		f.ErrorKind = errorKind(workerErr, f.Error)
 		if f.ErrorKind == "" {
 			f.ErrorKind = "unknown"
@@ -652,13 +659,13 @@ func (e *engine) failureFacts(kind string, inst *flow.Instruction, workerErr err
 	}
 	missing, err := e.store.FoundationMissing()
 	if err != nil {
-		f.FactWarnings = append(f.FactWarnings, "基础设定状态读取失败: "+err.Error())
+		f.FactWarnings = append(f.FactWarnings, t.foundationReadFailed+err.Error())
 	} else {
 		f.FoundationGap = missing
 	}
 	p, err := e.store.Progress.Load()
 	if err != nil {
-		f.FactWarnings = append(f.FactWarnings, "创作进度读取失败: "+err.Error())
+		f.FactWarnings = append(f.FactWarnings, t.progressReadFailed+err.Error())
 	}
 	if p != nil {
 		f.Phase = string(p.Phase)

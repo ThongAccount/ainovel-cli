@@ -185,8 +185,8 @@ func TestStageCoCreate_OccupancyBlocksConcurrentEntries(t *testing.T) {
 }
 
 func TestBuildStoryStateSummary_NilStore(t *testing.T) {
-	if got := buildStoryStateSummary(nil); got != "" {
-		t.Errorf("nil store 应返回空串，得 %q", got)
+	if got := buildStoryStateSummary(nil, hostTextsVI); got != "" {
+		t.Errorf("nil store phải trả về chuỗi rỗng, thực tế %q", got)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestBuildStoryStateSummary_Populated(t *testing.T) {
 	if err := st.Progress.Init(100); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Book.Save(domain.BookMetadata{Title: "影之诗", Synopsis: "少年追索失落的影子。"}); err != nil {
+	if err := st.Book.Save(domain.BookMetadata{Title: "Bóng thơ", Synopsis: "Thiếu niên truy tìm bóng đã lạc mất."}); err != nil {
 		t.Fatal(err)
 	}
 	p, _ := st.Progress.Load()
@@ -209,17 +209,17 @@ func TestBuildStoryStateSummary_Populated(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Outline.SaveCompass(domain.StoryCompass{
-		EndingDirection: "主角登临绝巅",
-		OpenThreads:     []string{"师门血仇未报"},
-		EstimatedScale:  "预计 4-6 卷",
+		EndingDirection: "Người chính bước lên đỉnh cao",
+		OpenThreads:     []string{"Thù hận thầy môn chưa báo"},
+		EstimatedScale:  "Dự kiến 4-6 tập",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	got := buildStoryStateSummary(st)
-	for _, want := range []string{"影之诗", "已完成 3 章", "下一章为第 4 章", "主角登临绝巅", "师门血仇未报", "预计 4-6 卷"} {
+	got := buildStoryStateSummary(st, hostTextsVI)
+	for _, want := range []string{"Bóng thơ", "đã hoàn thành 3 chương", "chương kế tiếp là chương 4", "Người chính bước lên đỉnh cao", "Thù hận thầy môn chưa báo", "Dự kiến 4-6 tập"} {
 		if !strings.Contains(got, want) {
-			t.Errorf("摘要应含 %q，实际:\n%s", want, got)
+			t.Errorf("tóm tắt phải chứa %q, thực tế:\n%s", want, got)
 		}
 	}
 }
@@ -233,8 +233,8 @@ func TestBuildStoryStateSummaryUsesDynamicPlanningWording(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Outline.SaveLayeredOutline([]domain.VolumeOutline{{
-		Index: 1, Title: "卷一", Arcs: []domain.ArcOutline{
-			{Index: 1, Chapters: []domain.OutlineEntry{{Title: "一"}, {Title: "二"}}},
+		Index: 1, Title: "Tập một", Arcs: []domain.ArcOutline{
+			{Index: 1, Chapters: []domain.OutlineEntry{{Title: "Một"}, {Title: "Hai"}}},
 			{Index: 2, EstimatedChapters: 64},
 		},
 	}}); err != nil {
@@ -249,11 +249,11 @@ func TestBuildStoryStateSummaryUsesDynamicPlanningWording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := buildStoryStateSummary(st)
-	if !strings.Contains(got, "当前已细化 2 章（后续按弧动态规划）") {
-		t.Fatalf("动态规划摘要口径错误:\n%s", got)
+	got := buildStoryStateSummary(st, hostTextsVI)
+	if !strings.Contains(got, "hiện đã chi tiết hóa 2 chương (phần sau lập kế hoạch động theo cung)") {
+		t.Fatalf("cách diễn đạt tóm tắt theo quy hoạch động sai:\n%s", got)
 	}
-	if strings.Contains(got, "66") || strings.Contains(got, "规划 2 章") {
-		t.Fatalf("动态规划摘要不得暗示固定总章数:\n%s", got)
+	if strings.Contains(got, "66") || strings.Contains(got, "dự kiến 2 chương") {
+		t.Fatalf("tóm tắt theo quy hoạch động không được ám chỉ tổng số chương cố định:\n%s", got)
 	}
 }
