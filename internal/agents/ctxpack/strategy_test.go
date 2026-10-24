@@ -10,68 +10,91 @@ import (
 	"github.com/voocel/agentcore"
 	corecontext "github.com/voocel/agentcore/context"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
+// setStoreLang đặt ngôn ngữ tác phẩm của store rồi tự khôi phục.
+// store.SetLanguage đồng bộ cả biến ngôn ngữ toàn cục của i18n, nên phải
+// khôi phục cả hai; không dùng t.Parallel() trong các test đổi ngôn ngữ.
+func setStoreLang(t *testing.T, s *storepkg.Store, lang i18n.Lang) {
+	t.Helper()
+	previousStore := s.Language()
+	previousActive := i18n.Active()
+	s.SetLanguage(string(lang))
+	t.Cleanup(func() {
+		s.SetLanguage(previousStore)
+		i18n.SetActive(string(previousActive))
+	})
+}
+
 func TestStoreSummaryCompactApplyUsesPersistentStoreData(t *testing.T) {
 	s := seededWriterStore(t)
-	strategy := NewStoreSummaryCompact(StoreSummaryCompactConfig{
-		Store:              s,
-		KeepRecentTokens:   80,
-		SummaryTokenBudget: 2000,
-	})
 
-	msgs := []agentcore.AgentMessage{
-		agentcore.UserMsg(strings.Repeat("旧上下文", 80)),
-		agentcore.Message{
-			Role:    agentcore.RoleAssistant,
-			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("旧回复", 80))},
-		},
-		agentcore.UserMsg("继续写第三章，注意承接第二章结尾。"),
-		agentcore.Message{
-			Role:    agentcore.RoleAssistant,
-			Content: []agentcore.ContentBlock{agentcore.TextBlock("收到，我先梳理当前场景。")},
-		},
-	}
+	for _, lang := range []i18n.Lang{i18n.LangVI, i18n.LangZH} {
+		t.Run(string(lang), func(t *testing.T) {
+			setStoreLang(t, s, lang)
+			texts := PromptTextsFor(lang)
 
-	out, result, err := strategy.Apply(context.Background(), msgs, msgs, corecontext.Budget{
-		Tokens:    corecontext.EstimateTotal(msgs),
-		Window:    128,
-		Threshold: 32,
-	})
-	if err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-	if !result.Applied {
-		t.Fatal("expected store summary strategy to apply")
-	}
-	if result.Name != storeSummaryStrategyName {
-		t.Fatalf("unexpected strategy name: %q", result.Name)
-	}
-	if len(out) < 2 {
-		t.Fatalf("expected summary + kept messages, got %d", len(out))
-	}
-	summary, ok := out[0].(corecontext.ContextSummary)
-	if !ok {
-		t.Fatalf("expected ContextSummary, got %T", out[0])
-	}
-	if !strings.Contains(summary.Summary, "最近章节摘要") {
-		t.Fatalf("expected persistent summaries in checkpoint, got %q", summary.Summary)
-	}
-	if !strings.Contains(summary.Summary, "当前章节计划") {
-		t.Fatalf("expected chapter plan in checkpoint, got %q", summary.Summary)
-	}
-	if !strings.Contains(summary.Summary, "活跃伏笔") {
-		t.Fatalf("expected foreshadow data in checkpoint, got %q", summary.Summary)
-	}
-	if !strings.Contains(summary.Summary, "待修审稿问题") {
-		t.Fatalf("expected pending review section in checkpoint, got %q", summary.Summary)
-	}
-	if !strings.Contains(summary.Summary, "仓库线索需要再蓄压一拍") {
-		t.Fatalf("expected pending review details in checkpoint, got %q", summary.Summary)
-	}
-	if result.Info == nil || result.Info.CompactedCount <= 0 {
-		t.Fatalf("expected compaction info, got %+v", result.Info)
+			strategy := NewStoreSummaryCompact(StoreSummaryCompactConfig{
+				Store:              s,
+				KeepRecentTokens:   80,
+				SummaryTokenBudget: 2000,
+			})
+
+			msgs := []agentcore.AgentMessage{
+				agentcore.UserMsg(strings.Repeat("ngữ cảnh cũ", 400)),
+				agentcore.Message{
+					Role:    agentcore.RoleAssistant,
+					Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("trả lời cũ", 80))},
+				},
+				agentcore.UserMsg("Tiếp tục viết chương 3, chú ý nối tiếp phần cuối chương 2."),
+				agentcore.Message{
+					Role:    agentcore.RoleAssistant,
+					Content: []agentcore.ContentBlock{agentcore.TextBlock("Nhận rồi, trước hết tôi rà lại bối cảnh hiện tại.")},
+				},
+			}
+
+			out, result, err := strategy.Apply(context.Background(), msgs, msgs, corecontext.Budget{
+				Tokens:    corecontext.EstimateTotal(msgs),
+				Window:    128,
+				Threshold: 32,
+			})
+			if err != nil {
+				t.Fatalf("Apply: %v", err)
+			}
+			if !result.Applied {
+				t.Fatal("phải áp dụng chiến lược tóm tắt từ store")
+			}
+			if result.Name != storeSummaryStrategyName {
+				t.Fatalf("tên chiến lược lạ: %q", result.Name)
+			}
+			if len(out) < 2 {
+				t.Fatalf("phải có bản tóm tắt + các tin nhắn giữ lại, got %d", len(out))
+			}
+			summary, ok := out[0].(corecontext.ContextSummary)
+			if !ok {
+				t.Fatalf("phải là ContextSummary, got %T", out[0])
+			}
+			if !strings.Contains(summary.Summary, texts.recentSummaries) {
+				t.Fatalf("bản tóm tắt phải có mục tóm tắt chương, got %q", summary.Summary)
+			}
+			if !strings.Contains(summary.Summary, texts.currentChapterPlan) {
+				t.Fatalf("bản tóm tắt phải có mục kế hoạch chương, got %q", summary.Summary)
+			}
+			if !strings.Contains(summary.Summary, texts.activeForeshadow) {
+				t.Fatalf("bản tóm tắt phải có mục manh mối, got %q", summary.Summary)
+			}
+			if !strings.Contains(summary.Summary, texts.pendingReviews) {
+				t.Fatalf("bản tóm tắt phải có mục vấn đề biên tập chờ sửa, got %q", summary.Summary)
+			}
+			if !strings.Contains(summary.Summary, "manh mối kho cần tích áp thêm một nhịp") {
+				t.Fatalf("bản tóm tắt phải có chi tiết vấn đề biên tập, got %q", summary.Summary)
+			}
+			if result.Info == nil || result.Info.CompactedCount <= 0 {
+				t.Fatalf("phải có thông tin nén, got %+v", result.Info)
+			}
+		})
 	}
 }
 
@@ -81,12 +104,19 @@ func TestWriterRestoreIncludesOptionalDataWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	text, ok, err := buildWriterRestoreText(s, restoreBudgetTokens)
-	if err != nil {
-		t.Fatalf("辅助数据损坏不应阻止恢复上下文: %v", err)
-	}
-	if !ok || !strings.Contains(text, "数据告警") || !strings.Contains(text, "style_rules") {
-		t.Fatalf("恢复上下文应向模型暴露读取告警: %q", text)
+	for _, lang := range []i18n.Lang{i18n.LangVI, i18n.LangZH} {
+		t.Run(string(lang), func(t *testing.T) {
+			setStoreLang(t, s, lang)
+			texts := PromptTextsFor(lang)
+
+			text, ok, err := buildWriterRestoreText(s, restoreBudgetTokens)
+			if err != nil {
+				t.Fatalf("dữ liệu phụ hỏng không được ngăn việc khôi phục ngữ cảnh: %v", err)
+			}
+			if !ok || !strings.Contains(text, texts.dataWarning) || !strings.Contains(text, "style_rules") {
+				t.Fatalf("ngữ cảnh khôi phục phải phơi bày cảnh báo đọc dữ liệu: %q", text)
+			}
+		})
 	}
 }
 
@@ -107,10 +137,10 @@ func TestStoreSummaryCompactApplyFallsBackWhenStoreDataInsufficient(t *testing.T
 
 	strategy := NewStoreSummaryCompact(StoreSummaryCompactConfig{Store: s, KeepRecentTokens: 20})
 	msgs := []agentcore.AgentMessage{
-		agentcore.UserMsg(strings.Repeat("旧上下文", 40)),
+		agentcore.UserMsg(strings.Repeat("ngữ cảnh cũ", 40)),
 		agentcore.Message{
 			Role:    agentcore.RoleAssistant,
-			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("旧回复", 40))},
+			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("trả lời cũ", 40))},
 		},
 	}
 
@@ -123,10 +153,10 @@ func TestStoreSummaryCompactApplyFallsBackWhenStoreDataInsufficient(t *testing.T
 		t.Fatalf("Apply: %v", err)
 	}
 	if result.Applied {
-		t.Fatal("expected no-op when persistent memory is insufficient")
+		t.Fatal("khi dữ liệu lưu trữ không đủ thì phải không làm gì")
 	}
 	if len(out) != len(msgs) {
-		t.Fatalf("expected messages unchanged, got %d", len(out))
+		t.Fatalf("các tin nhắn phải giữ nguyên, got %d", len(out))
 	}
 }
 
@@ -140,21 +170,42 @@ func TestWriterRestorePackRefreshReusesStoreBuilder(t *testing.T) {
 		t.Fatalf("buildMessage: %v", err)
 	}
 	if !ok {
-		t.Fatal("expected restore pack message")
+		t.Fatal("phải có tin nhắn khôi phục")
 	}
 	text := msg.TextContent()
 	if !strings.Contains(text, "<post-compact-context>") {
-		t.Fatalf("expected wrapped restore context, got %q", text)
+		t.Fatalf("phải bọc ngữ cảnh khôi phục, got %q", text)
 	}
-	if !strings.Contains(text, "待修审稿问题") {
-		t.Fatalf("expected pending review section, got %q", text)
+	texts := PromptTextsFor(i18n.Normalize(s.Language()))
+	if !strings.Contains(text, texts.pendingReviews) {
+		t.Fatalf("phải có mục vấn đề biên tập chờ sửa, got %q", text)
 	}
-	if !strings.Contains(text, "当前章节计划") {
-		t.Fatalf("expected chapter plan section, got %q", text)
+	if !strings.Contains(text, texts.currentChapterPlan) {
+		t.Fatalf("phải có mục kế hoạch chương, got %q", text)
 	}
 
 	if _, _, err := pack.buildMessage(0); err == nil {
-		t.Fatal("expected an explicit error when the restore pack does not fit")
+		t.Fatal("phải trả lỗi tường minh khi gói khôi phục không vừa ngân sách")
+	}
+}
+
+// TestPromptTextsFollowWorkLanguage kiểm tra prompt tóm tắt của Writer đổi
+// theo ngôn ngữ tác phẩm.
+func TestPromptTextsFollowWorkLanguage(t *testing.T) {
+	vi := PromptTextsFor(i18n.LangVI)
+	zh := PromptTextsFor(i18n.LangZH)
+
+	if !strings.Contains(vi.SummarySystem, "trợ lý tóm tắt ngữ cảnh") {
+		t.Fatalf("prompt hệ thống tiếng Việt sai: %q", vi.SummarySystem)
+	}
+	if !strings.Contains(zh.SummarySystem, "小说创作上下文摘要助手") {
+		t.Fatalf("prompt hệ thống tiếng Trung sai: %q", zh.SummarySystem)
+	}
+	if !strings.Contains(vi.Summary, "Tiến độ hiện tại") {
+		t.Fatalf("prompt tóm tắt tiếng Việt phải dùng nhãn tiếng Việt: %q", vi.Summary)
+	}
+	if !strings.Contains(zh.Summary, "当前进度") {
+		t.Fatalf("prompt tóm tắt tiếng Trung phải dùng nhãn tiếng Trung: %q", zh.Summary)
 	}
 }
 
@@ -175,51 +226,51 @@ func seededWriterStore(t *testing.T) *storepkg.Store {
 		t.Fatalf("Save progress: %v", err)
 	}
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "第一章", CoreEvent: "开场"},
-		{Chapter: 2, Title: "第二章", CoreEvent: "冲突升级"},
-		{Chapter: 3, Title: "第三章", CoreEvent: "追查线索", Scenes: []string{"主角追查失踪案", "发现旧仓库线索"}},
+		{Chapter: 1, Title: "Chương 1", CoreEvent: "Mở đầu"},
+		{Chapter: 2, Title: "Chương 2", CoreEvent: "Xung đột leo thang"},
+		{Chapter: 3, Title: "Chương 3", CoreEvent: "Truy tìm manh mối", Scenes: []string{"Người dẫn chuyện truy tìm vụ mất tích", "Phát hiện manh mối ở kho cũ"}},
 	}); err != nil {
 		t.Fatalf("SaveOutline: %v", err)
 	}
 	if err := s.Drafts.SaveChapterPlan(domain.ChapterPlan{
 		Chapter:    3,
-		Title:      "第三章",
-		Goal:       "推进失踪案调查",
-		Conflict:   "主角与搭档对调查方向分歧",
-		Hook:       "仓库中发现可疑录音",
-		EmotionArc: "怀疑到紧张",
+		Title:      "Chương 3",
+		Goal:       "Đẩy tiến điều tra vụ mất tích",
+		Conflict:   "Người dẫn chuyện và đồng hành bất đồng về hướng điều tra",
+		Hook:       "Trong kho phát hiện băng thu đáng ngờ",
+		EmotionArc: "Từ nghi ngờ đến căng thẳng",
 	}); err != nil {
 		t.Fatalf("SaveChapterPlan: %v", err)
 	}
 	if err := s.Summaries.SaveSummary(domain.ChapterSummary{
 		Chapter:    1,
-		Summary:    "主角接下委托，发现失踪案并不简单。",
-		Characters: []string{"林岚", "周策"},
-		KeyEvents:  []string{"委托成立"},
+		Summary:    "Người dẫn chuyện nhận việc, phát hiện vụ mất tích không đơn giản.",
+		Characters: []string{"Lâm Lam", "Châu Trạc"},
+		KeyEvents:  []string{"Việc được giao thành lập"},
 	}); err != nil {
 		t.Fatalf("SaveSummary 1: %v", err)
 	}
 	if err := s.Summaries.SaveSummary(domain.ChapterSummary{
 		Chapter:    2,
-		Summary:    "两人追查旧码头，线索指向废弃仓库。",
-		Characters: []string{"林岚", "周策", "沈叔"},
-		KeyEvents:  []string{"旧码头冲突", "仓库线索出现"},
+		Summary:    "Hai người truy tìm bến cũ, manh mối chỉ về kho bỏ hoang.",
+		Characters: []string{"Lâm Lam", "Châu Trạc", "Thúc bá"},
+		KeyEvents:  []string{"Xung đột ở bến cũ", "Manh mối kho xuất hiện"},
 	}); err != nil {
 		t.Fatalf("SaveSummary 2: %v", err)
 	}
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
-		{ID: "tape", Description: "失踪者留下的录音带", PlantedAt: 2, Status: "planted"},
+		{ID: "tape", Description: "Băng thu người mất tích để lại", PlantedAt: 2, Status: "planted"},
 	}); err != nil {
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
 	if err := s.World.SaveTimeline([]domain.TimelineEvent{
-		{Chapter: 2, Time: "夜晚", Event: "旧码头交锋", Characters: []string{"林岚", "周策"}},
+		{Chapter: 2, Time: "Ban đêm", Event: "Chạm trán ở bến cũ", Characters: []string{"Lâm Lam", "Châu Trạc"}},
 	}); err != nil {
 		t.Fatalf("SaveTimeline: %v", err)
 	}
 	if err := s.World.SaveStyleRules(domain.WritingStyleRules{
-		Prose:  []string{"句子偏短，保持压迫感"},
-		Taboos: []string{"避免直白解释谜团"},
+		Prose:  []string{"Câu ngắn, giữ chút nghẹt thở"},
+		Taboos: []string{"Tránh giải thích bí ẩn quá thẳng"},
 	}); err != nil {
 		t.Fatalf("SaveStyleRules: %v", err)
 	}
@@ -227,16 +278,16 @@ func seededWriterStore(t *testing.T) *storepkg.Store {
 		Chapter: 2,
 		Scope:   "chapter",
 		Verdict: "polish",
-		Summary: "第二章结尾铺垫偏急，需要补一拍仓库前的压迫感。",
+		Summary: "Phần dựng trước kết chương 2 hơi vội, cần bồi thêm nhịp nghẹt trước kho.",
 		Issues: []domain.ConsistencyIssue{
 			{
 				Type:        "pacing",
 				Severity:    "warning",
-				Description: "仓库线索出现过快，悬疑蓄压不够。",
-				Suggestion:  "在进入仓库前增加一段迟疑与环境压迫描写。",
+				Description: "Manh mối kho xuất hiện quá sớm, chưa đủ tích áp suspense.",
+				Suggestion:  "Thêm một đoạn do dự và miêu tả khí áp môi trường trước khi vào kho.",
 			},
 		},
-		ContractMisses: []string{"章末钩子不够强"},
+		ContractMisses: []string{"Câu móc cuối chương chưa đủ mạnh"},
 	}); err != nil {
 		t.Fatalf("Save chapter review: %v", err)
 	}
@@ -244,7 +295,7 @@ func seededWriterStore(t *testing.T) *storepkg.Store {
 		Chapter: 2,
 		Scope:   "global",
 		Verdict: "polish",
-		Summary: "第二章尾声节奏偏快，仓库线索需要再蓄压一拍。",
+		Summary: "Nhịp điệu phần cuối chương 2 hơi nhanh, manh mối kho cần tích áp thêm một nhịp.",
 	}); err != nil {
 		t.Fatalf("SaveReview: %v", err)
 	}

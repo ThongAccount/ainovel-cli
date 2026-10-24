@@ -1,15 +1,20 @@
 package agents
 
-// 端到端验证 save_review 硬停 + 任务感知 StopGuard 的组合行为（build.go editor
-// 配置的真实接线：StopAfterToolResult 命中 save_review/save_*_summary、
-// StopGuardFactory 用真 guard、工具落真 checkpoint）。
+// Kiểm thử đầu-cuối hành vi kết hợp của dừng cứng save_review và StopGuard
+// có nhận biết nhiệm vụ (đúng cách nối thật trong cấu hình editor ở build.go:
+// StopAfterToolResult chạm save_review/save_*_summary, StopGuardFactory dùng
+// guard thật, công cụ ghi checkpoint thật).
 //
-// 场景一（摘要任务先复核）：editor 被派生成弧摘要，却先调了 save_review——
-// 硬停触发但 guard 否决，注入催促后 editor 走到 save_arc_summary 才真正退出。
-// 这是恢复 save_review 硬停的安全前提，防止弧摘要永不落盘的死循环回归。
+// Kịch bản một (nhiệm vụ tóm tắt nhưng soát duyệt trước): editor được phân
+// công sinh tóm tắt cung nhưng lại gọi save_review — dừng cứng có hiệu lực
+// nhưng guard bác, sau khi chèn thông điệp thúc thì editor mới đi tới
+// save_arc_summary rồi mới thoát thật.
+// Đây là tiền đề an toàn cho việc khôi phục dừng cứng save_review, chặn vòng
+// lặp vô hạn khi tóm tắt cung không bao giờ được ghi xuống đĩa.
 //
-// 场景二（评审任务一步收尾）：editor 被派评审，save_review 落盘即硬停放行，
-// 不再多跑一轮 LLM 收尾。
+// Kịch bản hai (nhiệm vụ biên tập chốt sau một bước): editor được phân công
+// biên tập, save_review ghi xuống đĩa là dừng cứng cho qua, không chạy thêm
+// một lượt LLM để chốt.
 
 import (
 	"context"
@@ -24,7 +29,8 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// editorStopAfterToolResult 与 build.go 中 editor 的配置保持同一判据。
+// editorStopAfterToolResult giữ cùng tiêu chí với cấu hình editor trong
+// build.go.
 func editorStopAfterToolResult(toolName string, _ json.RawMessage) bool {
 	return toolName == "save_review" || toolName == "save_arc_summary" || toolName == "save_volume_summary"
 }
@@ -34,7 +40,7 @@ func checkpointTool(t *testing.T, st *store.Store, name, step string) agentcore.
 	return agentcore.NewFuncTool(name, "fake "+name, map[string]any{"type": "object"},
 		func(context.Context, json.RawMessage) (json.RawMessage, error) {
 			if _, err := st.Checkpoints.Append(domain.ArcScope(1, 1), step, "artifact", "digest"); err != nil {
-				t.Fatalf("append checkpoint %s: %v", step, err)
+				t.Fatalf("ghi checkpoint %s: %v", step, err)
 			}
 			return json.RawMessage(`"saved"`), nil
 		})
@@ -57,7 +63,7 @@ func runEditorLike(t *testing.T, st *store.Store, task string, model agentcore.C
 	tool := subagent.NewRunner(cfg).AsTool()
 	args, _ := json.Marshal(map[string]string{"agent": "editor", "task": task})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
-		t.Fatalf("subagent execute: %v", err)
+		t.Fatalf("chạy subagent: %v", err)
 	}
 }
 
@@ -71,22 +77,22 @@ func TestEditorFlow_SummaryTaskSurvivesEarlyReview(t *testing.T) {
 	model := &contractModel{fn: func(i int, _ []agentcore.Message) (*agentcore.LLMResponse, error) {
 		switch i {
 		case 0:
-			// 跑偏：摘要任务却先复核。
+			// Lệch hướng: nhiệm vụ sinh tóm tắt nhưng lại soát duyệt trước.
 			return &agentcore.LLMResponse{Message: assistantToolCall("save_review", `{}`)}, nil
 		default:
-			// guard 否决硬停并注入催促后，本轮才产出摘要。
+			// Guard bác lần dừng cứng và chèn lời thúc, lượt này mới ra tóm tắt.
 			calls.Add(1)
 			return &agentcore.LLMResponse{Message: assistantToolCall("save_arc_summary", `{}`)}, nil
 		}
 	}}
 
-	runEditorLike(t, st, "生成第 1 卷第 1 弧摘要（save_arc_summary）", model, []agentcore.Tool{
+	runEditorLike(t, st, "Sinh tóm tắt cung 1 của tập 1 (save_arc_summary)", model, []agentcore.Tool{
 		checkpointTool(t, st, "save_review", "review"),
 		checkpointTool(t, st, "save_arc_summary", "arc_summary"),
 	})
 
 	if calls.Load() == 0 {
-		t.Fatal("save_review 硬停被 guard 否决后，editor 应继续走到 save_arc_summary——若 run 在复核后直接结束，说明终态退出绕过了 guard，弧摘要死循环会回归")
+		t.Fatal("sau khi guard bác lần dừng cứng save_review, editor phải đi tiếp tới save_arc_summary — nếu run kết thúc ngay sau khi soát duyệt thì lần thoát trạng thái cuối đã đi vòng qua guard và vòng lặp vô hạn tóm tắt cung sẽ quay lại")
 	}
 	all := st.Checkpoints.All()
 	var hasSummary bool
@@ -96,7 +102,7 @@ func TestEditorFlow_SummaryTaskSurvivesEarlyReview(t *testing.T) {
 		}
 	}
 	if !hasSummary {
-		t.Fatal("弧摘要必须最终落盘")
+		t.Fatal("tóm tắt cung phải cuối cùng được ghi xuống đĩa")
 	}
 }
 
@@ -110,15 +116,15 @@ func TestEditorFlow_ReviewTaskStopsAtSaveReview(t *testing.T) {
 		if i == 0 {
 			return &agentcore.LLMResponse{Message: assistantToolCall("save_review", `{}`)}, nil
 		}
-		t.Fatal("评审任务 save_review 落盘后应硬停，模型不应获得额外轮次")
+		t.Fatal("nhiệm vụ biên tập phải dừng cứng sau khi save_review ghi xuống đĩa, model không được có thêm lượt")
 		return nil, nil
 	}}
 
-	runEditorLike(t, st, "对第 1 卷第 1 弧做弧级评审（scope=arc）", model, []agentcore.Tool{
+	runEditorLike(t, st, "Biên tập cấp cung 1 của tập 1 (scope=arc)", model, []agentcore.Tool{
 		checkpointTool(t, st, "save_review", "review"),
 	})
 
 	if got := model.calls(); got != 1 {
-		t.Fatalf("评审任务应恰好一次模型调用后收尾，got %d", got)
+		t.Fatalf("nhiệm vụ biên tập phải chốt sau đúng một lượt gọi model, got %d", got)
 	}
 }

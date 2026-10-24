@@ -1,22 +1,31 @@
 package agents
 
-// agentcore 契约测试：把本项目依赖的框架行为钉成可执行断言。
-// 每条测试标注依赖方；bump agentcore 前必须全绿——注释会过时，测试不会。
-// 全部经 subagent.Runner.Run 驱动——这是 Engine 的实际派发通道。
+// Hợp đồng kiểm thử agentcore: đóng băng hành vi khung mà dự án này dựa vào
+// thành các khẳng định chạy được.
+// Mỗi kiểm thử đều ghi rõ bên phụ thuộc; phải xanh hết trước khi nâng cấp
+// agentcore — comment thì lỗi thời, còn kiểm thử thì không.
+// Tất cả đều chạy qua subagent.Runner.Run — đó là kênh phân công thật của
+// Engine.
 //
-// 已钉死的契约：
-//  1. StopAfterTools/StopAfterToolResult 终态退出会经过 StopGuard（StopTriggerAfterTool），
-//     guard 否决（InjectMessage）能把 run 拉回继续 —— guard/subagent_guards.go 的任务感知
-//     EditorStopGuard 依赖此行为兜住"被派生成摘要却只做了复核"的提前退出。
-//  2. StopReasonError / StopReasonAborted 直接终止 run，不触达 StopGuard ——
-//     guard/subagent_guards.go 的 hardStopReasons 因此只需列 safety/content_filter。
-//  3. provider 拒答（safety 等非 error 停机）会以 end_turn 路径触达 StopGuard，
-//     且 info.Message.StopReason 保留原值 —— hardStopReasons 的立即升级依赖此路径。
-//  4. StopGuard 返回 InjectMessage 后模型获得新一轮；返回 Escalate 立即终止，
-//     且错误链可被 errors.Is(err, agentcore.ErrStopGuard) 匹配 ——
-//     guard/stop_guard.go 的"物理不可停机"与超限升级依赖此语义。
-//  5. Runner.Run 的错误保持类型化链：未注册 agent 匹配 subagent.ErrUnknownAgent ——
-//     host/engine.go 的 isDeterministicWorkerError 依赖此分类而非错误文案。
+// Các hợp đồng đã đóng băng:
+//  1. Lần thoát trạng thái cuối qua StopAfterTools/StopAfterToolResult sẽ đi
+//     qua StopGuard (StopTriggerAfterTool), guard bác (InjectMessage) kéo được
+//     run quay lại tiếp tục — EditorStopGuard có nhận biết nhiệm vụ trong
+//     guard/subagent_guards.go dựa vào hành vi này để bắt lần thoát sớm kiểu
+//     "được phân công sinh tóm tắt nhưng chỉ làm soát duyệt".
+//  2. StopReasonError / StopReasonAborted dừng run trực tiếp, không chạm
+//     StopGuard — vì vậy hardStopReasons trong guard/subagent_guards.go chỉ
+//     cần liệt kê safety/content_filter.
+//  3. Provider từ chối (safety và các dừng không phải error) đi tới StopGuard
+//     qua đường end_turn, và info.Message.StopReason giữ nguyên giá trị —
+//     nâng cấp ngay của hardStopReasons phụ thuộc đúng đường này.
+//  4. StopGuard trả InjectMessage thì model có được một lượt mới; trả
+//     Escalate thì dừng ngay, và chuỗi lỗi so khớp được bằng
+//     errors.Is(err, agentcore.ErrStopGuard) — ngữ nghĩa "không thể dừng vật
+//     lý" và nâng cấp quá ngưỡng trong guard/stop_guard.go phụ thuộc điều này.
+//  5. Lỗi của Runner.Run giữ chuỗi kiểu: agent chưa đăng ký khớp
+//     subagent.ErrUnknownAgent — isDeterministicWorkerError trong
+//     host/engine.go dựa vào phân loại này chứ không dựa vào văn bản lỗi.
 
 import (
 	"context"
@@ -30,7 +39,7 @@ import (
 	"github.com/voocel/agentcore/subagent"
 )
 
-// contractModel 按调用序号返回预设响应的 mock 模型。
+// contractModel là mô hình giả trả về đáp án định sẵn theo thứ tự gọi.
 type contractModel struct {
 	fn  func(i int, msgs []agentcore.Message) (*agentcore.LLMResponse, error)
 	idx int64
@@ -85,18 +94,22 @@ func okTool(name string) agentcore.Tool {
 		})
 }
 
-// runSubagent 用给定配置经 Runner.Run（Engine 的派发通道）跑一次单派发。
-// 返回执行错误——StopGuard 升级终止会以 error 形式浮出（这本身也是契约），
-// 期望正常结束的用例自行断言 nil。
+// runSubagent chạy một lượt phân công qua Runner.Run (kênh phân công của
+// Engine) với cấu hình cho trước.
+// Trả về lỗi thực thi — lần nâng cấp của StopGuard sẽ nổi lên dưới dạng
+// error (điều này cũng là hợp đồng); các ca kỳ vọng kết thúc bình thường tự
+// khẳng định nil.
 func runSubagent(t *testing.T, cfg subagent.Config) error {
 	t.Helper()
 	_, err := subagent.NewRunner(cfg).Run(context.Background(), cfg.Name, "contract")
 	return err
 }
 
-// 契约 1：终态工具退出经过 StopGuard；guard 否决（InjectMessage）后 run 继续。
-// 依赖方：EditorStopGuard —— save_review 等终态工具命中后，任务感知 guard 必须
-// 有机会把"产物未落盘"的提前退出拉回来。
+// Hợp đồng 1: lần thoát bằng công cụ trạng thái cuối đi qua StopGuard; guard bác
+// (InjectMessage) thì run tiếp tục.
+// Bên phụ thuộc: EditorStopGuard — khi các công cụ trạng thái cuối như
+// save_review được chạm tới, guard có nhận biết nhiệm vụ phải có cơ hội kéo
+// lại lần thoát sớm kiểu "sản phẩm chưa ghi xuống đĩa".
 func TestContract_TerminalToolExitConsultsStopGuard(t *testing.T) {
 	var guardCalls atomic.Int32
 	var trigger atomic.Value
@@ -106,7 +119,8 @@ func TestContract_TerminalToolExitConsultsStopGuard(t *testing.T) {
 		case 0:
 			return &agentcore.LLMResponse{Message: assistantToolCall("finish", `{}`)}, nil
 		default:
-			// guard 否决终态退出后模型必须获得新一轮；这轮正常结束。
+			// Sau khi guard bác lần thoát trạng thái cuối, model phải có được
+			// một lượt mới; lượt này kết thúc bình thường.
 			return &agentcore.LLMResponse{Message: assistantText("done", agentcore.StopReasonStop)}, nil
 		}
 	}}
@@ -124,28 +138,30 @@ func TestContract_TerminalToolExitConsultsStopGuard(t *testing.T) {
 				n := guardCalls.Add(1)
 				if n == 1 {
 					trigger.Store(info.Trigger)
-					return agentcore.StopDecision{Allow: false, InjectMessage: "还没落盘，继续"}
+					return agentcore.StopDecision{Allow: false, InjectMessage: "chưa ghi xuống đĩa, tiếp tục"}
 				}
 				return agentcore.StopDecision{Allow: true}
 			}
 		},
 	}); err != nil {
-		t.Fatalf("subagent execute: %v", err)
+		t.Fatalf("chạy subagent: %v", err)
 	}
 
 	if guardCalls.Load() < 2 {
-		t.Fatalf("终态工具退出必须触达 StopGuard 且否决后继续（期望 ≥2 次咨询），got %d", guardCalls.Load())
+		t.Fatalf("lần thoát bằng công cụ trạng thái cuối phải chạm StopGuard và tiếp tục sau khi bị bác (kỳ vọng ≥2 lần hỏi), got %d", guardCalls.Load())
 	}
 	if got := trigger.Load(); got != agentcore.StopTriggerAfterTool {
-		t.Fatalf("终态退出的 Trigger 应为 StopTriggerAfterTool，got %v", got)
+		t.Fatalf("Trigger của lần thoát trạng thái cuối phải là StopTriggerAfterTool, got %v", got)
 	}
 	if model.calls() < 2 {
-		t.Fatalf("guard 否决后模型应获得新一轮，got %d calls", model.calls())
+		t.Fatalf("sau khi guard bác, model phải có một lượt mới, got %d calls", model.calls())
 	}
 }
 
-// 契约 2：StopReasonError / StopReasonAborted 直接终止，不触达 StopGuard。
-// 依赖方：hardStopReasons 注释——只需处理会真正走到 guard 的拒答语义。
+// Hợp đồng 2: StopReasonError / StopReasonAborted dừng trực tiếp, không chạm
+// StopGuard.
+// Bên phụ thuộc: chú thích hardStopReasons — chỉ cần xử lý ngữ nghĩa từ chối
+// thật sự đi tới guard.
 func TestContract_ErrorAndAbortedStopSkipStopGuard(t *testing.T) {
 	for _, stop := range []agentcore.StopReason{agentcore.StopReasonError, agentcore.StopReasonAborted} {
 		t.Run(string(stop), func(t *testing.T) {
@@ -162,16 +178,17 @@ func TestContract_ErrorAndAbortedStopSkipStopGuard(t *testing.T) {
 						return agentcore.StopDecision{Allow: true}
 					}
 				},
-			}) // error/aborted 停机的 error 语义由 subagent 层定义，这里只关心 guard 是否被触达
+			}) // Ngữ nghĩa lỗi của lần dừng error/aborted do lớp subagent định nghĩa, ở đây chỉ quan tâm guard có được chạm tới hay không
 			if guardCalls.Load() != 0 {
-				t.Fatalf("%s 停机不应触达 StopGuard，got %d 次咨询", stop, guardCalls.Load())
+				t.Fatalf("lần dừng %s không được chạm StopGuard, got %d lần hỏi", stop, guardCalls.Load())
 			}
 		})
 	}
 }
 
-// 契约 3：provider 拒答（safety 等）走 end_turn 路径触达 StopGuard，
-// 且 info.Message.StopReason 保留原值。依赖方：hardStopReasons 的立即升级。
+// Hợp đồng 3: provider từ chối (safety…) đi tới StopGuard qua đường end_turn, và
+// info.Message.StopReason giữ nguyên giá trị.
+// Bên phụ thuộc: nâng cấp ngay của hardStopReasons.
 func TestContract_SafetyStopReachesStopGuardWithReason(t *testing.T) {
 	var seen atomic.Value
 	model := &contractModel{fn: func(int, []agentcore.Message) (*agentcore.LLMResponse, error) {
@@ -188,22 +205,23 @@ func TestContract_SafetyStopReachesStopGuardWithReason(t *testing.T) {
 		},
 	})
 	if got := seen.Load(); got != agentcore.StopReason("safety") {
-		t.Fatalf("StopGuard 应看到原始 stop reason safety，got %v", got)
+		t.Fatalf("StopGuard phải thấy stop reason safety gốc, got %v", got)
 	}
 	if !errors.Is(err, agentcore.ErrStopGuard) {
-		t.Fatalf("Escalate 应以可 errors.Is(agentcore.ErrStopGuard) 的错误浮出，got %v", err)
+		t.Fatalf("Escalate phải nổi lên dưới dạng lỗi so khớp được bằng errors.Is(agentcore.ErrStopGuard), got %v", err)
 	}
 }
 
-// 契约 4：end_turn 时 InjectMessage 让模型获得新一轮且注入内容在场；
-// Escalate 立即终止，模型不再被调用。依赖方：Worker StopGuard 的
-// "物理不可停机 + 连续超限升级"。
+// Hợp đồng 4: khi end_turn, InjectMessage cho model một lượt mới và nội dung
+// chèn phải có mặt;
+// Escalate dừng ngay, model không được gọi nữa. Bên phụ thuộc: StopGuard của
+// Worker với ngữ nghĩa "không thể dừng vật lý + nâng cấp quá ngưỡng".
 func TestContract_StopGuardInjectContinuesEscalateTerminates(t *testing.T) {
 	var sawInject atomic.Bool
 	model := &contractModel{fn: func(i int, msgs []agentcore.Message) (*agentcore.LLMResponse, error) {
 		if i > 0 {
 			for _, m := range msgs {
-				if strings.Contains(m.TextContent(), "禁止结束-契约") {
+				if strings.Contains(m.TextContent(), "Cấm kết thúc-hợp đồng") {
 					sawInject.Store(true)
 				}
 			}
@@ -219,7 +237,7 @@ func TestContract_StopGuardInjectContinuesEscalateTerminates(t *testing.T) {
 			return func(context.Context, agentcore.StopInfo) agentcore.StopDecision {
 				switch guardCalls.Add(1) {
 				case 1:
-					return agentcore.StopDecision{Allow: false, InjectMessage: "禁止结束-契约"}
+					return agentcore.StopDecision{Allow: false, InjectMessage: "Cấm kết thúc-hợp đồng"}
 				default:
 					return agentcore.StopDecision{Allow: false, Escalate: true}
 				}
@@ -231,19 +249,21 @@ func TestContract_StopGuardInjectContinuesEscalateTerminates(t *testing.T) {
 	}
 
 	if !sawInject.Load() {
-		t.Fatal("InjectMessage 后模型的下一轮请求里应包含注入消息")
+		t.Fatal("lượt kế tiếp của model phải chứa thông điệp được chèn")
 	}
 	if guardCalls.Load() != 2 {
-		t.Fatalf("期望 guard 恰被咨询 2 次（1 注入 + 1 升级），got %d", guardCalls.Load())
+		t.Fatalf("guard phải được hỏi đúng 2 lần (1 chèn + 1 nâng cấp), got %d", guardCalls.Load())
 	}
 	if model.calls() != 2 {
-		t.Fatalf("Escalate 后模型不应再被调用，期望恰 2 次，got %d", model.calls())
+		t.Fatalf("sau khi Escalate, model không được gọi nữa, kỳ vọng đúng 2 lần, got %d", model.calls())
 	}
 }
 
-// 契约 5：Runner.Run 的错误保持类型化链——未注册 agent 以 subagent.ErrUnknownAgent
-// 浮出。依赖方：host/engine.go 的 isDeterministicWorkerError（"重试必然同错→
-// 直接暂停"的分类依赖 errors.Is,而非错误文案匹配）。
+// Hợp đồng 5: lỗi của Runner.Run giữ chuỗi kiểu — agent chưa đăng ký nổi lên
+// dưới dạng subagent.ErrUnknownAgent.
+// Bên phụ thuộc: isDeterministicWorkerError trong host/engine.go (phân loại
+// "thử lại chắc chắn lỗi lặp lại → dừng" dựa vào errors.Is chứ không dựa vào
+// văn bản lỗi).
 func TestContract_RunUnknownAgentIsTyped(t *testing.T) {
 	runner := subagent.NewRunner(subagent.Config{
 		Name: "writer", Description: "contract",
@@ -254,6 +274,6 @@ func TestContract_RunUnknownAgentIsTyped(t *testing.T) {
 	})
 	_, err := runner.Run(context.Background(), "ghost", "contract")
 	if !errors.Is(err, subagent.ErrUnknownAgent) {
-		t.Fatalf("未注册 agent 应匹配 subagent.ErrUnknownAgent，got %v", err)
+		t.Fatalf("agent chưa đăng ký phải khớp subagent.ErrUnknownAgent, got %v", err)
 	}
 }

@@ -9,12 +9,15 @@ import (
 	"github.com/voocel/agentcore"
 	corecontext "github.com/voocel/agentcore/context"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
 const defaultStoreSummaryBudgetTokens = 7000
 
 type writerStoreSummaryState struct {
+	// texts là bảng văn bản theo ngôn ngữ tác phẩm (lấy từ store.Language()).
+	texts             *PromptTexts
 	progress          *domain.Progress
 	chapter           int
 	currentOutline    *domain.OutlineEntry
@@ -32,7 +35,7 @@ type writerStoreSummaryState struct {
 
 func (s *writerStoreSummaryState) warn(scope string, err error) {
 	if s != nil && err != nil {
-		s.warnings = append(s.warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+		s.warnings = append(s.warnings, fmt.Sprintf(s.texts.readFailed, scope, err))
 	}
 }
 
@@ -64,7 +67,7 @@ func buildWriterStoreSummaryText(s *store.Store, budgetTokens int) (string, bool
 	if len(parts) == 0 {
 		return "", false, nil
 	}
-	return "以下内容来自小说持久化 store，用于在压缩后恢复写作上下文。\n\n" + strings.Join(parts, "\n\n"), true, nil
+	return state.texts.storeSummaryPrefix + "\n\n" + strings.Join(parts, "\n\n"), true, nil
 }
 
 func buildWriterRestoreText(s *store.Store, budgetTokens int) (string, bool, error) {
@@ -114,6 +117,7 @@ func loadWriterStoreSummaryState(s *store.Store) (*writerStoreSummaryState, bool
 	}
 
 	state := &writerStoreSummaryState{
+		texts:    PromptTextsFor(storeLang(s)),
 		progress: progress,
 		chapter:  chapter,
 	}
@@ -192,6 +196,7 @@ func loadWriterRestoreState(s *store.Store) (*writerStoreSummaryState, error) {
 	}
 
 	state := &writerStoreSummaryState{
+		texts:    PromptTextsFor(storeLang(s)),
 		progress: progress,
 		chapter:  chapter,
 	}
@@ -251,36 +256,38 @@ func writerStoreProgressSection(state *writerStoreSummaryState) map[string]any {
 }
 
 func writerStoreSummarySections(state *writerStoreSummaryState) []writerStoreSection {
+	texts := state.texts
 	return []writerStoreSection{
-		{heading: "当前进度", data: writerStoreProgressSection(state)},
-		{heading: "数据告警", data: state.warnings},
-		{heading: "最近章节摘要", data: state.recentSummaries},
-		{heading: "当前章节计划", data: state.chapterPlan},
-		{heading: "当前章节大纲", data: state.currentOutline},
-		{heading: "当前弧摘要", data: state.currentArcSummary},
-		{heading: "当前卷摘要", data: state.currentVolSummary},
-		{heading: "角色快照", data: state.snapshots},
-		{heading: "活跃伏笔", data: state.foreshadow},
-		{heading: "待修审稿问题", data: state.pendingReviews},
-		{heading: "最近时间线", data: state.timeline},
-		{heading: "风格规则", data: state.styleRules},
+		{heading: texts.progress, data: writerStoreProgressSection(state)},
+		{heading: texts.dataWarning, data: state.warnings},
+		{heading: texts.recentSummaries, data: state.recentSummaries},
+		{heading: texts.currentChapterPlan, data: state.chapterPlan},
+		{heading: texts.currentChapterDraft, data: state.currentOutline},
+		{heading: texts.currentArcSummary, data: state.currentArcSummary},
+		{heading: texts.currentVolSummary, data: state.currentVolSummary},
+		{heading: texts.characterSnapshots, data: state.snapshots},
+		{heading: texts.activeForeshadow, data: state.foreshadow},
+		{heading: texts.pendingReviews, data: state.pendingReviews},
+		{heading: texts.recentTimeline, data: state.timeline},
+		{heading: texts.styleRules, data: state.styleRules},
 	}
 }
 
 func writerRestoreSections(state *writerStoreSummaryState) []writerStoreSection {
+	texts := state.texts
 	return []writerStoreSection{
-		{heading: "当前进度", data: writerStoreProgressSection(state)},
-		{heading: "数据告警", data: state.warnings},
-		{heading: "当前章节计划", data: state.chapterPlan},
-		{heading: "当前章节大纲", data: state.currentOutline},
-		{heading: "待修审稿问题", data: state.pendingReviews},
-		{heading: "角色快照", data: state.snapshots},
-		{heading: "最近章节摘要", data: state.recentSummaries},
-		{heading: "活跃伏笔", data: state.foreshadow},
-		{heading: "当前弧摘要", data: state.currentArcSummary},
-		{heading: "当前卷摘要", data: state.currentVolSummary},
-		{heading: "最近时间线", data: state.timeline},
-		{heading: "风格规则", data: state.styleRules},
+		{heading: texts.progress, data: writerStoreProgressSection(state)},
+		{heading: texts.dataWarning, data: state.warnings},
+		{heading: texts.currentChapterPlan, data: state.chapterPlan},
+		{heading: texts.currentChapterDraft, data: state.currentOutline},
+		{heading: texts.pendingReviews, data: state.pendingReviews},
+		{heading: texts.characterSnapshots, data: state.snapshots},
+		{heading: texts.recentSummaries, data: state.recentSummaries},
+		{heading: texts.activeForeshadow, data: state.foreshadow},
+		{heading: texts.currentArcSummary, data: state.currentArcSummary},
+		{heading: texts.currentVolSummary, data: state.currentVolSummary},
+		{heading: texts.recentTimeline, data: state.timeline},
+		{heading: texts.styleRules, data: state.styleRules},
 	}
 }
 
@@ -294,7 +301,7 @@ func renderWriterStoreSections(state *writerStoreSummaryState, budgetTokens int,
 		if isEmptySummarySection(sec.data) {
 			continue
 		}
-		stop := appendJSONSection(&parts, sec.heading, sec.data, &remaining)
+		stop := appendJSONSection(&parts, sec.heading, sec.data, &remaining, state.texts)
 		if stop {
 			break
 		}
@@ -401,7 +408,7 @@ func loadLayeredSummariesForStoreState(s *store.Store, progress *domain.Progress
 	}
 }
 
-func appendJSONSection(parts *[]string, heading string, data any, remaining *int) bool {
+func appendJSONSection(parts *[]string, heading string, data any, remaining *int, texts *PromptTexts) bool {
 	if parts == nil || remaining == nil || *remaining <= 0 {
 		return true
 	}
@@ -416,7 +423,7 @@ func appendJSONSection(parts *[]string, heading string, data any, remaining *int
 			return true
 		}
 		text = truncateJSONToTokens(b, *remaining-20)
-		*parts = append(*parts, fmt.Sprintf("## %s\n%s [已截断]", heading, text))
+		*parts = append(*parts, fmt.Sprintf("## %s\n%s %s", heading, text, texts.truncated))
 		*remaining = 0
 		return true
 	}
@@ -443,4 +450,13 @@ func isEmptySummarySection(data any) bool {
 	default:
 		return false
 	}
+}
+
+// storeLang trả về ngôn ngữ tác phẩm của store; store nil thì rơi về ngôn ngữ
+// đang hiệu hành của tiến trình.
+func storeLang(s *store.Store) i18n.Lang {
+	if s == nil {
+		return i18n.Active()
+	}
+	return i18n.Normalize(s.Language())
 }

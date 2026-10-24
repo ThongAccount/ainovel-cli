@@ -16,13 +16,15 @@ import (
 	"github.com/voocel/ainovel-cli/internal/agents/ctxpack"
 	"github.com/voocel/ainovel-cli/internal/agents/guard"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/store"
 	"github.com/voocel/ainovel-cli/internal/tools"
 )
 
-// agentToRole 把 subagent name 归一为 ModelSet 认得的 role 名。
-// architect_short / architect_long 都共用同一个 architect role 配置。
-// 跟 host.agentRoleName 同义，因为 build 与 host 互不依赖故各持一份。
+// agentToRole chuẩn hóa tên subagent thành tên role mà ModelSet nhận.
+// architect_short / architect_long cùng dùng chung một cấu hình role architect.
+// Cùng nghĩa với host.agentRoleName, vì build và host không phụ thuộc lẫn nhau
+// nên mỗi bên giữ một bản.
 func agentToRole(name string) string {
 	if strings.HasPrefix(name, "architect_") {
 		return "architect"
@@ -30,34 +32,41 @@ func agentToRole(name string) string {
 	return name
 }
 
-// promptCacheBase 从书目录派生稳定短哈希，作为提示词缓存身份前缀：同一本书
-// 跨进程重启共享路由桶，且不向 provider 泄露本地路径。角色后缀由调用方拼接，
-// subagent 每次 spawn 再追加 "#seq"（一次会话一个键）。
+// promptCacheBase sinh mã băm ngắn ổn định từ thư mục sách, dùng làm tiền tố
+// định danh cho bộ nhớ đệm prompt: cùng một cuốn sách dùng chung bucket định
+// tuyến qua các lần khởi động tiến trình, mà không làm lộ đường dẫn cục bộ cho
+// provider. Hậu tố vai trò do nơi gọi ghép, subagent mỗi lần spawn lại thêm
+// "#seq" (mỗi phiên một khoá).
 func promptCacheBase(bookDir string) string {
 	sum := sha256.Sum256([]byte(bookDir))
 	return "nvl-" + hex.EncodeToString(sum[:6])
 }
 
-// subagentMaxRetries 是所有 Worker 的 LLM retry 上限。
-// 退避策略：指数退避（受 maxDelay 上限约束），优先服从 server Retry-After。
-// 工具只在完整 Assistant 消息提交后启动，因此 stream-idle / 503 /
-// 短暂网络抖动可以在 Worker 内安全重试，不会重放工具副作用。
+// subagentMaxRetries là trần thử lại LLM cho mọi Worker.
+// Chiến lược lùi bước: lùi theo cấp số nhân (bị chặn trên bởi maxDelay), ưu tiên
+// tuân theo Retry-After của server.
+// Công cụ chỉ khởi chạy sau khi tin nhắn Assistant đã gửi trọn vẹn, nên
+// stream-idle / 503 / nhiễu mạng ngắn đều thử lại an toàn trong Worker mà không
+// phát lại tác dụng phụ của công cụ.
 const subagentMaxRetries = 7
 
-// UsageRecorder 是 BuildWorkers 可选的用量回调；签名与 OnMessage 一致，
-// 每条 agent 消息都会调一次，由 Host 层负责聚合。task 是本次 spawn 的任务文本
-// 作为会话身份，供缓存链断裂检测按会话重置基线。
-// nil 表示不追踪。
+// UsageRecorder là callback ghi nhận mức dùng, tuỳ chọn cho BuildWorkers; chữ ký
+// giống OnMessage, mỗi tin nhắn agent gọi một lần, lớp Host lo gom lại. task là
+// văn bản nhiệm vụ của lần spawn này, dùng làm định danh phiên để cơ chế phát
+// hiện đứt chuỗi cache đặt lại đường cơ sở theo từng phiên.
+// nil nghĩa là không theo dõi.
 type UsageRecorder func(agentName, task string, msg agentcore.AgentMessage)
 
-// ApplyThinking 把某具体角色的推理强度应用到 Worker（运行时 /model 调整用）。
-// architect → 两个 architect_* 子代理；writer/editor → 对应子代理。
-// 空 level = 沿用模型/provider 默认。其它 role 名忽略。
+// ApplyThinking áp mức suy luận của một vai trò cụ thể lên Worker (dùng khi
+// đổi /model lúc chạy).
+// architect → cả hai subagent architect_*; writer/editor → subagent tương ứng.
+// level rỗng = giữ mặc định của model/provider. Tên role khác bị bỏ qua.
 type ApplyThinking func(role string, level agentcore.ThinkingLevel)
 
-// ParseThinkingLevel 把配置字符串转 agentcore.ThinkingLevel。
-// "" 合法（= 不覆盖/继承）；其余须是 off/low/medium/high/xhigh/max 之一，
-// 否则返回 error（启动时降级当空并 warn，运行时把 error 回显给用户）。
+// ParseThinkingLevel chuyển chuỗi cấu hình thành agentcore.ThinkingLevel.
+// "" hợp lệ (= không ghi đè/kế thừa); còn lại phải là off/low/medium/high/xhigh/max,
+// nếu không sẽ trả về error (lúc khởi động hạ cấp thành rỗng kèm warn, lúc chạy
+// trả lại error cho người dùng).
 func ParseThinkingLevel(s string) (agentcore.ThinkingLevel, error) {
 	lv := agentcore.NormalizeThinkingLevel(agentcore.ThinkingLevel(s))
 	switch lv {
@@ -65,13 +74,14 @@ func ParseThinkingLevel(s string) (agentcore.ThinkingLevel, error) {
 		agentcore.ThinkingHigh, agentcore.ThinkingXHigh, agentcore.ThinkingMax:
 		return lv, nil
 	default:
-		return "", fmt.Errorf("无效推理强度 %q（可选：off/low/medium/high/xhigh/max）", s)
+		return "", fmt.Errorf("mức suy luận không hợp lệ %q (chọn: off/low/medium/high/xhigh/max)", s)
 	}
 }
 
 func ResolveThinkingForModel(model agentcore.ChatModel, level agentcore.ThinkingLevel) (agentcore.ThinkingLevel, bool) {
 	level = agentcore.NormalizeThinkingLevel(level)
-	// 对不支持 thinking 的普通 chat 模型，显式 off 不是 no-op，而是非法参数。
+	// Với mô hình chat thường không hỗ trợ thinking, "off" tường minh không phải
+	// no-op mà là tham số không hợp lệ.
 	if cp, ok := model.(llm.CapabilityProvider); ok && cp.Capabilities().Thinking.Supported == llm.SupportNo {
 		return agentcore.ThinkingAuto, level == agentcore.ThinkingAuto
 	}
@@ -85,11 +95,12 @@ func AvailableThinkingForModel(model agentcore.ChatModel) []agentcore.ThinkingLe
 	return llm.ThinkingPolicyFor(model).Available
 }
 
-// roleThinking 解析某角色生效的推理强度；非法值降级为空（不覆盖）并 warn。
+// roleThinking phân giải mức suy luận có hiệu lực của một vai trò; giá trị không
+// hợp lệ bị hạ cấp thành rỗng (không ghi đè) kèm warn.
 func roleThinking(cfg bootstrap.Config, role string) agentcore.ThinkingLevel {
 	lv, err := ParseThinkingLevel(cfg.ResolveReasoningEffort(role))
 	if err != nil {
-		slog.Warn("忽略无效推理强度配置", "module", "agent", "role", role, "err", err)
+		slog.Warn("bỏ qua cấu hình mức suy luận không hợp lệ", "module", "agent", "role", role, "err", err)
 		return ""
 	}
 	return lv
@@ -100,12 +111,14 @@ func resolvedRoleThinking(model agentcore.ChatModel, cfg bootstrap.Config, role 
 	return resolved
 }
 
-// BuildWorkers 组装三个 Worker(architect_short/long、writer、editor)为可程序化
-// 调用的 subagent.Runner。Engine 直接调用其类型化入口，无 LLM 工具层
-// (docs/engine-rfc.md §1)。
-// 返回 Runner、WriterRestorePack 与 ApplyThinking(运行时 /model 联动各角色推理强度;
-// writer/architect/editor 的 ContextManager 走工厂自动重建)。
-// onGuardBlock 可选(nil 安全):各 Worker StopGuard 的拦截/升级审计回调。
+// BuildWorkers lắp ráp ba Worker (architect_short/long, writer, editor) thành
+// subagent.Runner gọi được bằng chương trình. Engine gọi trực tiếp các cửa vào
+// có kiểu của nó, không qua lớp công cụ LLM (docs/engine-rfc.md §1).
+// Trả về Runner, WriterRestorePack và ApplyThinking (liên kết mức suy luận các
+// vai trò với /model lúc chạy; ContextManager của writer/architect/editor được
+// dựng lại tự động qua nhà máy).
+// onGuardBlock tuỳ chọn (an toàn khi nil): callback kiểm toán việc chặn/nâng cấp
+// của StopGuard từng Worker.
 func BuildWorkers(
 	cfg bootstrap.Config,
 	store *store.Store,
@@ -115,7 +128,7 @@ func BuildWorkers(
 	recordUsage UsageRecorder,
 	onGuardBlock guard.BlockHook,
 ) (*subagent.Runner, *ctxpack.WriterRestorePack, ApplyThinking) {
-	// 共享工具
+	// Công cụ dùng chung
 	contextTool := tools.NewContextTool(store, bundle.References, cfg.Style, styleStats)
 	readChapter := tools.NewReadChapterTool(store)
 
@@ -124,8 +137,9 @@ func BuildWorkers(
 		tools.NewSaveBookTool(store),
 		tools.NewSaveFoundationTool(store),
 		tools.NewReviseOutlineTool(store),
-		// 返工队列里的章节只能靠 chapter_contract 承接"该重写成什么样"：
-		// revise_outline 不许碰已写章节，save_foundation(outline) 写作期禁止全量覆盖。
+		// Chương trong hàng đợi làm lại chỉ có thể nhận yêu cầu "viết lại thành
+		// gì" qua chapter_contract: revise_outline không được đụng chương đã viết,
+		// save_foundation(outline) bị cấm ghi đè toàn bộ trong giai đoạn sáng tác.
 		tools.NewPlanChapterTool(store),
 		tools.NewResolveOutlineFeedbackTool(store),
 		tools.NewAuditFoundationTool(store),
@@ -147,9 +161,9 @@ func BuildWorkers(
 		tools.NewSaveVolumeSummaryTool(store),
 	}
 
-	// Provider failover 只记日志,不通知宿主
+	// Chuyển provider dự phòng chỉ ghi nhật ký, không báo cho lớp host
 	reportFailover := func(ev bootstrap.FailoverEvent) {
-		slog.Warn("provider 切换",
+		slog.Warn("chuyển provider",
 			"module", "agent",
 			"role", ev.Role,
 			"reason", ev.Reason,
@@ -163,13 +177,15 @@ func BuildWorkers(
 	writerModel := models.ForRoleWithFailover("writer", reportFailover)
 	editorModel := models.ForRoleWithFailover("editor", reportFailover)
 
-	// Writer 的 ContextManager 由工厂每次调用重建，窗口随模型 swap 动态跟随（见下方工厂）。
+	// ContextManager của Writer được dựng lại mỗi lần gọi qua nhà máy, cửa sổ
+	// ngữ cảnh bám theo model khi hoán đổi (xem nhà máy bên dưới).
 	writerProvider, writerModelName, _ := models.CurrentSelection("writer")
 	writerContextWindow, writerSource := cfg.ResolveContextWindow(writerProvider, writerModelName)
 	bootstrap.LogContextWindowChoice("writer", writerModelName, writerContextWindow, writerSource)
 
-	// modelLookup 写入 session 时给每条 assistant 消息附 _meta:{provider,model}，
-	// 让 replay 不再依赖"当前 ModelSet"来反推历史 cost，运行中切换模型也能精确算。
+	// modelLookup gắn _meta:{provider,model} cho mỗi tin nhắn assistant khi ghi
+	// vào session, để replay không còn phải dựa vào "ModelSet hiện tại" để suy ra
+	// chi phí lịch sử, và đổi model lúc chạy vẫn tính chính xác.
 	modelLookup := func(agentName string) (string, string) {
 		role := agentToRole(agentName)
 		provider, name, _ := models.CurrentSelection(role)
@@ -183,19 +199,27 @@ func BuildWorkers(
 		}
 	}
 
-	// 提示词缓存：一书一基、一角色一名、一会话一键（subagent spawn 追加 #seq）。
-	// OpenAI 系用 prompt_cache_key 做路由亲和；Claude 系用 cache_control 滚动断点
-	//（system 地板 + 末消息尖端）。provider 不支持时由 agentcore 按能力静默丢弃，
-	// 多轮会话下读缓存收益恒为正，故不设开关。
+	// Bộ nhớ đệm prompt: một sách một nền, một vai trò một tên, một phiên một
+	// khoá (subagent spawn thêm #seq).
+	// Hệ OpenAI dùng prompt_cache_key để giữ affinity định tuyến; hệ Claude dùng
+	// cache_control cuộn điểm gãy (nền system + đầu nhọn tin nhắn cuối). Khi
+	// provider không hỗ trợ, agentcore âm thầm bỏ qua theo năng lực; với phiên
+	// nhiều lượt, lợi ích đọc cache luôn dương nên không cần công tắc.
 	cacheBase := promptCacheBase(store.Dir())
 
 	architectStopGuardFactory := func(_, _ string) agentcore.StopGuard {
 		return guard.NewArchitectStopGuard(store, onGuardBlock)
 	}
+	// Mô tả subagent được ghép thành mô tả công cụ mà model đọc, nên theo ngôn
+	// ngữ tác phẩm lấy từ bundle.
+	lang := i18n.Normalize(bundle.Language)
+	texts := workerTextsFor(lang)
+	promptTexts := ctxpack.PromptTextsFor(lang)
+
 	architectThinking, _ := ResolveThinkingForModel(architectModel, roleThinking(cfg, "architect"))
 	architectShort := subagent.Config{
 		Name:             "architect_short",
-		Description:      "短篇规划师：为单卷、单冲突、高密度故事生成紧凑设定与扁平大纲",
+		Description:      texts.architectShortDesc,
 		Model:            architectModel,
 		SystemPrompt:     bundle.Prompts.ArchitectShort,
 		Tools:            architectTools,
@@ -212,7 +236,7 @@ func BuildWorkers(
 	}
 	architectLong := subagent.Config{
 		Name:                "architect_long",
-		Description:         "长篇规划师：为连载型、可持续升级的故事生成分层设定与卷弧大纲",
+		Description:         texts.architectLongDesc,
 		Model:               architectModel,
 		SystemPrompt:        bundle.Prompts.ArchitectLong,
 		Tools:               architectTools,
@@ -226,8 +250,10 @@ func BuildWorkers(
 		StopGuardFactory:    architectStopGuardFactory,
 	}
 
-	// 唯一组装路径:协议模板 {{VOICE}} 原位回填文风段,再追加风格预设。
-	// eval 的 voice A/B 走同一函数,保证两臂等价(docs/voice-layer.md §3.2)。
+	// Đường lắp ráp duy nhất: mẫu giao thức {{VOICE}} được điền tại chỗ đoạn văn
+	// phong, rồi nối thêm bộ phong cách.
+	// A/B voice của eval đi qua cùng hàm, bảo đảm hai nhánh tương đương
+	// (docs/voice-layer.md §3.2).
 	writerPrompt := assets.BuildWriterPrompt(bundle.Prompts.Writer, bundle.Voice, bundle.Styles[cfg.Style])
 
 	restore := &ctxpack.WriterRestorePack{}
@@ -235,7 +261,7 @@ func BuildWorkers(
 
 	writer := subagent.Config{
 		Name:             "writer",
-		Description:      "创作者：自主完成一章的构思、写作、自审和提交",
+		Description:      texts.writerDesc,
 		Model:            writerModel,
 		SystemPrompt:     writerPrompt,
 		Tools:            writerTools,
@@ -250,14 +276,14 @@ func BuildWorkers(
 			return guard.NewWriterStopGuard(store, onGuardBlock)
 		},
 		ContextManagerFactory: func(model agentcore.ChatModel) agentcore.ContextManager {
-			// 每章按当前 writer 模型重建上下文管理器。
+			// Dựng lại bộ quản lý ngữ cảnh theo model writer hiện tại cho mỗi chương.
 			window, _ := models.ResolveContextWindow(bootstrap.ModelProvider(model), bootstrap.ModelName(model))
 			return newContextManager(contextManagerConfig{
 				Model:         model,
 				ContextWindow: window,
 				ReserveTokens: bootstrap.CompactReserveTokens(window),
 				Agent:         "writer",
-				// 提交投影，避免后续轮次反复改写请求前缀。
+				// Chiếu sau khi gửi, tránh các lượt sau ghi lại tiền tố yêu cầu.
 				CommitProjected: true,
 				ToolMicrocompact: &corecontext.ToolResultMicrocompactConfig{
 					MinResultTokens: 200,
@@ -270,10 +296,10 @@ func BuildWorkers(
 				},
 				Summary: &corecontext.FullSummaryConfig{
 					PostSummaryHooks:    []corecontext.PostSummaryHook{restore.Hook()},
-					SystemPrompt:        ctxpack.WriterSummarySystemPrompt,
-					SummaryPrompt:       ctxpack.WriterSummaryPrompt,
-					UpdateSummaryPrompt: ctxpack.WriterUpdateSummaryPrompt,
-					TurnPrefixPrompt:    ctxpack.WriterTurnPrefixPrompt,
+					SystemPrompt:        promptTexts.SummarySystem,
+					SummaryPrompt:       promptTexts.Summary,
+					UpdateSummaryPrompt: promptTexts.UpdateSummary,
+					TurnPrefixPrompt:    promptTexts.TurnPrefix,
 				},
 			})
 		},
@@ -281,7 +307,7 @@ func BuildWorkers(
 
 	editor := subagent.Config{
 		Name:             "editor",
-		Description:      "审阅者：阅读原文，从结构和审美两个层面发现问题",
+		Description:      texts.editorDesc,
 		Model:            editorModel,
 		SystemPrompt:     bundle.Prompts.Editor,
 		Tools:            editorTools,
@@ -291,9 +317,11 @@ func BuildWorkers(
 		OnMessage:        onMsg,
 		CacheLastMessage: "ephemeral",
 		PromptCacheKey:   cacheBase + "-editor",
-		// 终态产物命中即停。终态退出仍会咨询 StopGuard（契约测试 TestContract_
-		// TerminalToolExitConsultsStopGuard），任务感知的 NewEditorStopGuard 负责
-		// 否决"被派生成摘要却只做了复核"的提前退出，所以 save_review 可以安全硬停。
+		// Trúng sản phẩm cuối cùng là dừng. Lần thoát cuối vẫn hỏi ý kiến StopGuard
+		// (hợp đồng kiểm thử TestContract_TerminalToolExitConsultsStopGuard),
+		// NewEditorStopGuard có nhận biết nhiệm vụ nên bác lần thoát sớm kiểu
+		// "được phân công sinh tóm tắt nhưng chỉ làm soát duyệt", nên save_review
+		// có thể dừng cứng an toàn.
 		StopAfterToolResult: func(toolName string, _ json.RawMessage) bool {
 			return toolName == "save_review" || toolName == "save_arc_summary" || toolName == "save_volume_summary"
 		},
@@ -304,7 +332,7 @@ func BuildWorkers(
 
 	runner := subagent.NewRunner(architectShort, architectLong, writer, editor)
 
-	// 运行时联动各角色推理强度（/model 调整用）。
+	// Liên kết mức suy luận các vai trò lúc chạy (dùng khi đổi /model).
 	applyThinking := func(role string, level agentcore.ThinkingLevel) {
 		switch role {
 		case "architect":
