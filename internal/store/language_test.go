@@ -2,9 +2,10 @@ package store
 
 import "testing"
 
-// TestStoreLanguage 钉死作品语种的规范形式：默认越南语，显式设置后原样反映。
-// internal/tools 与 internal/host/exp 都从这里读语种，它是"模型面向文本"
-// 选择语种的唯一事实源。
+// TestStoreLanguage ghim dạng chuẩn của ngôn ngữ tác phẩm: mặc định là tiếng Việt,
+// đặt tường minh thì phản ánh nguyên trạng.
+// internal/tools và internal/host/exp đều đọc ngôn ngữ từ đây — đây là nguồn sự thật
+// duy nhất để chọn ngôn ngữ cho "văn bản hướng tới model".
 func TestStoreLanguage(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if got := s.Language(); got != "vi" {

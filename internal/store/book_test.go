@@ -15,27 +15,28 @@ func TestBookStorePersistsCanonicalDataAndReadableProjection(t *testing.T) {
 	if err := s.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Book.Save(domain.BookMetadata{Title: " 长夜将明 ", Synopsis: " 少年守住最后一盏灯。 "}); err != nil {
+	if err := s.Book.Save(domain.BookMetadata{Title: " Đêm dài sẽ sáng ", Synopsis: " Thiếu niên giữ lấy ngọn đèn cuối cùng. "}); err != nil {
 		t.Fatal(err)
 	}
 	book, err := s.Book.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if book.Title != "长夜将明" || book.Synopsis != "少年守住最后一盏灯。" {
+	if book.Title != "Đêm dài sẽ sáng" || book.Synopsis != "Thiếu niên giữ lấy ngọn đèn cuối cùng." {
 		t.Fatalf("unexpected book metadata: %+v", book)
 	}
 	projection, err := os.ReadFile(filepath.Join(dir, "book.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// store 未显式设语种 → 本 fork 默认越南语，派生 Markdown 的标签走 labelsVI。
-	if text := string(projection); !strings.Contains(text, "# 长夜将明") ||
+	// store chưa đặt ngôn ngữ tường minh → fork này mặc định tiếng Việt, nhãn của Markdown
+	// dẫn xuất đi theo labelsVI.
+	if text := string(projection); !strings.Contains(text, "# Đêm dài sẽ sáng") ||
 		!strings.Contains(text, "## Giới thiệu") ||
-		!strings.Contains(text, "少年守住最后一盏灯。") {
+		!strings.Contains(text, "Thiếu niên giữ lấy ngọn đèn cuối cùng.") {
 		t.Fatalf("unexpected book projection: %s", text)
 	}
-	if err := s.Book.Save(domain.BookMetadata{Title: "空简介"}); err == nil {
+	if err := s.Book.Save(domain.BookMetadata{Title: "Tóm tắt rỗng"}); err == nil {
 		t.Fatal("empty synopsis must be rejected")
 	}
 }

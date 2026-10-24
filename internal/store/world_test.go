@@ -19,7 +19,7 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
-// TestLoadEmpty 统一验证所有领域的空读取行为。
+// TestLoadEmpty kiểm tra thống nhất hành vi đọc rỗng của mọi miền dữ liệu.
 func TestLoadEmpty(t *testing.T) {
 	s := newTestStore(t)
 
@@ -55,13 +55,13 @@ func TestTimeline_Append(t *testing.T) {
 	s := newTestStore(t)
 
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{
-		{Chapter: 1, Time: "清晨", Event: "事件一"},
+		{Chapter: 1, Time: "buổi sớm", Event: "sự kiện một"},
 	}); err != nil {
 		t.Fatalf("batch1: %v", err)
 	}
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{
-		{Chapter: 2, Time: "午后", Event: "事件二"},
-		{Chapter: 3, Time: "傍晚", Event: "事件三"},
+		{Chapter: 2, Time: "buổi chiều", Event: "sự kiện hai"},
+		{Chapter: 3, Time: "hoàng hôn", Event: "sự kiện ba"},
 	}); err != nil {
 		t.Fatalf("batch2: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestTimeline_Append(t *testing.T) {
 	if len(loaded) != 3 {
 		t.Fatalf("want 3, got %d", len(loaded))
 	}
-	if loaded[2].Event != "事件三" {
+	if loaded[2].Event != "sự kiện ba" {
 		t.Errorf("third event: %+v", loaded[2])
 	}
 }
@@ -82,14 +82,14 @@ func TestTimeline_AppendIsIdempotent(t *testing.T) {
 	s := newTestStore(t)
 	event := domain.TimelineEvent{
 		Chapter:    1,
-		Time:       "清晨",
-		Event:      "林墨入住客栈",
-		Characters: []string{"林墨", "老周"},
+		Time:       "buổi sớm",
+		Event:      "Lâm Mặc nhận phòng khách sạn",
+		Characters: []string{"Lâm Mặc", "Lão Chu"},
 	}
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{event}); err != nil {
 		t.Fatalf("append first: %v", err)
 	}
-	event.Characters = []string{"老周", "林墨"} // 角色顺序不应影响同一事件判定
+	event.Characters = []string{"Lão Chu", "Lâm Mặc"} // thứ tự nhân vật không được ảnh hưởng việc xác định cùng một sự kiện
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{event}); err != nil {
 		t.Fatalf("append duplicate: %v", err)
 	}
@@ -102,7 +102,8 @@ func TestTimeline_AppendIsIdempotent(t *testing.T) {
 		t.Fatalf("duplicate timeline event should be ignored, got %d: %+v", len(loaded), loaded)
 	}
 
-	// 跨重启仍从 JSONL 重建去重索引，commit Saga 重放不能产生重复记录。
+	// Sau khi khởi động lại vẫn dựng lại chỉ mục khử trùng lặp từ JSONL, phát lại commit
+	// Saga không được tạo bản ghi trùng.
 	s2 := NewStore(s.Dir())
 	if err := s2.World.AppendTimelineEvents([]domain.TimelineEvent{event}); err != nil {
 		t.Fatalf("append duplicate after restart: %v", err)
@@ -131,7 +132,7 @@ func TestTimeline_DedupKeyDoesNotCollideOnContent(t *testing.T) {
 func TestTimeline_MigratesLegacyAndAppendsProjection(t *testing.T) {
 	dir := t.TempDir()
 	legacyStore := NewStore(dir)
-	legacy := []domain.TimelineEvent{{Chapter: 1, Time: "清晨", Event: "旧事件"}}
+	legacy := []domain.TimelineEvent{{Chapter: 1, Time: "buổi sớm", Event: "sự kiện cũ"}}
 	if err := legacyStore.World.io.WriteJSON("timeline.json", legacy); err != nil {
 		t.Fatalf("write legacy: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestTimeline_MigratesLegacyAndAppendsProjection(t *testing.T) {
 
 	s := NewStore(dir)
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{
-		{Chapter: 2, Time: "午后", Event: "新事件"},
+		{Chapter: 2, Time: "buổi chiều", Event: "sự kiện mới"},
 	}); err != nil {
 		t.Fatalf("append with migration: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestTimeline_MigratesLegacyAndAppendsProjection(t *testing.T) {
 	}
 
 	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{
-		{Chapter: 3, Time: "傍晚", Event: "追加事件"},
+		{Chapter: 3, Time: "hoàng hôn", Event: "sự kiện bổ sung"},
 	}); err != nil {
 		t.Fatalf("append jsonl: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestTimeline_MigratesLegacyAndAppendsProjection(t *testing.T) {
 
 func TestTimeline_RepairsUncommittedJSONLTail(t *testing.T) {
 	s := newTestStore(t)
-	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{{Chapter: 1, Event: "完整记录"}}); err != nil {
+	if err := s.World.AppendTimelineEvents([]domain.TimelineEvent{{Chapter: 1, Event: "bản ghi đầy đủ"}}); err != nil {
 		t.Fatalf("append first: %v", err)
 	}
 	path := filepath.Join(s.Dir(), "timeline.jsonl")
@@ -189,7 +190,7 @@ func TestTimeline_RepairsUncommittedJSONLTail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open jsonl: %v", err)
 	}
-	if _, err := f.WriteString(`{"chapter":2,"event":"未提交`); err != nil {
+	if _, err := f.WriteString(`{"chapter":2,"event":"chưa ghi ký`); err != nil {
 		_ = f.Close()
 		t.Fatalf("write partial tail: %v", err)
 	}
@@ -198,11 +199,11 @@ func TestTimeline_RepairsUncommittedJSONLTail(t *testing.T) {
 	}
 
 	s2 := NewStore(s.Dir())
-	if err := s2.World.AppendTimelineEvents([]domain.TimelineEvent{{Chapter: 2, Event: "重放记录"}}); err != nil {
+	if err := s2.World.AppendTimelineEvents([]domain.TimelineEvent{{Chapter: 2, Event: "bản ghi phát lại"}}); err != nil {
 		t.Fatalf("append after partial tail: %v", err)
 	}
 	loaded, err := s2.World.LoadTimeline()
-	if err != nil || len(loaded) != 2 || loaded[1].Event != "重放记录" {
+	if err != nil || len(loaded) != 2 || loaded[1].Event != "bản ghi phát lại" {
 		t.Fatalf("tail recovery: got (%+v, %v)", loaded, err)
 	}
 }
@@ -227,7 +228,7 @@ func TestTimeline_LoadRecent(t *testing.T) {
 	for _, tt := range []struct {
 		current, window, want int
 	}{
-		{7, 10, 4}, // 全部
+		{7, 10, 4}, // tất cả
 		{7, 3, 2},  // ch5,ch7
 		{5, 2, 3},  // ch3,ch5,ch7
 	} {
@@ -245,8 +246,8 @@ func TestForeshadow_UpdateLifecycle(t *testing.T) {
 
 	// plant
 	_ = s.World.UpdateForeshadow(1, []domain.ForeshadowUpdate{
-		{ID: "f1", Action: "plant", Description: "黑影"},
-		{ID: "f2", Action: "plant", Description: "断剑"},
+		{ID: "f1", Action: "plant", Description: "bóng tối"},
+		{ID: "f2", Action: "plant", Description: "gươm đứt"},
 	})
 	// advance f1, resolve f2
 	_ = s.World.UpdateForeshadow(3, []domain.ForeshadowUpdate{
@@ -265,7 +266,7 @@ func TestForeshadow_UpdateLifecycle(t *testing.T) {
 		t.Errorf("f2: want resolved@3, got %s@%d", all[1].Status, all[1].ResolvedAt)
 	}
 
-	// LoadActive 应排除 resolved
+	// LoadActive phải loại các mục đã resolved
 	active, _ := s.World.LoadActiveForeshadow()
 	if len(active) != 1 || active[0].ID != "f1" {
 		t.Errorf("active: want [f1], got %v", active)
@@ -293,16 +294,16 @@ func TestForeshadow_PlantIsIdempotent(t *testing.T) {
 	s := newTestStore(t)
 
 	_ = s.World.UpdateForeshadow(1, []domain.ForeshadowUpdate{
-		{ID: "f1", Action: "plant", Description: "黑影"},
+		{ID: "f1", Action: "plant", Description: "bóng tối"},
 	})
 	_ = s.World.UpdateForeshadow(1, []domain.ForeshadowUpdate{
-		{ID: "f1", Action: "plant", Description: "黑影"},
+		{ID: "f1", Action: "plant", Description: "bóng tối"},
 	})
 	_ = s.World.UpdateForeshadow(3, []domain.ForeshadowUpdate{
 		{ID: "f1", Action: "advance"},
 	})
 	_ = s.World.UpdateForeshadow(3, []domain.ForeshadowUpdate{
-		{ID: "f1", Action: "plant", Description: "黑影"},
+		{ID: "f1", Action: "plant", Description: "bóng tối"},
 	})
 
 	all, _ := s.World.LoadForeshadowLedger()
@@ -319,20 +320,20 @@ func TestForeshadow_PlantIsIdempotent(t *testing.T) {
 func TestRelationships_UpdateMerge(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.World.SaveRelationships([]domain.RelationshipEntry{
-		{CharacterA: "张三", CharacterB: "李四", Relation: "师徒", Chapter: 1},
+		{CharacterA: "Trương Tam", CharacterB: "Lý Tứ", Relation: "sư đồ", Chapter: 1},
 	})
 
-	// 更新已有 + 新增
+	// Cập nhật mục có sẵn + thêm mới
 	_ = s.World.UpdateRelationships([]domain.RelationshipEntry{
-		{CharacterA: "张三", CharacterB: "李四", Relation: "挚友", Chapter: 5},
-		{CharacterA: "王五", CharacterB: "赵六", Relation: "同门", Chapter: 5},
+		{CharacterA: "Trương Tam", CharacterB: "Lý Tứ", Relation: "tri kỷ", Chapter: 5},
+		{CharacterA: "Vương Ngũ", CharacterB: "Triệu Lục", Relation: "đồng môn", Chapter: 5},
 	})
 
 	loaded, _ := s.World.LoadRelationships()
 	if len(loaded) != 2 {
 		t.Fatalf("want 2, got %d", len(loaded))
 	}
-	if loaded[0].Relation != "挚友" {
+	if loaded[0].Relation != "tri kỷ" {
 		t.Errorf("update failed: %+v", loaded[0])
 	}
 }
@@ -340,18 +341,18 @@ func TestRelationships_UpdateMerge(t *testing.T) {
 func TestRelationships_PairKeySymmetry(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.World.SaveRelationships([]domain.RelationshipEntry{
-		{CharacterA: "张三", CharacterB: "李四", Relation: "师徒", Chapter: 1},
+		{CharacterA: "Trương Tam", CharacterB: "Lý Tứ", Relation: "sư đồ", Chapter: 1},
 	})
-	// B-A 顺序更新，应匹配同一条
+	// Cập nhật theo thứ tự B-A phải khớp cùng một mục
 	_ = s.World.UpdateRelationships([]domain.RelationshipEntry{
-		{CharacterA: "李四", CharacterB: "张三", Relation: "反目", Chapter: 3},
+		{CharacterA: "Lý Tứ", CharacterB: "Trương Tam", Relation: "oán thù", Chapter: 3},
 	})
 
 	loaded, _ := s.World.LoadRelationships()
 	if len(loaded) != 1 {
 		t.Fatalf("want 1 (merged), got %d", len(loaded))
 	}
-	if loaded[0].Relation != "反目" {
+	if loaded[0].Relation != "oán thù" {
 		t.Errorf("not updated: %+v", loaded[0])
 	}
 }
@@ -361,17 +362,17 @@ func TestRelationships_PairKeySymmetry(t *testing.T) {
 func TestStateChanges_Append(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.World.AppendStateChanges([]domain.StateChange{
-		{Chapter: 1, Entity: "张三", Field: "realm", NewValue: "练气期"},
+		{Chapter: 1, Entity: "Trương Tam", Field: "realm", NewValue: "tu khí kỳ"},
 	})
 	_ = s.World.AppendStateChanges([]domain.StateChange{
-		{Chapter: 3, Entity: "张三", Field: "realm", OldValue: "练气期", NewValue: "筑基期"},
+		{Chapter: 3, Entity: "Trương Tam", Field: "realm", OldValue: "tu khí kỳ", NewValue: "trúc cơ kỳ"},
 	})
 
 	loaded, _ := s.World.LoadStateChanges()
 	if len(loaded) != 2 {
 		t.Fatalf("want 2, got %d", len(loaded))
 	}
-	if loaded[1].NewValue != "筑基期" {
+	if loaded[1].NewValue != "trúc cơ kỳ" {
 		t.Errorf("second: %+v", loaded[1])
 	}
 }
@@ -380,10 +381,10 @@ func TestStateChanges_AppendIsIdempotent(t *testing.T) {
 	s := newTestStore(t)
 	change := domain.StateChange{
 		Chapter:  1,
-		Entity:   "张三",
+		Entity:   "Trương Tam",
 		Field:    "realm",
-		OldValue: "凡人",
-		NewValue: "练气期",
+		OldValue: "phàm nhân",
+		NewValue: "tu khí kỳ",
 	}
 	_ = s.World.AppendStateChanges([]domain.StateChange{change})
 	_ = s.World.AppendStateChanges([]domain.StateChange{change})
@@ -413,14 +414,14 @@ func TestStateChanges_MigratesLegacyAndRemainsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	legacyStore := NewStore(dir)
 	legacy := []domain.StateChange{{
-		Chapter: 1, Entity: "张三", Field: "realm", NewValue: "练气期",
+		Chapter: 1, Entity: "Trương Tam", Field: "realm", NewValue: "tu khí kỳ",
 	}}
 	if err := legacyStore.World.io.WriteJSON("meta/state_changes.json", legacy); err != nil {
 		t.Fatalf("write legacy: %v", err)
 	}
 
 	change := domain.StateChange{
-		Chapter: 2, Entity: "张三", Field: "realm", OldValue: "练气期", NewValue: "筑基期",
+		Chapter: 2, Entity: "Trương Tam", Field: "realm", OldValue: "tu khí kỳ", NewValue: "trúc cơ kỳ",
 	}
 	s := NewStore(dir)
 	if err := s.World.AppendStateChanges([]domain.StateChange{change}); err != nil {
@@ -435,7 +436,7 @@ func TestStateChanges_MigratesLegacyAndRemainsIdempotent(t *testing.T) {
 	}
 
 	next := domain.StateChange{
-		Chapter: 3, Entity: "张三", Field: "realm", OldValue: "筑基期", NewValue: "金丹期",
+		Chapter: 3, Entity: "Trương Tam", Field: "realm", OldValue: "trúc cơ kỳ", NewValue: "kim đan kỳ",
 	}
 	if err := s.World.AppendStateChanges([]domain.StateChange{next}); err != nil {
 		t.Fatalf("append jsonl: %v", err)
@@ -448,7 +449,7 @@ func TestStateChanges_MigratesLegacyAndRemainsIdempotent(t *testing.T) {
 		t.Fatal("state_changes.jsonl should preserve old bytes and append new records")
 	}
 
-	// 新 Store 从日志恢复索引后重放相同 change，条目数仍保持不变。
+	// Store mới khôi phục chỉ mục từ log rồi phát lại cùng change, số mục vẫn không đổi.
 	s2 := NewStore(dir)
 	if err := s2.World.AppendStateChanges([]domain.StateChange{next}); err != nil {
 		t.Fatalf("restart duplicate: %v", err)
@@ -465,9 +466,9 @@ func TestStyleRules_SaveAndLoad(t *testing.T) {
 	s := newTestStore(t)
 	rules := domain.WritingStyleRules{
 		Volume: 1, Arc: 2,
-		Prose:    []string{"短句为主"},
-		Dialogue: []domain.CharacterVoice{{Name: "张三", Rules: []string{"粗犷"}}},
-		Taboos:   []string{"不用网络用语"},
+		Prose:    []string{"câu ngắn là chính"},
+		Dialogue: []domain.CharacterVoice{{Name: "Trương Tam", Rules: []string{"mạnh mẽ"}}},
+		Taboos:   []string{"không dùng từ ngữ mạng"},
 	}
 	_ = s.World.SaveStyleRules(rules)
 
@@ -493,7 +494,7 @@ func TestReview_GlobalScopeIsolation(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.World.SaveReview(domain.ReviewEntry{Chapter: 5, Scope: "global", Verdict: "accept"})
 
-	// chapter-scoped load 不应找到 global review
+	// Lần load theo phạm vi chapter không được tìm thấy review global
 	if got, _ := s.World.LoadReview(5); got != nil {
 		t.Errorf("chapter load should not find global: %+v", got)
 	}
@@ -515,7 +516,7 @@ func TestReview_LoadLastReview(t *testing.T) {
 			t.Errorf("LoadLastReview(%d): want ch%d, got %+v", tt.from, tt.want, got)
 		}
 	}
-	// from=1 找不到
+	// from=1 không tìm thấy
 	if got, _ := s.World.LoadLastReview(1); got != nil {
 		t.Errorf("from=1 should be nil, got %+v", got)
 	}
@@ -526,8 +527,8 @@ func TestReview_LoadLastReview(t *testing.T) {
 func TestWorldRules_SaveAndLoad(t *testing.T) {
 	s := newTestStore(t)
 	rules := []domain.WorldRule{
-		{Category: "magic", Rule: "法术消耗精神力", Boundary: "精神力耗尽会昏迷"},
-		{Category: "society", Rule: "贵族拥有裁判权", Boundary: "不得越权"},
+		{Category: "magic", Rule: "pháp thuật hao tổn thần lực", Boundary: "thần lực cạn kiệt sẽ hôn mê"},
+		{Category: "society", Rule: "quý tộc có quyền phán xét", Boundary: "không được vượt quyền"},
 	}
 	_ = s.World.SaveWorldRules(rules)
 
@@ -539,33 +540,34 @@ func TestWorldRules_SaveAndLoad(t *testing.T) {
 	}
 
 	loaded, _ := s.World.LoadWorldRules()
-	if len(loaded) != 2 || loaded[0].Rule != "法术消耗精神力" {
+	if len(loaded) != 2 || loaded[0].Rule != "pháp thuật hao tổn thần lực" {
 		t.Errorf("roundtrip: %+v", loaded)
 	}
 }
 
 func TestRenderWorldRules(t *testing.T) {
 	md := renderWorldRules([]domain.WorldRule{
-		{Category: "magic", Rule: "法术消耗精神力", Boundary: "精神力耗尽会昏迷"},
-		{Category: "society", Rule: "贵族有裁判权"},
-		{Category: "magic", Rule: "禁咒需三人", Boundary: "单人施放会死"},
+		{Category: "magic", Rule: "pháp thuật hao tổn thần lực", Boundary: "thần lực cạn kiệt sẽ hôn mê"},
+		{Category: "society", Rule: "quý tộc có quyền phán xét"},
+		{Category: "magic", Rule: "cấm chú cần ba người", Boundary: "một người thi triển sẽ chết"},
 	}, labelsZH)
 
-	// magic 分组应在 society 之前
+	// Nhóm magic phải nằm trước society
 	if strings.Index(md, "## magic") >= strings.Index(md, "## society") {
 		t.Error("magic should appear before society")
 	}
-	if !strings.Contains(md, "边界：精神力耗尽会昏迷") {
+	if !strings.Contains(md, "边界：thần lực cạn kiệt sẽ hôn mê") {
 		t.Error("missing boundary")
 	}
-	// 无 boundary 不应输出空边界行
+	// Không có boundary thì không được xuất dòng boundary rỗng
 	if strings.Contains(md, "边界：\n") {
 		t.Error("empty boundary rendered")
 	}
 }
 
-// TestRuleViolationsContract 违规事实存储契约(第五轮评审):
-// 同章最新覆盖旧记录;重写后空列表视为已清;跨重启可读。
+// TestRuleViolationsContract hợp đồng lưu trữ sự thật vi phạm (đợt đánh giá thứ năm):
+// bản ghi mới nhất trong cùng chương ghi đè bản ghi cũ; danh sách rỗng sau khi viết lại
+// được coi là đã xóa; đọc được sau khi khởi động lại.
 func TestRuleViolationsContract(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
@@ -575,26 +577,26 @@ func TestRuleViolationsContract(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	if got := s.World.LoadRuleViolations(3); len(got) != 1 || got[0].Target != "不禁" {
-		t.Fatalf("首次读取: %+v", got)
+		t.Fatalf("đọc lần đầu: %+v", got)
 	}
 
-	// 同章重写:最新记录(空列表=已清)覆盖旧违规
+	// Viết lại trong cùng chương: bản ghi mới nhất (danh sách rỗng = đã xóa) ghi đè vi phạm cũ
 	if err := s.World.SaveRuleViolations(3, nil); err != nil {
 		t.Fatalf("save empty: %v", err)
 	}
 	if got := s.World.LoadRuleViolations(3); len(got) != 0 {
-		t.Fatalf("重写后旧违规应被清除: %+v", got)
+		t.Fatalf("vi phạm cũ phải bị xóa sau khi viết lại: %+v", got)
 	}
 
-	// 其他章不受影响 + 跨重启(新 Store 实例)可读
+	// Chương khác không bị ảnh hưởng + đọc được sau khi khởi động lại (thể hiện Store mới)
 	if err := s.World.SaveRuleViolations(5, []rules.Violation{{Rule: "forbidden_phrases", Target: "某种程度上", Actual: 2, Severity: rules.SeverityWarning}}); err != nil {
 		t.Fatalf("save ch5: %v", err)
 	}
 	s2 := NewStore(dir)
 	if got := s2.World.LoadRuleViolations(5); len(got) != 1 || got[0].Rule != "forbidden_phrases" {
-		t.Fatalf("跨重启读取: %+v", got)
+		t.Fatalf("đọc sau khi khởi động lại: %+v", got)
 	}
 	if got := s2.World.LoadRuleViolations(99); got != nil {
-		t.Fatalf("无记录章节应返回 nil: %+v", got)
+		t.Fatalf("chương không có bản ghi phải trả về nil: %+v", got)
 	}
 }
