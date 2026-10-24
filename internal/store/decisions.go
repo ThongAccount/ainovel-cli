@@ -11,11 +11,14 @@ import (
 	"time"
 )
 
-// DecisionStore 审计运行时的 LLM 语义裁定(meta/decisions.jsonl,append-only)。
+// DecisionStore lưu vết kiểm toán các phán quyết ngữ nghĩa của LLM lúc chạy
+// (meta/decisions.jsonl, chỉ ghi nối).
 //
-// 定位(docs/engine-arbiter.md §4.3):审计与离线重放的数据源——记录"当时看到什么
-// 事实、做了什么裁定",供 eval 回归与未来 Arbiter 的 A/B 对照。它**不是**事件溯源,
-// 也**不是**恢复数据源(恢复只依赖 Progress/Checkpoint/RunMeta 等事实层)。
+// Định vị (docs/engine-arbiter.md §4.3): nguồn dữ liệu cho kiểm toán và phát lại
+// ngoại tuyến — ghi lại “lúc đó thấy sự thật nào, đã phán quyết ra sao”, phục vụ hồi
+// quy eval và so sánh A/B cho Tài phán trong tương lai. Nó **không phải** nguồn
+// truy vết sự kiện, cũng **không phải** nguồn khôi phục (khôi phục chỉ dựa trên
+// Progress/Checkpoint/RunMeta và các lớp sự thật khác).
 type DecisionStore struct{ io *IO }
 
 func NewDecisionStore(io *IO) *DecisionStore { return &DecisionStore{io: io} }
@@ -23,31 +26,35 @@ func NewDecisionStore(io *IO) *DecisionStore { return &DecisionStore{io: io} }
 const (
 	decisionSchemaVersion = 1
 	decisionsFile         = "meta/decisions.jsonl"
-	// maxDecisionInputBytes 单条 input 上限;超限截断并标记,防止长粘贴撑爆审计文件。
+	// maxDecisionInputBytes giới hạn trên của một input; vượt ngưỡng thì cắt bớt và
+	// đánh dấu, để nội dung dán quá dài không làm phình kích thước tệp kiểm toán.
 	maxDecisionInputBytes = 8 << 10
 )
 
-// DecisionRecord 一次语义裁定的审计记录。facts 只存结构化事实与引用,不复制正文。
-// input 保留在记录内(离线重放必需);脱敏发生在 diag export 边界,不在落盘时。
+// DecisionRecord là bản ghi kiểm toán của một phán quyết ngữ nghĩa. facts chỉ lưu sự
+// thật có cấu trúc và tham chiếu, không sao chép văn bản.
+// input được giữ trong bản ghi (cần cho phát lại ngoại tuyến); việc khử nhạy cảm
+// diễn ra ở ranh giới export của diag, không phải lúc ghi xuống.
 type DecisionRecord struct {
 	SchemaVersion  int             `json:"schema_version"`
 	ID             string          `json:"id"`
 	At             string          `json:"at"`
 	Kind           string          `json:"kind"`    // intervention | plan_start | volume_end | ...
-	Decider        string          `json:"decider"` // arbiter | architect（卷末评审）
+	Decider        string          `json:"decider"` // arbiter | architect (thẩm duyệt cuối tập)
 	CheckpointSeq  int64           `json:"checkpoint_seq,omitempty"`
 	Input          string          `json:"input,omitempty"`
 	InputTruncated bool            `json:"input_truncated,omitempty"`
 	Facts          json.RawMessage `json:"facts,omitempty"`
 	Decision       json.RawMessage `json:"decision,omitempty"`
 	Reason         string          `json:"reason,omitempty"`
-	Error          string          `json:"error,omitempty"` // 裁定失败时的错误文本——失败也是审计事实,没有它排障只能靠推理
+	Error          string          `json:"error,omitempty"` // văn bản lỗi khi phán quyết thất bại — thất bại cũng là sự thật kiểm toán, thiếu nó thì chẩn đoán chỉ còn dựa vào suy đoán
 	Model          string          `json:"model,omitempty"`
 	DurationMs     int64           `json:"duration_ms,omitempty"`
 }
 
-// Append 落盘一条裁定记录;SchemaVersion/At/ID 由本方法补齐,input 超限截断。
-// 返回补齐后的记录(ID 供调用方关联,如 PlanStartRecord.DecisionID)。
+// Append ghi một bản ghi phán quyết xuống; SchemaVersion/At/ID được bổ sung bởi
+// phương thức này, input vượt ngưỡng sẽ bị cắt bớt.
+// Trả về bản ghi đã bổ sung (ID để bên gọi liên kết, ví dụ PlanStartRecord.DecisionID).
 func (s *DecisionStore) Append(rec DecisionRecord) (DecisionRecord, error) {
 	rec.SchemaVersion = decisionSchemaVersion
 	if rec.At == "" {
@@ -62,12 +69,13 @@ func (s *DecisionStore) Append(rec DecisionRecord) (DecisionRecord, error) {
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
-		return rec, fmt.Errorf("marshal decision: %w", err)
+		return rec, fmt.Errorf("mã hóa bản ghi phán quyết: %w", err)
 	}
 	s.io.mu.Lock()
 	defer s.io.mu.Unlock()
-	// 上一次追加可能在换行写入前崩溃。先删除协议上可证明未提交的尾部，避免把新 JSON
-	// 直接拼到残行后面；完整换行记录绝不自动修改。
+	// Lần ghi nối trước có thể hỏng trước khi ghi dấu xuống dòng. Xóa trước phần cuối
+	// mà giao thức chứng minh được là chưa ghi ký, để không nối JSON mới vào sau một
+	// dòng cụt; bản ghi hoàn chỉnh có dấu xuống dòng tuyệt đối không tự ý sửa.
 	if _, err := s.committedDataUnlocked(); err != nil {
 		return rec, fmt.Errorf("repair decision tail: %w", err)
 	}
@@ -77,11 +85,13 @@ func (s *DecisionStore) Append(rec DecisionRecord) (DecisionRecord, error) {
 	return rec, nil
 }
 
-// Recent 返回最近 n 条记录(旧→新);文件缺失返回空。
+// Recent trả về n bản ghi gần nhất (cũ→mới); trả về rỗng nếu thiếu tệp.
 //
-// 已提交损坏行必须显式返回错误——Arbiter 不能在缺失部分历史的事实包上继续裁定。
-// 崩溃打断的尾部残行（末字节非 '\n'）由 committedDataUnlocked 截断并显式告警；这不是
-// 猜测式修复，因为本文件协议规定只有换行结束的记录才算提交。
+// Dòng đã ghi ký mà bị hỏng phải trả lỗi tường minh — Tài phán không thể tiếp tục
+// phán quyết trên một gói sự thật thiếu một phần lịch sử. Phần cuối cụt do sập giữa
+// chừng (byte cuối khác '\n') bị committedDataUnlocked cắt bớt và cảnh báo tường minh;
+// đây không phải sửa theo phỏng đoán, vì giao thức của tệp này quy định chỉ bản ghi
+// kết thúc bằng dấu xuống dòng mới được coi là đã ghi ký.
 func (s *DecisionStore) Recent(n int) ([]DecisionRecord, error) {
 	s.io.mu.Lock()
 	defer s.io.mu.Unlock()
@@ -99,8 +109,9 @@ func (s *DecisionStore) Recent(n int) ([]DecisionRecord, error) {
 	return all, nil
 }
 
-// committedDataUnlocked 返回完整换行记录，并把换行之后的残留字节从磁盘截断。调用方
-// 必须持有 io.mu 写锁。截断是幂等的，失败时原文件保留，错误明确上抛。
+// committedDataUnlocked trả về các bản ghi hoàn chỉnh có dấu xuống dòng và cắt các
+// byte tàn dư sau dấu xuống dòng khỏi đĩa. Bên gọi phải giữ khóa ghi io.mu. Việc cắt
+// là idempotent; nếu thất bại thì tệp gốc được giữ nguyên và lỗi được ném lên rõ ràng.
 func (s *DecisionStore) committedDataUnlocked() ([]byte, error) {
 	data, err := s.io.ReadFileUnlocked(decisionsFile)
 	if os.IsNotExist(err) {
@@ -116,7 +127,7 @@ func (s *DecisionStore) committedDataUnlocked() ([]byte, error) {
 	if err := os.Truncate(s.io.path(decisionsFile), int64(keep)); err != nil {
 		return nil, err
 	}
-	slog.Warn("已修复裁定审计的未提交尾部",
+	slog.Warn("Đã sửa phần cuối chưa ghi ký của nhật ký phán quyết",
 		"module", "store", "file", decisionsFile, "discarded_bytes", len(data)-keep)
 	return data[:keep], nil
 }
@@ -130,7 +141,7 @@ func parseDecisionRecords(data []byte) ([]DecisionRecord, error) {
 		}
 		var rec DecisionRecord
 		if err := json.Unmarshal(raw, &rec); err != nil {
-			return nil, fmt.Errorf("parse %s line %d: %w", decisionsFile, i+1, err)
+			return nil, fmt.Errorf("phân tích %s dòng %d: %w", decisionsFile, i+1, err)
 		}
 		all = append(all, rec)
 	}

@@ -1,23 +1,25 @@
-// Package store 提供基于文件系统的持久化存储。
+// Package store cung cấp lớp lưu trữ bền dựa trên hệ thống tệp.
 //
-// 架构：1 个 IO 基座 + 多个子存储 + 1 个组合根。
-// 每个子存储持有独立的 IO 实例和独立的 sync.RWMutex。
-// 主要领域（Progress、Outline、Drafts、Summaries 等）的读写互不阻塞；
-// WorldStore 将多个低频小领域合并共享一把锁。
+// Kiến trúc: 1 nền IO + nhiều kho con + 1 gốc tổ hợp.
+// Mỗi kho con giữ một thể hiện IO riêng và một sync.RWMutex riêng.
+// Các miền chính (Progress, Outline, Drafts, Summaries…) đọc ghi không chặn nhau;
+// WorldStore gộp nhiều miền nhỏ, ít ghi vào dùng chung một khóa.
 //
-// 组合根 Store 持有所有子存储的引用，并串行协调跨域操作
-// （ExpandArc、AppendVolume、ClearHandledSteer）；多个文件不构成事务原子提交，
-// 调用依靠安全写入顺序、显式错误与同参数幂等重放恢复。
+// Gốc tổ hợp Store giữ tham chiếu tới mọi kho con và tuần tự hóa các thao tác
+// liên miền (ExpandArc, AppendVolume, ClearHandledSteer); nhiều tệp không tạo thành
+// một giao dịch nguyên tử, nên lời gọi dựa vào thứ tự ghi an toàn, lỗi tường minh và
+// khả năng phát lại idempotent với cùng tham số để khôi phục.
 //
-// 子存储划分：
-//   - ProgressStore: 进度主状态（meta/progress.json）
-//   - OutlineStore: 前提、大纲（扁平/分层）、指南针
-//   - DraftStore: 章节构思、草稿、终稿
-//   - SummaryStore: 章/弧/卷摘要
-//   - RunMetaStore: 运行元数据（模型、干预历史）
-//   - SignalStore: 一次性信号文件（PendingCommit 恢复）
-//   - CheckpointStore: step 级 checkpoint（meta/checkpoints.jsonl）
-//   - RuntimeStore: 运行时事件队列（meta/runtime/*.jsonl）
-//   - CharacterStore: 角色档案、状态快照
-//   - WorldStore: 时间线、伏笔、关系、状态变化、世界规则、风格规则、审阅
+// Chia nhỏ các kho con:
+//   - ProgressStore: trạng thái tiến độ chính (meta/progress.json)
+//   - OutlineStore: tiền đề, đề cương (phẳng/phân tầng), la bàn
+//   - DraftStore: dàn ý chương, bản nháp, bản chính thức
+//   - SummaryStore: tóm tắt chương/cung/tập
+//   - RunMetaStore: siêu dữ liệu chạy (mô hình, lịch sử can thiệp)
+//   - SignalStore: tệp tín hiệu một lần (khôi phục PendingCommit)
+//   - CheckpointStore: checkpoint cấp bước (meta/checkpoints.jsonl)
+//   - RuntimeStore: hàng đợi sự kiện runtime (meta/runtime/*.jsonl)
+//   - CharacterStore: hồ sơ nhân vật, ảnh chụp trạng thái
+//   - WorldStore: dòng thời gian, phục bút, quan hệ, thay đổi trạng thái, luật thế
+//     giới, luật văn phong, thẩm duyệt
 package store

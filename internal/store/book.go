@@ -7,12 +7,13 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain"
 )
 
-// BookStore 管理作品对外信息，meta/book.json 是唯一事实源，book.md 是可读投影。
+// BookStore quản lý thông tin công khai của tác phẩm; meta/book.json là nguồn sự thật
+// duy nhất, còn book.md là bản chiếu cho người đọc.
 type BookStore struct{ io *IO }
 
 func NewBookStore(io *IO) *BookStore { return &BookStore{io: io} }
 
-// Load 读取作品信息；尚未生成时返回 nil。
+// Load đọc thông tin tác phẩm; trả về nil nếu chưa sinh.
 func (s *BookStore) Load() (*domain.BookMetadata, error) {
 	var book domain.BookMetadata
 	if err := s.io.ReadJSON("meta/book.json", &book); err != nil {
@@ -28,7 +29,7 @@ func (s *BookStore) Load() (*domain.BookMetadata, error) {
 	return &book, nil
 }
 
-// Save 保存规范化的作品信息及其可读投影。
+// Save lưu thông tin tác phẩm đã chuẩn hóa cùng bản chiếu cho người đọc.
 func (s *BookStore) Save(book domain.BookMetadata) error {
 	book = book.Normalized()
 	if err := book.Validate(); err != nil {

@@ -2,12 +2,14 @@ package store
 
 import "github.com/voocel/ainovel-cli/internal/i18n"
 
-// mdLabels 是派生 Markdown 视图里的固定标签。
+// mdLabels là các nhãn cố định trong bản Markdown dẫn xuất.
 //
-// 这些 .md 会被 novel_context 读回模型上下文，因此标签语种不只是显示问题：
-// 越南语正文里每章顶着「第 N 章」「核心事件」，等于持续暗示模型当前是中文语境，
-// 实测导致正文夹带汉字（quan sát草木 / Bạo虐 / 顿号）。标签跟随作品语种，
-// 才不会和模型的输出语种互相拉扯。
+// Những .md này được novel_context đọc ngược vào ngữ cảnh model, nên ngôn ngữ của
+// nhãn không chỉ là vấn đề hiển thị: văn bản tiếng Việt mà mỗi chương lại đội
+// nhãn tiếng Trung (`第 N 章`, `核心事件`) thì liên tục gợi ý cho model rằng đang ở
+// bối cảnh tiếng Trung; thực nghiệm cho thấy điều đó khiến văn bản lẫn chữ Hán
+// (quan sát草木 / Bạo虐 / 顿号). Nhãn phải theo ngôn ngữ tác phẩm thì mới không
+// kéo ngược ngôn ngữ xuất của model.
 type mdLabels struct {
 	bookTitleFmt string
 	synopsis     string
@@ -57,7 +59,7 @@ var labelsZH = mdLabels{
 	worldRules: "世界观规则", rule: "规则", boundary: "边界",
 }
 
-// labelsVI 用项目既定译名：tập / cung / chương / đề cương / điểm móc / phục bút。
+// labelsVI dùng các thuật ngữ đã chốt của dự án: tập / cung / chương / đề cương / điểm móc / phục bút.
 var labelsVI = mdLabels{
 	bookTitleFmt: "%s", synopsis: "Giới thiệu", charProfiles: "Hồ sơ nhân vật", charArc: "Cung nhân vật",
 	traits: "Đặc điểm", listSep: ", ", openParen: " (", closeParen: ")", colon: ": ",

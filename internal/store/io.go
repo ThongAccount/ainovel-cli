@@ -10,20 +10,21 @@ import (
 	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
-// IO 封装文件系统读写操作，提供加锁和原子写入。
-// 每个子存储持有独立的 IO 实例，拥有各自的 sync.RWMutex。
+// IO bọc các thao tác đọc ghi hệ thống tệp, cung cấp khóa và ghi nguyên tử.
+// Mỗi kho con giữ một thể hiện IO riêng với sync.RWMutex riêng.
 type IO struct {
 	dir  string
 	lang string
 	mu   sync.RWMutex
 }
 
-// SetLanguage 设定作品语种（"vi" / "zh"），影响派生 Markdown 视图的标签。
-// 启动时设一次；空值按本 fork 的默认走越南语。
+// SetLanguage đặt ngôn ngữ tác phẩm ("vi" / "zh"), ảnh hưởng nhãn của các bản
+// Markdown dẫn xuất.
+// Gọi một lần lúc khởi động; giá trị rỗng dùng mặc định tiếng Việt của fork này.
 func (io *IO) SetLanguage(lang string) { io.lang = string(i18n.Normalize(lang)) }
 
-// Language 返回当前作品语种的规范形式（"vi" / "zh"）。
-// 未显式设置过时返回 "vi"——本 fork 以越南语为默认语种。
+// Language trả về dạng chuẩn của ngôn ngữ tác phẩm hiện tại ("vi" / "zh").
+// Nếu chưa đặt tường minh thì trả về "vi" — fork này mặc định là tiếng Việt.
 func (io *IO) Language() string { return string(i18n.Normalize(io.lang)) }
 
 func (io *IO) labels() mdLabels { return labelsFor(io.lang) }
@@ -110,11 +111,13 @@ func (io *IO) WriteMarkdown(rel string, content string) error {
 	return io.WriteFileUnlocked(rel, []byte(content))
 }
 
-// WriteMarkdownUnlocked 写出 .md sidecar。约定：每个 .md 都是对应 .json 的
-// best-effort 人类可读视图，绝非数据源——运行时与导出一律从 .json 重新渲染。
-// 各 Save 方法在同一写锁内先写 .json 再写此 .md，是两次独立的 tmp+rename；
-// 二者之间崩溃会留下 .md 落后于 .json，这是可接受的（无人把 .md 当数据读，
-// 下次写同一 scope 即自愈）。故意不为此加两文件原子提交——那是过度设计。
+// WriteMarkdownUnlocked ghi tệp .md đi kèm. Quy ước: mỗi .md chỉ là bản hiển thị
+// cho người đọc, dựng theo best-effort từ .json tương ứng, tuyệt đối không phải nguồn
+// dữ liệu — mọi lần chạy và xuất đều render lại từ .json.
+// Các phương thức Save ghi .json trước rồi ghi .md này trong cùng một khóa ghi, qua
+// hai lần tmp+rename độc lập; nếu sập giữa chừng thì .md sẽ chậm hơn .json, điều này
+// chấp nhận được (không ai đọc .md như dữ liệu, lần ghi tiếp theo cùng phạm vi sẽ tự
+// lành). Cố ý không thêm giao dịch nguyên tử cho hai tệp — như vậy là thiết kế thừa.
 func (io *IO) WriteMarkdownUnlocked(rel string, content string) error {
 	return io.WriteFileUnlocked(rel, []byte(content))
 }
@@ -141,8 +144,8 @@ func (io *IO) AppendLineUnlocked(rel string, data []byte) error {
 	return f.Sync()
 }
 
-// syncFileUnlocked 在幂等重放时确认已存在的追加记录已持久化。
-// 调用方负责持有 io.mu 写锁。
+// syncFileUnlocked xác nhận bản ghi ghi nối đã có được lưu bền khi phát lại idempotent.
+// Bên gọi chịu trách nhiệm giữ khóa ghi io.mu.
 func (io *IO) syncFileUnlocked(rel string) error {
 	f, err := os.OpenFile(io.path(rel), os.O_WRONLY, 0)
 	if err != nil {
@@ -175,11 +178,11 @@ func (io *IO) WithWriteLock(fn func() error) error {
 	return fn()
 }
 
-// EnsureDirs 创建指定的子目录。
+// EnsureDirs tạo các thư mục con chỉ định.
 func (io *IO) EnsureDirs(dirs []string) error {
 	for _, d := range dirs {
 		if err := os.MkdirAll(filepath.Join(io.dir, d), 0o755); err != nil {
-			return fmt.Errorf("create dir %s: %w", d, err)
+			return fmt.Errorf("tạo thư mục %s: %w", d, err)
 		}
 	}
 	return nil

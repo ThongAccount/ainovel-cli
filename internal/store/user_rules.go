@@ -6,15 +6,18 @@ import (
 	"github.com/voocel/ainovel-cli/internal/rules"
 )
 
-// UserRulesStore 管理本书归一化后的用户规则快照（meta/user_rules.json）。
+// UserRulesStore quản lý ảnh chụp quy tắc người dùng đã chuẩn hóa cho tác phẩm này
+// (meta/user_rules.json).
 //
-// 运行时唯一事实源：novel_context 注入与 commit_chapter 检查都只读这一份，
-// 不再反复读 rules 文件（避免漂移与双读者发散）。快照由开书/导入/刷新时归一化生成。
+// Nguồn sự thật duy nhất lúc chạy: cả việc tiêm vào novel_context và kiểm tra ở
+// commit_chapter đều chỉ đọc bản này, không đọc lại tệp rules nhiều lần (tránh trôi
+// dữ liệu và hai bên đọc lệch nhau). Ảnh chụp được sinh khi chuẩn hóa lúc mở sách /
+// nhập / làm mới.
 type UserRulesStore struct{ io *IO }
 
 func NewUserRulesStore(io *IO) *UserRulesStore { return &UserRulesStore{io: io} }
 
-// Load 读取 meta/user_rules.json。不存在时返回 nil（调用方据此惰性生成）。
+// Load đọc meta/user_rules.json. Trả về nil nếu không tồn tại (bên gọi tự sinh theo yêu cầu).
 func (s *UserRulesStore) Load() (*rules.Snapshot, error) {
 	s.io.mu.RLock()
 	defer s.io.mu.RUnlock()
@@ -28,7 +31,7 @@ func (s *UserRulesStore) Load() (*rules.Snapshot, error) {
 	return &snap, nil
 }
 
-// Save 保存快照。
+// Save lưu ảnh chụp.
 func (s *UserRulesStore) Save(snap *rules.Snapshot) error {
 	s.io.mu.Lock()
 	defer s.io.mu.Unlock()
