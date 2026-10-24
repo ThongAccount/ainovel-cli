@@ -77,9 +77,9 @@ func (m *Model) clearCommandPalette() {
 	m.compActive = false
 }
 
-	// syncCommandInputHighlight dùng lại bảng đăng ký lệnh để nhận diện token đầu tiên.
-	// Chỉ ghi lại lệnh trọn vẹn đã được đăng ký; khi render cuối cùng chỉ tô màu token này,
-	// tham số giữ màu chữ thường.
+// syncCommandInputHighlight dùng lại bảng đăng ký lệnh để nhận diện token đầu tiên.
+// Chỉ ghi lại lệnh trọn vẹn đã được đăng ký; khi render cuối cùng chỉ tô màu token này,
+// tham số giữ màu chữ thường.
 func (m *Model) syncCommandInputHighlight() {
 	m.commandToken = ""
 	fields := strings.Fields(m.textarea.Value())

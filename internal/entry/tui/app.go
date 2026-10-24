@@ -14,10 +14,10 @@ import (
 
 // Run khởi động TUI.
 // Quy ước phân tầng các chế độ khởi động:
-// 1. Chế độ nhanh và chế độ đồng sáng tác thuộc về "điều phối khởi động";
-// 2. Phiên sáng tác chính thức đi vào host.Host;
-// 3. Nếu sau này bổ sung chế độ dùng chung như "tiếp tục truyện đã có", gom về
-//    internal/entry/startup.
+//  1. Chế độ nhanh và chế độ đồng sáng tác thuộc về "điều phối khởi động";
+//  2. Phiên sáng tác chính thức đi vào host.Host;
+//  3. Nếu sau này bổ sung chế độ dùng chung như "tiếp tục truyện đã có", gom về
+//     internal/entry/startup.
 func Run(cfg bootstrap.Config, bundle assets.Bundle, build buildversion.Info) error {
 	rt, err := host.New(cfg, bundle, host.WithFileLog("tui.log", false,
 		slog.String("version", build.Version),
