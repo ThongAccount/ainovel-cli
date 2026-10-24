@@ -6,7 +6,8 @@
 #   bash scripts/check-vi-port.sh [tùy chọn]
 #
 #   Script phải chạy từ repo root (tự chuyển về root qua git rev-parse),
-#   dùng python3 + git, không cần mạng.
+#   dùng python3 + git, không cần mạng. Nếu máy không có `python3` thì
+#   fallback sang `python` (runner Windows của GitHub Actions).
 #
 # TÙY CHỌN
 #   --track-e            phạm vi Track E — CLI/TUI, bootstrap, logger, notify,
