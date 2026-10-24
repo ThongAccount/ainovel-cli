@@ -51,3 +51,23 @@ func TestLangResolve(t *testing.T) {
 		t.Errorf("LangZH.Resolve = %q", got)
 	}
 }
+
+func TestActive(t *testing.T) {
+	// Chưa thiết lập → tiếng Việt
+	SetActive("")
+	if got := Active(); got != LangVI {
+		t.Errorf("Active() = %q want vi", got)
+	}
+	SetActive("zh")
+	if got := Active(); got != LangZH {
+		t.Errorf("Active() after SetActive(zh) = %q want zh", got)
+	}
+	SetActive("chinese")
+	if got := Active(); got != LangZH {
+		t.Errorf("Active() after SetActive(chinese) = %q want zh", got)
+	}
+	SetActive("vi")
+	if got := Active(); got != LangVI {
+		t.Errorf("Active() after SetActive(vi) = %q want vi", got)
+	}
+}

@@ -11,7 +11,10 @@
 // đi qua i18n: bản port này dùng tiếng Việt cố định cho giao diện vận hành.
 package i18n
 
-import "strings"
+import (
+	"strings"
+	"sync/atomic"
+)
 
 // Lang là ngôn ngữ tác phẩm.
 type Lang string
@@ -67,4 +70,31 @@ func (t Text) Resolve(lang Lang) string {
 		return t.ZH
 	}
 	return t.VI
+}
+
+// active là ngôn ngữ tác phẩm ở cấp tiến trình.
+//
+// Một lần chạy CLI = một tác phẩm = một ngôn ngữ. Vì vậy các package không
+// có đường dẫn tới store (internal/arbiter, internal/llmcontract,
+// internal/chapterfacts, internal/stylestat) vẫn cần biết ngôn ngữ đang viết
+// để sinh văn bản hướng tới mô hình. Biến tiến trình giữ các package đó
+// độc lập với store, nên không phải đổi chữ ký hàm ở biên giữa các package.
+//
+// Thứ tự ưu tiên khi đọc: store.Language() (nếu package có store) → Active().
+var active atomic.Value // Lang
+
+// SetActive đặt ngôn ngữ tác phẩm ở cấp tiến trình.
+// internal/store.SetLanguage gọi hàm này, nên vận hành thực tế chỉ cần
+// SetLanguage một lần lúc khởi động.
+func SetActive(s string) {
+	active.Store(Normalize(s))
+}
+
+// Active trả về ngôn ngữ tác phẩm ở cấp tiến trình.
+// Chưa thiết lập thì mặc định là tiếng Việt.
+func Active() Lang {
+	if v, ok := active.Load().(Lang); ok {
+		return v
+	}
+	return LangVI
 }

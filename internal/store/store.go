@@ -87,10 +87,14 @@ func NewStore(dir string) *Store {
 
 // SetLanguage 设定作品语种（"vi" / "zh"），影响所有派生 Markdown 视图的标签。
 // 启动时设一次即可；未调用则按本 fork 的默认走越南语。
+//
+// 同时同步到 i18n 的进程级语种：没有 store 句柄的包（internal/arbiter、
+// internal/llmcontract…）也要按作品语种生成面向模型的文本。
 func (s *Store) SetLanguage(lang string) {
 	for _, x := range s.ios {
 		x.SetLanguage(lang)
 	}
+	i18n.SetActive(lang)
 }
 
 // Language 返回当前作品语种的规范形式（"vi" / "zh"）。
