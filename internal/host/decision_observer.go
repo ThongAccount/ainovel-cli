@@ -2,9 +2,10 @@ package host
 
 import "time"
 
-// runObservedDecision 给一次完整的 Arbiter 裁定补齐可观察生命周期。
-// Arbiter 仍是非流式 LLM 函数；这里只复用现有事件 ID 的开始/结束原地更新机制，
-// 不引入额外状态，也不把结构化 JSON 混进 Worker 的实时输出面板。
+// runObservedDecision bổ sung vòng đời quan sát được cho một lần phán quyết đầy
+// đủ của Arbiter. Arbiter vẫn là hàm LLM không luồng; ở đây chỉ tái sử dụng cơ chế
+// cập nhật tại chỗ theo ID sự kiện hiện có, không thêm trạng thái nào, cũng không
+// trộn JSON có cấu trúc vào bảng hiển thị thời gian thực của Worker.
 func runObservedDecision[T any](o *observer, label string, call func() (T, error)) (T, error) {
 	if o == nil {
 		return call()
