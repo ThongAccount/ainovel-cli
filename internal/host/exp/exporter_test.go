@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// newTestStore 构造一个 t.TempDir() 之上的最小 store，已写入 1..n 章终稿与 progress。
+// newTestStore tạo store tối giản trên t.TempDir(), đã ghi bản chính của chương
+// 1..n cùng progress.
 func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -24,7 +26,7 @@ func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store
 		t.Fatalf("init progress: %v", err)
 	}
 	if novelName != "" {
-		if err := s.Book.Save(domain.BookMetadata{Title: novelName, Synopsis: "一段面向读者的测试简介。"}); err != nil {
+		if err := s.Book.Save(domain.BookMetadata{Title: novelName, Synopsis: "Đoạn giới thiệu thử nghiệm dành cho người đọc."}); err != nil {
 			t.Fatalf("save book: %v", err)
 		}
 	}
@@ -32,7 +34,7 @@ func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store
 		t.Fatalf("phase writing: %v", err)
 	}
 	for _, ch := range completed {
-		if err := s.Drafts.SaveFinalChapter(ch, fmt.Sprintf("正文 ch %d。", ch)); err != nil {
+		if err := s.Drafts.SaveFinalChapter(ch, fmt.Sprintf("Nội dung chương %d.", ch)); err != nil {
 			t.Fatalf("save chapter %d: %v", ch, err)
 		}
 		if err := s.Progress.StartChapter(ch); err != nil {
@@ -46,14 +48,14 @@ func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store
 }
 
 func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
-	s, dir := newTestStore(t, "光斑", []int{1, 2, 3})
-	if err := s.Outline.SavePremise("光与影的故事。"); err != nil {
+	s, dir := newTestStore(t, "Quang vệ", []int{1, 2, 3})
+	if err := s.Outline.SavePremise("Câu chuyện về ánh sáng và bóng tối."); err != nil {
 		t.Fatalf("save premise: %v", err)
 	}
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "雨夜归人"},
-		{Chapter: 2, Title: "破晓"},
-		{Chapter: 3, Title: "余烬"},
+		{Chapter: 1, Title: "Người trở về trong đêm mưa"},
+		{Chapter: 2, Title: "Bình minh"},
+		{Chapter: 3, Title: "Tro tàn"},
 	}); err != nil {
 		t.Fatalf("save outline: %v", err)
 	}
@@ -65,31 +67,36 @@ func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
 	if res.Chapters != 3 {
 		t.Errorf("Chapters = %d, want 3", res.Chapters)
 	}
-	if res.Path != filepath.Join(dir, "光斑.txt") {
-		t.Errorf("Path = %q, want default {dir}/光斑.txt", res.Path)
+	if res.Path != filepath.Join(dir, "Quang vệ.txt") {
+		t.Errorf("Path = %q, want default {dir}/Quang vệ.txt", res.Path)
 	}
 	data, err := os.ReadFile(res.Path)
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
 	text := string(data)
-	// store 未显式设语种 → 本 fork 默认越南语：书名不带《》，章标题用 "Chương N"。
-	if !strings.HasPrefix(text, "光斑\n\n") {
+	// Store chưa đặt ngôn ngữ rõ ràng → bản port này mặc định tiếng Việt: tên sách
+	// không dùng «», tiêu đề chương dùng "Chương N".
+	if !strings.HasPrefix(text, "Quang vệ\n\n") {
 		t.Errorf("missing Vietnamese book title at start:\n%s", text)
 	}
-	for _, want := range []string{"Chương 1  雨夜归人", "Chương 3  余烬"} {
+	for _, want := range []string{"Chương 1  Người trở về trong đêm mưa", "Chương 3  Tro tàn"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output missing %q\nfull:\n%s", want, text)
 		}
 	}
-	// premise 不进导出（创作蓝图，非读者内容）
-	if strings.Contains(text, "光与影的故事。") {
+	// premise không đưa vào bản xuất (bản thiết kế sáng táo, không phải nội dung cho người đọc)
+	if strings.Contains(text, "Câu chuyện về ánh sáng và bóng tối.") {
 		t.Errorf("premise must not appear in export:\n%s", text)
 	}
 }
 
-// TestRun_ZHLanguageUsesChineseLayout 钉死中文作品仍导出中文版式。
+// TestRun_ZHLanguageUsesChineseLayout kiểm chứng tác phẩm tiếng Trung vẫn xuất
+// theo bố cục tiếng Trung.
 func TestRun_ZHLanguageUsesChineseLayout(t *testing.T) {
+	previousLang := i18n.Active()
+	t.Cleanup(func() { i18n.SetActive(string(previousLang)) })
+
 	s, _ := newTestStore(t, "光斑", []int{1})
 	s.SetLanguage("zh")
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "雨夜归人"}}); err != nil {
@@ -113,12 +120,12 @@ func TestRun_ZHLanguageUsesChineseLayout(t *testing.T) {
 }
 
 func TestRun_UsesCommittedTitleForCompletedChapter(t *testing.T) {
-	s, _ := newTestStore(t, "光斑", []int{1})
-	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "计划标题"}}); err != nil {
+	s, _ := newTestStore(t, "Quang vệ", []int{1})
+	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Tiêu đề dự kiến"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Summaries.SaveSummary(domain.ChapterSummary{
-		Chapter: 1, Title: "终稿标题", Summary: "摘要",
+		Chapter: 1, Title: "Tiêu đề bản chính", Summary: "Tóm tắt",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -132,15 +139,16 @@ func TestRun_UsesCommittedTitleForCompletedChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "Chương 1  终稿标题") || strings.Contains(text, "计划标题") {
+	if !strings.Contains(text, "Chương 1  Tiêu đề bản chính") || strings.Contains(text, "Tiêu đề dự kiến") {
 		t.Fatalf("export title projection is wrong:\n%s", text)
 	}
 }
 
-// TestRun_PremiseNotExported 端到端钉死：premise.md 存在也不进导出，书名保留（issue #27）。
+// TestRun_PremiseNotExported kiểm chứng đầu-cuối: premise.md tồn tại vẫn không
+// được xuất, còn tên sách được giữ lại (issue #27).
 func TestRun_PremiseNotExported(t *testing.T) {
-	s, _ := newTestStore(t, "光斑", []int{1})
-	if err := s.Outline.SavePremise("# 光斑\n## 目标读者\n不该出现的创作蓝图。"); err != nil {
+	s, _ := newTestStore(t, "Quang vệ", []int{1})
+	if err := s.Outline.SavePremise("# Quang vệ\n## Đối tượng đọc\nBản thiết kế sáng táo không được xuất."); err != nil {
 		t.Fatalf("save premise: %v", err)
 	}
 	res, err := Run(context.Background(), Deps{Store: s}, Options{})
@@ -152,10 +160,10 @@ func TestRun_PremiseNotExported(t *testing.T) {
 		t.Fatalf("read output: %v", err)
 	}
 	text := string(data)
-	if strings.Contains(text, "不该出现的创作蓝图。") || strings.Contains(text, "目标读者") {
+	if strings.Contains(text, "Bản thiết kế sáng táo không được xuất.") || strings.Contains(text, "Đối tượng đọc") {
 		t.Errorf("premise must not be exported, got:\n%s", text)
 	}
-	if !strings.HasPrefix(text, "光斑\n\n") {
+	if !strings.HasPrefix(text, "Quang vệ\n\n") {
 		t.Errorf("book title should remain: %s", text)
 	}
 }
@@ -178,11 +186,11 @@ func TestRun_ExistingFile_NoOverwrite(t *testing.T) {
 	if err == nil {
 		t.Fatal("expect error when target exists and !Overwrite")
 	}
-	if !strings.Contains(err.Error(), "已存在") {
+	if !strings.Contains(err.Error(), "đã tồn tại") {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// 加 Overwrite 应成功
+	// Thêm Overwrite phải thành công
 	res, err := Run(context.Background(), Deps{Store: s}, Options{OutPath: target, Overwrite: true})
 	if err != nil {
 		t.Fatalf("Overwrite Run: %v", err)
@@ -229,7 +237,7 @@ func TestRun_UnsupportedFormat(t *testing.T) {
 func TestRunRejectsMissingBookMetadata(t *testing.T) {
 	s, _ := newTestStore(t, "", []int{1})
 	if _, err := Run(context.Background(), Deps{Store: s}, Options{}); err == nil {
-		t.Fatal("作品信息缺失时必须拒绝导出")
+		t.Fatal("phải từ chối xuất khi thiếu thông tin tác phẩm")
 	}
 }
 
@@ -245,7 +253,7 @@ func TestInferFormat(t *testing.T) {
 		{"book.epub", FormatEPUB, false},
 		{"book.EPUB", FormatEPUB, false},
 		{"/abs/path/x.epub", FormatEPUB, false},
-		{"book", FormatTXT, false}, // 无后缀按 TXT
+		{"book", FormatTXT, false}, // không có phần mở rộng thì dùng TXT
 		{"book.dat", "", true},
 		{"book.pdf", "", true},
 	}
@@ -268,11 +276,11 @@ func TestInferFormat(t *testing.T) {
 }
 
 func TestRun_EPUB_FromExtension(t *testing.T) {
-	s, dir := newTestStore(t, "光斑", []int{1})
-	if err := s.Outline.SavePremise("光与影。"); err != nil {
+	s, dir := newTestStore(t, "Quang vệ", []int{1})
+	if err := s.Outline.SavePremise("Ánh sáng và bóng tối."); err != nil {
 		t.Fatalf("save premise: %v", err)
 	}
-	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "雨夜"}}); err != nil {
+	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Đêm mưa"}}); err != nil {
 		t.Fatalf("save outline: %v", err)
 	}
 
@@ -288,19 +296,19 @@ func TestRun_EPUB_FromExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	// EPUB 是 zip，前 4 字节 PK 头
+	// EPUB là zip, có chữ PK ở 4 byte đầu
 	if len(data) < 4 || string(data[:2]) != "PK" {
 		t.Errorf("output does not look like a zip: %x", data[:min(8, len(data))])
 	}
 }
 
 func TestRun_DefaultPathFollowsFormat(t *testing.T) {
-	s, dir := newTestStore(t, "光斑", []int{1})
+	s, dir := newTestStore(t, "Quang vệ", []int{1})
 	res, err := Run(context.Background(), Deps{Store: s}, Options{Format: FormatEPUB})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := filepath.Join(dir, "光斑.epub")
+	want := filepath.Join(dir, "Quang vệ.epub")
 	if res.Path != want {
 		t.Errorf("Path = %q want %q", res.Path, want)
 	}
@@ -312,7 +320,7 @@ func TestRun_UnknownExtension(t *testing.T) {
 	if err == nil {
 		t.Fatal("expect error for unknown extension")
 	}
-	if !strings.Contains(err.Error(), "扩展名") {
+	if !strings.Contains(err.Error(), "phần mở rộng") {
 		t.Errorf("error should mention extension: %v", err)
 	}
 }
