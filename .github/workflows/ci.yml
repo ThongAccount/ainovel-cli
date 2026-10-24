@@ -44,6 +44,10 @@ jobs:
           GOWORK: "off"
         run: go test -buildvcs=false -count=1 ./...
 
+      - name: Vietnamese port check
+        shell: bash
+        run: bash scripts/check-vi-port.sh
+
       - name: Race test critical state paths
         if: runner.os == 'Linux'
         env:
