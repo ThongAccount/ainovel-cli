@@ -1,14 +1,19 @@
-// Package arbiter 是语义裁定层:按需唤醒的 LLM-as-function。
+// Package arbiter là lớp phán quyết ngữ nghĩa: LLM-as-function được đánh thức
+// khi cần.
 //
-// 两平面对称(docs/engine-arbiter.md §二):
+// Hai mặt đối xứng (docs/engine-arbiter.md §二):
 //
-//	确定性平面:  flow.LoadState   → flow.Route     → Instruction
-//	语义平面:    arbiter.Collect* → arbiter.Decide* → XxxDecision
+//	Mặt quyết định:  flow.LoadState   → flow.Route     → Instruction
+//	Mặt ngữ nghĩa:    arbiter.Collect* → arbiter.Decide* → XxxDecision
 //
-// 纪律:Collect 集中 IO(从 store 读齐事实);Decide 除统一执行器管理的模型请求外无 IO,
-// 可用历史 facts 离线重放;执行归 Engine。每场景一对函数 + 专属 Decision 类型,
-// 场景不匹配的动作在类型上不可表达;剩余合法性由各类型的 Validate 拒绝——
-// Arbiter 输出与一切 LLM 输出同样不可信,事实校验是最后一道门。
+// Kỷ luật: Collect tập trung mọi IO (đọc đủ sự thật từ store); Decide ngoài
+// lời gọi mô hình do bộ thực thi thống nhất quản lý thì không có IO, nên có
+// thể phát lại offline bằng các facts đã lưu; việc thi hành thuộc Engine.
+// Mỗi kịch bản là một cặp hàm cộng với kiểu Decision riêng — hành động thuộc
+// kịch bản khác không thể biểu đạt ở tầng kiểu; phần hợp lệ còn lại bị từ
+// chối bởi Validate của từng kiểu —
+// Đầu ra của Arbiter cũng không đáng tin như mọi đầu ra LLM khác, kiểm tra sự
+// thật là cổng chốt cuối.
 package arbiter
 
 import (
@@ -24,11 +29,13 @@ import (
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 )
 
-// decideMaxTokens 单次裁定的输出上限;裁定 JSON 很小,大头留给推理模型的思考预算
-// (与 userrules.normalizeMaxTokens 同理)。
+// decideMaxTokens là trần đầu ra cho một lần phán quyết; JSON phán quyết rất
+// nhỏ, phần lớn ngân sách dành cho suy nghĩ của mô hình suy luận
+// (cùng lý do với userrules.normalizeMaxTokens).
 const decideMaxTokens = 8192
 
-// decide 将场景契约与业务校验交给统一结构化执行器。除模型调用外无 IO。
+// decide giao hợp đồng kịch bản và kiểm tra nghiệp vụ cho bộ thực thi có cấu
+// trúc thống nhất. Ngoài lời gọi mô hình thì không có IO.
 func decide[T any](ctx context.Context, model agentcore.ChatModel, contract llmcontract.Contract, systemPrompt, payload string, validate func(*T) error) (T, error) {
 	out, err := llmcontract.Execute(ctx, model, llmcontract.Request[T]{
 		Contract:     contract,
@@ -39,13 +46,13 @@ func decide[T any](ctx context.Context, model agentcore.ChatModel, contract llmc
 		Agent:        "arbiter",
 		Hooks: llmcontract.Hooks{
 			Resolved: func(res llmcontract.Resolution) {
-				slog.Debug("裁定协议选择", "module", "arbiter",
+				slog.Debug("chọn giao thức phán quyết", "module", "arbiter",
 					"contract", contract.Name, "structured_mode", res.Mode,
 					"capability_source", res.Source, "provider", res.Provider,
 					"model", res.Model, "schema_fingerprint", contract.Fingerprint())
 			},
 			Correction: func(ev llmcontract.Correction) {
-				slog.Warn("裁定输出自愈", "module", "arbiter", "attempt", ev.Attempt,
+				slog.Warn("tự lành đầu ra phán quyết", "module", "arbiter", "attempt", ev.Attempt,
 					"layer", ev.Layer, "structured_mode", ev.Mode, "err", ev.Err)
 			},
 		},
@@ -56,44 +63,50 @@ func decide[T any](ctx context.Context, model agentcore.ChatModel, contract llmc
 	return out, nil
 }
 
-// DispatchOp 是各场景共享的派单动作。
+// DispatchOp là hành động phân công dùng chung cho mọi kịch bản.
 type DispatchOp struct {
 	Agent string `json:"agent"`
 	Task  string `json:"task"`
 }
 
-// workerNames 是合法派单目标(与 agents.BuildWorkers 注册的一致)。有序切片:
-// 同时充当 schema enum(顺序确定保 fingerprint 稳定)与校验白名单。
+// workerNames là các đích phân công hợp lệ (khớp với các worker do
+// agents.BuildWorkers đăng ký). Cắt slice có thứ tự: vừa làm enum của schema
+// (thứ tự cố định giữ vân tay ổn định) vừa là danh sách trắng khi kiểm tra.
 var workerNames = []string{"architect_long", "architect_short", "writer", "editor"}
 
-func (d *DispatchOp) validate() error {
+// validate kiểm tra hành động phân công: đích phải nằm trong danh sách trắng
+// và nhiệm vụ không được rỗng.
+func (d *DispatchOp) validate(texts *arbiterTexts) error {
 	if d == nil {
 		return nil
 	}
 	if !slices.Contains(workerNames, d.Agent) {
-		return fmt.Errorf("dispatch.agent 非法: %q", d.Agent)
+		return fmt.Errorf(texts.dispatchAgentInvalid, d.Agent)
 	}
 	if strings.TrimSpace(d.Task) == "" {
-		return fmt.Errorf("dispatch.task 不能为空")
+		return fmt.Errorf("%s", texts.dispatchTaskRequired)
 	}
 	return nil
 }
 
-// dispatchSchema 是 DispatchOp 的可空 schema 位:仅需要派单的动作给出对象,
-// 其余情况为 null(strict 模式全字段 required,可选语义用 null 表达)。
-func dispatchSchema(desc string) map[string]any {
+// dispatchSchema là vị trí schema có thể null của DispatchOp: chỉ hành động
+// cần phân công mới đưa ra đối tượng, các trường hợp khác là null (chế độ
+// strict bắt mọi trường required, ngữ nghĩa "tùy chọn" được diễn đạt bằng
+// null).
+func dispatchSchema(texts *arbiterTexts, desc string) map[string]any {
 	return llmcontract.Nullable(schema.Object(
-		schema.Property("agent", schema.Enum(desc, workerNames...)).Required(),
-		schema.Property("task", schema.String("交给该 worker 的完整任务描述")).Required(),
+		schema.Property("agent", schema.Enum(texts.dispatchAgentLabel, workerNames...)).Required(),
+		schema.Property("task", schema.String(texts.dispatchTaskLabel)).Required(),
 	))
 }
 
-// marshalPayload 序列化事实包;失败即程序错误,必须暴露——静默伪造空事实
-// 会让模型基于假输入误判。
+// marshalPayload serialize gói sự thật; hỏng thì đó là lỗi chương trình, bắt
+// buộc phải phơi bày — tự bịa sự thật rỗng sẽ khiến model phán đoán trên đầu
+// vào giả.
 func marshalPayload(v any) (string, error) {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("arbiter: 事实包序列化失败: %w", err)
+		return "", fmt.Errorf("arbiter: không serialize được gói sự thật: %w", err)
 	}
 	return string(data), nil
 }

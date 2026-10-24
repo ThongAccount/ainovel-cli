@@ -8,13 +8,15 @@ import (
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// InterventionFacts 干预分诊的事实包(Collect 时刻快照)。
-// Engine 在边界执行 Dispatch 前用 Phase/QueueHead 做对账(咨询与执行之间隔着
-// worker 运行,事实可能已推进;不符 → 丢弃并以新事实重询)。
+// InterventionFacts là gói sự thật của chẩn đoán can thiệp (ảnh chụp lúc Collect).
+// Engine đối chiếu Phase/QueueHead trước khi thi hành Dispatch ở ranh giới
+// (giữa lúc hỏi và lúc thi hành có một worker chạy, sự thật có thể đã tiến;
+// không khớp → bỏ qua và hỏi lại với sự thật mới).
 type InterventionFacts struct {
 	Phase                    string           `json:"phase,omitempty"`
 	Flow                     string           `json:"flow,omitempty"`
@@ -37,14 +39,15 @@ type InterventionFacts struct {
 	RecentDecisions          []RecentDecision `json:"recent_decisions,omitempty"`
 }
 
-// RecentDecision 是干预记忆:最近几次裁定的摘要,覆盖"上次改的怎么样了"类跨干预引用。
+// RecentDecision là ký ức can thiệp: tóm tắt các phán quyết gần nhất, phủ
+// các tham chiếu xuyên can thiệp kiểu "lần trước sửa thế nào".
 type RecentDecision struct {
 	At     string `json:"at"`
 	Input  string `json:"input"`
 	Reason string `json:"reason,omitempty"`
 }
 
-// QueueHead 返回重写队列头(无则 0),Engine 对账用。
+// QueueHead trả về đầu hàng đợi viết lại (0 nếu không có), Engine dùng để đối chiếu.
 func (f InterventionFacts) QueueHead() int {
 	if len(f.PendingRewrites) > 0 {
 		return f.PendingRewrites[0]
@@ -52,28 +55,29 @@ func (f InterventionFacts) QueueHead() int {
 	return 0
 }
 
-// CollectInterventionFacts 从 store 读齐分诊事实。任何控制事实读取失败都显式
-// 返回错误，禁止 Arbiter 在零值拼成的不完整快照上做语义决策。
+// CollectInterventionFacts đọc đủ sự thật chẩn đoán từ store. Mọi lỗi đọc sự
+// thật điều khiển đều được trả về tường minh, cấm Arbiter ra quyết định ngữ
+// nghĩa trên một ảnh chụp không đầy đủ do ghép từ giá trị rỗng.
 func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	var f InterventionFacts
 	if st == nil {
-		return f, fmt.Errorf("store 不能为空")
+		return f, fmt.Errorf("store không được để trống")
 	}
 	missing, err := st.FoundationMissing()
 	if err != nil {
-		return f, fmt.Errorf("读取基础设定状态: %w", err)
+		return f, fmt.Errorf("đọc trạng thái thiết lập nền tảng: %w", err)
 	}
 	f.FoundationMissing = missing
 	book, err := st.Book.Load()
 	if err != nil {
-		return f, fmt.Errorf("读取作品信息: %w", err)
+		return f, fmt.Errorf("đọc thông tin tác phẩm: %w", err)
 	}
 	if book != nil {
 		f.Title = book.Title
 	}
 	p, err := st.Progress.Load()
 	if err != nil {
-		return f, fmt.Errorf("读取进度: %w", err)
+		return f, fmt.Errorf("đọc tiến độ: %w", err)
 	}
 	if p != nil {
 		f.Phase = string(p.Phase)
@@ -83,7 +87,7 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 		if p.Layered {
 			outline, outlineErr := st.Outline.LoadOutline()
 			if outlineErr != nil {
-				return f, fmt.Errorf("读取当前详细大纲: %w", outlineErr)
+				return f, fmt.Errorf("đọc dàn ý chi tiết hiện tại: %w", outlineErr)
 			}
 			f.OutlinedChapters = len(outline)
 		} else {
@@ -95,7 +99,7 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	}
 	meta, err := st.RunMeta.Load()
 	if err != nil {
-		return f, fmt.Errorf("读取运行元信息: %w", err)
+		return f, fmt.Errorf("đọc siêu dữ liệu chạy: %w", err)
 	}
 	if meta != nil {
 		f.PlanningTier = string(meta.PlanningTier)
@@ -112,7 +116,7 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	}
 	recent, err := st.Decisions.Recent(5)
 	if err != nil {
-		return f, fmt.Errorf("读取近期裁定: %w", err)
+		return f, fmt.Errorf("đọc các phán quyết gần đây: %w", err)
 	}
 	for _, r := range recent {
 		if r.Kind != "intervention" {
@@ -125,7 +129,8 @@ func CollectInterventionFacts(st *storepkg.Store) (InterventionFacts, error) {
 	return f, nil
 }
 
-// AdvanceHoldOp 一次性暂停动作：在工作边界、返工排空或目标章节完成后暂停，也可取消。
+// AdvanceHoldOp là hành động tạm dừng một lần: dừng ở ranh giới công việc, khi
+// hàng đợi viết lại đã rỗng, hoặc sau khi chương đích hoàn thành; cũng có thể huỷ.
 type AdvanceHoldOp struct {
 	Cancel        bool                    `json:"cancel,omitempty"`
 	After         domain.AdvanceHoldAfter `json:"after,omitempty"`
@@ -133,14 +138,16 @@ type AdvanceHoldOp struct {
 	Reason        string                  `json:"reason,omitempty"`
 }
 
-// ReopenOp 完本返工:把全书重开进返工态并把目标章入队(仅 phase=complete 合法)。
+// ReopenOp là làm lại sau khi hoàn thành: mở lại toàn bộ sách vào trạng thái làm
+// lại và đưa chương đích vào hàng đợi (chỉ hợp lệ ở phase=complete).
 type ReopenOp struct {
 	Chapters []int  `json:"chapters"`
 	Reason   string `json:"reason,omitempty"`
 }
 
-// InterventionDecision 干预裁定。动作组合自由,执行顺序由 Engine 固定:
-// answer → rules → hold → reopen → dispatch;至多一个 dispatch(类型事实)。
+// InterventionDecision là phán quyết can thiệp. Tổ hợp hành động tự do, thứ tự
+// thi hành do Engine cố định:
+// answer → rules → hold → reopen → dispatch; tối đa một dispatch (sự thật kiểu).
 type InterventionDecision struct {
 	Answer   string         `json:"answer,omitempty"`
 	Rules    string         `json:"rules,omitempty"`
@@ -150,100 +157,111 @@ type InterventionDecision struct {
 	Reason   string         `json:"reason"`
 }
 
-var interventionContract = llmcontract.Contract{
-	Name:        "arbiter_intervention",
-	Description: "用户干预裁定：回答、规则、暂停、重开与派单",
-	Schema: schema.Object(
-		schema.Property("answer", llmcontract.Nullable(schema.String("回显给用户的文字；无则为 null"))).Required(),
-		schema.Property("rules", llmcontract.Nullable(schema.String("要落盘的长效写作规则原文；无则为 null"))).Required(),
-		schema.Property("hold", llmcontract.Nullable(schema.Object(
-			schema.Property("cancel", schema.Bool("是否取消既有一次性暂停")).Required(),
-			schema.Property("after", llmcontract.Nullable(schema.Enum("暂停触发点；取消时为 null", string(domain.AdvanceHoldAtBoundary), string(domain.AdvanceHoldAfterRewritesDrained), string(domain.AdvanceHoldAtChapter)))).Required(),
-			schema.Property("target_chapter", llmcontract.Nullable(schema.Int("after=chapter 时的目标章节；其他情况为 null"))).Required(),
-			schema.Property("reason", llmcontract.Nullable(schema.String("用户诉求摘要；取消时可为 null"))).Required(),
-		))).Required(),
-		schema.Property("reopen", llmcontract.Nullable(schema.Object(
-			schema.Property("chapters", schema.Array("需要重开的章节号", schema.Int("章节号"))).Required(),
-			schema.Property("reason", llmcontract.Nullable(schema.String("重开理由"))).Required(),
-		))).Required(),
-		schema.Property("dispatch", dispatchSchema("派单目标；无需派单时为 null")).Required(),
-		schema.Property("reason", schema.String("一句话裁定理由")).Required(),
-	),
+// interventionContractFor dựng hợp đồng can thiệp theo ngôn ngữ tác phẩm: mọi
+// trường required, các nhánh tùy chọn dùng hợp nhất null.
+func interventionContractFor(lang i18n.Lang) llmcontract.Contract {
+	texts := arbiterTextsFor(lang)
+	return llmcontract.Contract{
+		Name:        "arbiter_intervention",
+		Description: texts.interventionDesc,
+		Schema: schema.Object(
+			schema.Property("answer", llmcontract.Nullable(schema.String(texts.answerLabel))).Required(),
+			schema.Property("rules", llmcontract.Nullable(schema.String(texts.rulesLabel))).Required(),
+			schema.Property("hold", llmcontract.Nullable(schema.Object(
+				schema.Property("cancel", schema.Bool(texts.holdCancelLabel)).Required(),
+				schema.Property("after", llmcontract.Nullable(schema.Enum(texts.holdAfterLabel, string(domain.AdvanceHoldAtBoundary), string(domain.AdvanceHoldAfterRewritesDrained), string(domain.AdvanceHoldAtChapter)))).Required(),
+				schema.Property("target_chapter", llmcontract.Nullable(schema.Int(texts.holdTargetLabel))).Required(),
+				schema.Property("reason", llmcontract.Nullable(schema.String(texts.holdReasonLabel))).Required(),
+			))).Required(),
+			schema.Property("reopen", llmcontract.Nullable(schema.Object(
+				schema.Property("chapters", schema.Array(texts.reopenChaptersLabel, schema.Int(texts.reopenChapterLabel))).Required(),
+				schema.Property("reason", llmcontract.Nullable(schema.String(texts.reopenReasonLabel))).Required(),
+			))).Required(),
+			schema.Property("dispatch", dispatchSchema(texts, texts.dispatchLabel)).Required(),
+			schema.Property("reason", schema.String(texts.interventionReasonLbl)).Required(),
+		),
+		Lang: lang,
+	}
 }
 
-// ValidateAgainst 按事实做机械校验(场景内合法性;类型已排除跨场景动作)。
+// ValidateAgainst kiểm tra cơ học theo sự thật (tính hợp lệ trong kịch bản;
+// kiểu dữ liệu đã loại trừ hành động vượt kịch bản).
 func (d *InterventionDecision) ValidateAgainst(f InterventionFacts) error {
+	texts := activeTexts()
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("%s", texts.reasonRequired)
 	}
 	if d.Answer == "" && d.Rules == "" && d.Hold == nil && d.Reopen == nil && d.Dispatch == nil {
-		return fmt.Errorf("空决策：至少要有一个动作或 answer")
+		return fmt.Errorf("%s", texts.emptyDecision)
 	}
-	if err := d.Dispatch.validate(); err != nil {
+	if err := d.Dispatch.validate(texts); err != nil {
 		return err
 	}
-	if err := validateDispatchAgainst(d.Dispatch, f.Phase); err != nil {
+	if err := validateDispatchAgainst(d.Dispatch, f.Phase, texts); err != nil {
 		return err
 	}
 	complete := f.Phase == string(domain.PhaseComplete)
 	if d.Reopen != nil {
 		if !complete {
-			return fmt.Errorf("reopen 仅限完本期（当前 phase=%s）", f.Phase)
+			return fmt.Errorf(texts.reopenOnlyComplete, f.Phase)
 		}
 		if len(d.Reopen.Chapters) == 0 {
-			return fmt.Errorf("reopen.chapters 不能为空")
+			return fmt.Errorf("%s", texts.reopenChaptersRequired)
 		}
 		for _, ch := range d.Reopen.Chapters {
 			if ch < 1 || ch > f.CompletedChapters {
-				return fmt.Errorf("reopen 章节 %d 越界（已完成 %d 章）", ch, f.CompletedChapters)
+				return fmt.Errorf(texts.reopenChapterOutOfRange, ch, f.CompletedChapters)
 			}
 		}
 	}
 	if complete && d.Dispatch != nil {
-		return fmt.Errorf("完本期禁止直接派单；返工用 reopen（入队后由 Router 自动派发）")
+		return fmt.Errorf("%s", texts.completeNoDispatch)
 	}
 	if d.Hold != nil && !d.Hold.Cancel {
 		if f.Phase != string(domain.PhaseWriting) {
-			return fmt.Errorf("一次性暂停仅限写作期（当前 phase=%s）", f.Phase)
+			return fmt.Errorf(texts.holdOnlyWriting, f.Phase)
 		}
 		hold := domain.AdvanceHold{After: d.Hold.After, TargetChapter: d.Hold.TargetChapter, Reason: d.Hold.Reason}
 		if err := hold.Validate(); err != nil {
-			return fmt.Errorf("hold 无效: %w", err)
+			return fmt.Errorf(texts.holdInvalid, err)
 		}
 		nextChapter := f.NextChapter
 		if nextChapter == 0 {
 			nextChapter = f.CompletedChapters + 1
 		}
 		if hold.After == domain.AdvanceHoldAtChapter && hold.TargetChapter < nextChapter {
-			return fmt.Errorf("目标章节 %d 早于当前下一章 %d", hold.TargetChapter, nextChapter)
+			return fmt.Errorf(texts.targetChapterTooEarly, hold.TargetChapter, nextChapter)
 		}
 	}
 	return nil
 }
 
-// validateDispatchAgainst 把提示词中的阶段纪律落实为机械防线。Architect 可在规划期
-// 与写作期维护结构；Writer/Editor 只能消费已经完整且进入 writing 的作品事实。
-func validateDispatchAgainst(dispatch *DispatchOp, phase string) error {
+// validateDispatchAgainst biến kỷ luật giai đoạn trong prompt thành phòng tuyến cơ
+// học. Architect có thể duy trì cấu trúc ở giai đoạn quy hoạch và giai đoạn sáng
+// tác; Writer/Editor chỉ được dùng sự thật tác phẩm đã hoàn chỉnh và đã vào
+// giai đoạn writing.
+func validateDispatchAgainst(dispatch *DispatchOp, phase string, texts *arbiterTexts) error {
 	if dispatch == nil {
 		return nil
 	}
 	if phase == "" {
-		return fmt.Errorf("缺少 phase，禁止执行派单")
+		return fmt.Errorf("%s", texts.missingPhase)
 	}
 	if phase == string(domain.PhaseComplete) {
-		return fmt.Errorf("完本期禁止直接派单")
+		return fmt.Errorf("%s", texts.completeNoDispatch)
 	}
 	switch dispatch.Agent {
 	case "writer", "editor":
 		if phase != string(domain.PhaseWriting) {
-			return fmt.Errorf("%s 仅能在 writing 阶段派发（当前 phase=%s）", dispatch.Agent, phase)
+			return fmt.Errorf(texts.workerPhaseOnly, dispatch.Agent, phase)
 		}
 	}
 	return nil
 }
 
-// DecideIntervention 干预分诊。失败语义:返回 error → 调用方显式回显
-// 真实失败原因,且不产生任何写入(宁可不动,不可误动)。
+// DecideIntervention chẩn đoán can thiệp. Ngữ nghĩa thất bại: trả về error →
+// nơi gọi hiển thị lại đúng lý do thất bại và không ghi gì (thà không động còn
+// hơn động sai).
 func DecideIntervention(ctx context.Context, model agentcore.ChatModel, systemPrompt string, facts InterventionFacts, text string) (InterventionDecision, error) {
 	payload, err := marshalPayload(struct {
 		Intervention string            `json:"intervention"`
@@ -252,7 +270,8 @@ func DecideIntervention(ctx context.Context, model agentcore.ChatModel, systemPr
 	if err != nil {
 		return InterventionDecision{}, err
 	}
-	return decide(ctx, model, interventionContract, systemPrompt, payload, func(d *InterventionDecision) error {
+	lang := i18n.Active()
+	return decide(ctx, model, interventionContractFor(lang), systemPrompt, payload, func(d *InterventionDecision) error {
 		return d.ValidateAgainst(facts)
 	})
 }

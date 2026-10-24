@@ -7,19 +7,21 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 )
 
-// FailureFacts 是 worker_failure / deadlock 两个场景共用的事实包:
-// Engine 已做过确定性分类(重试/参数错等不到这里),送到 Arbiter 的都是
-// "确定性代码给不出出路"的残余。
+// FailureFacts là gói sự thật dùng chung cho hai kịch bản worker_failure và
+// deadlock: Engine đã tự phân loại ở tầng quyết định (lỗi tham số, lỗi tạm
+// thời… không đi tới đây), nên thứ đến với Arbiter đều là phần dư mà mã quyết
+// định không tìm ra lối thoát.
 type FailureFacts struct {
 	Kind          string   `json:"kind"` // worker_failure | deadlock
 	Agent         string   `json:"agent,omitempty"`
 	Task          string   `json:"task,omitempty"`
-	Error         string   `json:"error,omitempty"` // worker_failure:错误文本
+	Error         string   `json:"error,omitempty"` // worker_failure: văn bản lỗi
 	ErrorKind     string   `json:"error_kind,omitempty"`
-	Repeats       int      `json:"repeats,omitempty"` // deadlock:同指令已派次数
+	Repeats       int      `json:"repeats,omitempty"` // deadlock: số lần đã phát cùng chỉ thị
 	Phase         string   `json:"phase,omitempty"`
 	NextChapter   int      `json:"next_chapter,omitempty"`
 	PendingQueue  []int    `json:"pending_rewrites,omitempty"`
@@ -27,53 +29,63 @@ type FailureFacts struct {
 	FactWarnings  []string `json:"fact_warnings,omitempty"`
 }
 
-// FailureDecision 失败/僵局裁定。
+// FailureDecision là phán quyết thất bại/bế tắc.
 type FailureDecision struct {
 	Action   string      `json:"action"` // retry | reroute | abort
 	Dispatch *DispatchOp `json:"dispatch,omitempty"`
 	Reason   string      `json:"reason"`
 }
 
+// ValidateAgainst kiểm tra tính hợp lệ của phán quyết theo sự thật. Thông báo
+// lỗi được đưa lại cho model nên theo ngôn ngữ tác phẩm ở cấp tiến trình.
 func (d *FailureDecision) ValidateAgainst(f FailureFacts) error {
+	texts := activeTexts()
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("%s", texts.reasonRequired)
 	}
 	switch d.Action {
 	case "retry", "abort":
 		return nil
 	case "reroute":
 		if d.Dispatch == nil {
-			return fmt.Errorf("reroute 必须附 dispatch")
+			return fmt.Errorf("%s", texts.rerouteNeedsDispatch)
 		}
-		if err := d.Dispatch.validate(); err != nil {
+		if err := d.Dispatch.validate(texts); err != nil {
 			return err
 		}
-		return validateDispatchAgainst(d.Dispatch, f.Phase)
+		return validateDispatchAgainst(d.Dispatch, f.Phase, texts)
 	default:
-		return fmt.Errorf("action 非法: %q（可选 retry / reroute / abort）", d.Action)
+		return fmt.Errorf(texts.actionInvalid, d.Action)
 	}
 }
 
-// failureContract 紧邻 FailureDecision:action 封闭枚举,dispatch 可空对象
-// (仅 reroute 时非 null);跨字段组合仍由 ValidateAgainst 按事实校验。
-var failureContract = llmcontract.Contract{
-	Name:        "arbiter_failure",
-	Description: "失败/僵局裁定:给出出路",
-	Schema: schema.Object(
-		schema.Property("action", schema.Enum("出路", "retry", "reroute", "abort")).Required(),
-		schema.Property("dispatch", dispatchSchema("派单目标(仅 reroute 时给出,否则为 null)")).Required(),
-		schema.Property("reason", schema.String("裁定理由")).Required(),
-	),
+// failureContractFor dựng hợp đồng thất bại theo ngôn ngữ tác phẩm: action là
+// enum đóng, dispatch là đối tượng có thể null (chỉ khác null ở reroute); tổ
+// hợp giữa các trường vẫn do ValidateAgainst kiểm tra theo sự thật.
+func failureContractFor(lang i18n.Lang) llmcontract.Contract {
+	texts := arbiterTextsFor(lang)
+	return llmcontract.Contract{
+		Name:        "arbiter_failure",
+		Description: texts.failureDesc,
+		Schema: schema.Object(
+			schema.Property("action", schema.Enum(texts.failureActionLabel, "retry", "reroute", "abort")).Required(),
+			schema.Property("dispatch", dispatchSchema(texts, texts.failureDispatchLabel)).Required(),
+			schema.Property("reason", schema.String(texts.failureReasonLabel)).Required(),
+		),
+		Lang: lang,
+	}
 }
 
-// DecideFailure 失败/僵局咨询。失败语义:返回 error → Engine 按最保守路径处理
-// (暂停 + notify),绝不无限咨询。
+// DecideFailure hỏi ý kiến khi thất bại/bế tắc. Ngữ nghĩa thất bại: trả về
+// error → Engine xử lý theo đường thận trọng nhất (tạm dừng + notify), tuyệt
+// đối không hỏi vô hạn.
 func DecideFailure(ctx context.Context, model agentcore.ChatModel, systemPrompt string, facts FailureFacts) (FailureDecision, error) {
 	payload, err := marshalPayload(facts)
 	if err != nil {
 		return FailureDecision{}, err
 	}
-	return decide(ctx, model, failureContract, systemPrompt, payload, func(d *FailureDecision) error {
+	lang := i18n.Active()
+	return decide(ctx, model, failureContractFor(lang), systemPrompt, payload, func(d *FailureDecision) error {
 		return d.ValidateAgainst(facts)
 	})
 }

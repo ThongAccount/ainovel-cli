@@ -7,53 +7,68 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 )
 
-// PlanStartDecision 启动裁定:选规划师并产出(必要时扩充过的)任务文本。
+// PlanStartDecision là phán quyết khởi chạy: chọn kiến trúc sư và sinh văn bản
+// nhiệm vụ (đã bổ sung nếu cần).
 type PlanStartDecision struct {
 	Planner string `json:"planner"` // architect_long | architect_short
-	Task    string `json:"task"`    // 交给规划师的完整任务(含扩充后的需求)
+	Task    string `json:"task"`    // nhiệm vụ đầy đủ giao cho kiến trúc sư (kèm yêu cầu đã bổ sung)
 	Reason  string `json:"reason"`
 }
 
+// Validate kiểm tra tính hợp lệ của quyết định khởi chạy. Thông báo lỗi được
+// đưa lại cho model nên theo ngôn ngữ tác phẩm ở cấp tiến trình.
 func (d *PlanStartDecision) Validate() error {
+	texts := activeTexts()
 	if d.Planner != "architect_long" && d.Planner != "architect_short" {
-		return fmt.Errorf("planner 非法: %q（可选 architect_long / architect_short）", d.Planner)
+		return fmt.Errorf(texts.plannerInvalid, d.Planner)
 	}
 	if strings.TrimSpace(d.Task) == "" {
-		return fmt.Errorf("task 不能为空")
+		return fmt.Errorf("%s", texts.taskRequired)
 	}
 	if strings.TrimSpace(d.Reason) == "" {
-		return fmt.Errorf("reason 不能为空")
+		return fmt.Errorf("%s", texts.reasonRequired)
 	}
 	return nil
 }
 
-// planStartContract 紧邻 PlanStartDecision:字段全 required,planner 是封闭枚举。
-var planStartContract = llmcontract.Contract{
-	Name:        "arbiter_plan_start",
-	Description: "启动裁定:选规划师并产出完整任务文本",
-	Schema: schema.Object(
-		schema.Property("planner", schema.Enum("规划师", "architect_long", "architect_short")).Required(),
-		schema.Property("task", schema.String("交给规划师的完整任务(含扩充后的需求)")).Required(),
-		schema.Property("reason", schema.String("选择理由")).Required(),
-	),
+// planStartContractFor dựng hợp đồng khởi chạy theo ngôn ngữ tác phẩm: mọi
+// trường required, planner là enum đóng.
+func planStartContractFor(lang i18n.Lang) llmcontract.Contract {
+	texts := arbiterTextsFor(lang)
+	return llmcontract.Contract{
+		Name:        "arbiter_plan_start",
+		Description: texts.planStartDesc,
+		Schema: schema.Object(
+			schema.Property("planner", schema.Enum(texts.plannerLabel, "architect_long", "architect_short")).Required(),
+			schema.Property("task", schema.String(texts.planStartTaskLabel)).Required(),
+			schema.Property("reason", schema.String(texts.planStartReasonLabel)).Required(),
+		),
+		Lang: lang,
+	}
 }
 
-// planStartPayload 是 plan_start 的用户负载(事实即输入,无 store 状态——新书)。
+// planStartPayload là tải người dùng của kịch bản plan_start (sự thật chính là
+// đầu vào, không có trạng thái store — sách mới).
 type planStartPayload struct {
 	Requirement string `json:"requirement"`
 	Style       string `json:"style,omitempty"`
 }
 
-// DecidePlanStart 启动裁定:根据用户需求选规划师;需求过短(<20 字)时在 task 里
-// 自主补充差异化方向、目标读者与核心消费点、至少一个非常规钩子。
-// 失败语义:返回 error → 调用方显式报错中止启动(启动期用户在场,报错优于猜测)。
+// DecidePlanStart phán quyết khởi chạy: chọn kiến trúc sư theo yêu cầu người
+// dùng; khi yêu cầu quá ngắn (<20 ký tự) thì tự bổ sung trong task hướng khác
+// biệt hóa, độc giả mục tiêu và điểm tiêu thụ cốt lõi, ít nhất một móc câu
+// chuyện ngoài quy chuẩn.
+// Ngữ nghĩa thất bại: trả về error → nơi gọi báo lỗi và dừng khởi chạy (người
+// dùng đang ở đó, báo lỗi tốt hơn đoán).
 func DecidePlanStart(ctx context.Context, model agentcore.ChatModel, systemPrompt, requirement, style string) (PlanStartDecision, error) {
 	payload, err := marshalPayload(planStartPayload{Requirement: requirement, Style: style})
 	if err != nil {
 		return PlanStartDecision{}, err
 	}
-	return decide(ctx, model, planStartContract, systemPrompt, payload, (*PlanStartDecision).Validate)
+	lang := i18n.Active()
+	return decide(ctx, model, planStartContractFor(lang), systemPrompt, payload, (*PlanStartDecision).Validate)
 }

@@ -13,11 +13,12 @@ import (
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/llm"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// scriptedModel 按调用序号返回预设文本。
+// scriptedModel trả về văn bản định sẵn theo thứ tự lời gọi.
 type scriptedModel struct {
 	outputs        []string
 	idx            int64
@@ -53,13 +54,13 @@ func (m *scriptedModel) Generate(_ context.Context, messages []agentcore.Message
 
 func TestDecidePlanStartDoesNotSendThinkingToChatModel(t *testing.T) {
 	m := &scriptedModel{outputs: []string{
-		`{"planner":"architect_short","task":"规划短篇","reason":"篇幅较短"}`,
+		`{"planner":"architect_short","task":"lập dàn ý truyện ngắn","reason":"yêu cầu ngắn"}`,
 	}, rejectThinking: true}
-	if _, err := DecidePlanStart(t.Context(), m, "sys", "写一部短篇", ""); err != nil {
+	if _, err := DecidePlanStart(t.Context(), m, "sys", "viết một truyện ngắn", ""); err != nil {
 		t.Fatalf("decide: %v", err)
 	}
 	if m.lastCfg.ThinkingLevel != agentcore.ThinkingAuto {
-		t.Fatalf("Arbiter 不应向普通 chat 模型发送 thinking 参数, got %q", m.lastCfg.ThinkingLevel)
+		t.Fatalf("Arbiter không được gửi tham số thinking cho mô hình chat thường, got %q", m.lastCfg.ThinkingLevel)
 	}
 	if m.lastCfg.MaxTokens != decideMaxTokens {
 		t.Fatalf("max_tokens = %d, want %d", m.lastCfg.MaxTokens, decideMaxTokens)
@@ -68,16 +69,16 @@ func TestDecidePlanStartDoesNotSendThinkingToChatModel(t *testing.T) {
 
 func TestDecidePromptContractAppendsSchema(t *testing.T) {
 	m := &scriptedModel{outputs: []string{
-		`{"planner":"architect_short","task":"规划短篇","reason":"篇幅较短"}`,
+		`{"planner":"architect_short","task":"lập dàn ý truyện ngắn","reason":"yêu cầu ngắn"}`,
 	}}
-	const semanticPrompt = "只根据需求判断规划方式。"
-	if _, err := DecidePlanStart(t.Context(), m, semanticPrompt, "写一部短篇", ""); err != nil {
+	const semanticPrompt = "Chỉ căn cứ yêu cầu để chọn cách quy hoạch."
+	if _, err := DecidePlanStart(t.Context(), m, semanticPrompt, "viết một truyện ngắn", ""); err != nil {
 		t.Fatal(err)
 	}
 	got := m.lastMsgs[0].TextContent()
 	for _, want := range []string{semanticPrompt, "<output-json-schema>", `"planner"`} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("prompt contract 缺少 %q:\n%s", want, got)
+			t.Fatalf("prompt contract thiếu %q:\n%s", want, got)
 		}
 	}
 }
@@ -113,7 +114,7 @@ func (m *failingThenValidModel) Generate(context.Context, []agentcore.Message, [
 	return &agentcore.LLMResponse{Message: agentcore.Message{
 		Role: agentcore.RoleAssistant,
 		Content: []agentcore.ContentBlock{agentcore.TextBlock(
-			`{"planner":"architect_short","task":"规划短篇","reason":"篇幅较短"}`)},
+			`{"planner":"architect_short","task":"lập dàn ý truyện ngắn","reason":"yêu cầu ngắn"}`)},
 	}}, nil
 }
 
@@ -124,31 +125,31 @@ func (m *failingThenValidModel) GenerateStream(context.Context, []agentcore.Mess
 func (m *failingThenValidModel) SupportsTools() bool { return true }
 
 func TestDecidePlanStart_ValidAndFeedbackRetry(t *testing.T) {
-	// 第一次输出非法(planner 错),第二次带围栏但合法——反馈重试 + JSON 提取都要工作。
+	// Lần đầu sai (planner không hợp lệ), lần sau hợp lệ nhưng có hàng rào — cả thử lại theo phản hồi lẫn trích JSON đều phải chạy.
 	m := &scriptedModel{outputs: []string{
 		`{"planner":"writer","task":"x","reason":"r"}`,
-		"```json\n{\"planner\":\"architect_short\",\"task\":\"写一个 20 章的悬疑短篇……\",\"reason\":\"用户显式要求短篇\"}\n```",
+		"```json\n{\"planner\":\"architect_short\",\"task\":\"viết một truyện ngắn trinh thám 20 chương……\",\"reason\":\"người dùng yêu cầu truyện ngắn\"}\n```",
 	}}
-	d, err := DecidePlanStart(context.Background(), m, "sys", "20章悬疑短篇", "suspense")
+	d, err := DecidePlanStart(context.Background(), m, "sys", "truyện ngắn trinh thám 20 chương", "trinh thám")
 	if err != nil {
 		t.Fatalf("decide: %v", err)
 	}
-	if d.Planner != "architect_short" || !strings.Contains(d.Task, "悬疑") {
-		t.Fatalf("裁定错误: %+v", d)
+	if d.Planner != "architect_short" || !strings.Contains(d.Task, "trinh thám") {
+		t.Fatalf("phán quyết sai: %+v", d)
 	}
 	if got := atomic.LoadInt64(&m.idx); got != 2 {
-		t.Fatalf("应恰好 2 次调用（1 非法 + 1 反馈重试成功），got %d", got)
+		t.Fatalf("phải đúng 2 lời gọi (1 sai + 1 thử lại thành công), got %d", got)
 	}
 }
 
 func TestDecide_InvalidOutputContinuesUntilContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	m := &scriptedModel{outputs: []string{"完全不是 JSON"}, cancel: cancel, cancelAt: 4}
-	if _, err := DecidePlanStart(ctx, m, "sys", "需求", ""); !errors.Is(err, context.Canceled) {
-		t.Fatalf("应由 context 结束自愈循环，得 %v", err)
+	m := &scriptedModel{outputs: []string{"không phải JSON"}, cancel: cancel, cancelAt: 4}
+	if _, err := DecidePlanStart(ctx, m, "sys", "yêu cầu", ""); !errors.Is(err, context.Canceled) {
+		t.Fatalf("vòng tự lành phải dừng theo context, got %v", err)
 	}
 	if got := atomic.LoadInt64(&m.idx); got != 4 {
-		t.Fatalf("context 取消前应持续调用，got %d", got)
+		t.Fatalf("phải gọi liên tục trước khi context bị huỷ, got %d", got)
 	}
 }
 
@@ -159,7 +160,7 @@ func TestDecide_RetryableModelErrorReportsSharedProgress(t *testing.T) {
 		progress = append(progress, p)
 	})
 
-	if _, err := DecidePlanStart(ctx, m, "sys", "需求", ""); err != nil {
+	if _, err := DecidePlanStart(ctx, m, "sys", "yêu cầu", ""); err != nil {
 		t.Fatalf("decide: %v", err)
 	}
 	if got := atomic.LoadInt64(&m.calls); got != 9 {
@@ -172,8 +173,8 @@ func TestDecide_RetryableModelErrorReportsSharedProgress(t *testing.T) {
 
 func TestDecide_NonRetryableModelErrorFailsImmediately(t *testing.T) {
 	m := &errorModel{err: retryableTestError{retryable: false}}
-	if _, err := DecidePlanStart(context.Background(), m, "sys", "需求", ""); err == nil {
-		t.Fatal("non-retryable model error should fail")
+	if _, err := DecidePlanStart(context.Background(), m, "sys", "yêu cầu", ""); err == nil {
+		t.Fatal("lỗi mô hình không thử lại được phải làm thất bại")
 	}
 	if got := atomic.LoadInt64(&m.calls); got != 1 {
 		t.Fatalf("model calls = %d, want 1", got)
@@ -206,29 +207,29 @@ func TestInterventionDecision_ValidateAgainst(t *testing.T) {
 		f       InterventionFacts
 		wantErr bool
 	}{
-		{"空决策", InterventionDecision{Reason: "r"}, writing, true},
-		{"缺 reason", InterventionDecision{Answer: "好的"}, writing, true},
-		{"查询类", InterventionDecision{Answer: "已完成 10 章", Reason: "查询"}, writing, false},
-		{"返工组合", InterventionDecision{
-			Hold:     &AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "重写第3章语气"},
-			Dispatch: &DispatchOp{Agent: "editor", Task: "重写第3章:语气改冷"},
-			Reason:   "改已写章节",
+		{"quyết định rỗng", InterventionDecision{Reason: "r"}, writing, true},
+		{"thiếu reason", InterventionDecision{Answer: "được"}, writing, true},
+		{"loại tra cứu", InterventionDecision{Answer: "đã xong 10 chương", Reason: "tra cứu"}, writing, false},
+		{"tổ hợp làm lại", InterventionDecision{
+			Hold:     &AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "viết lại chương 3 cho lạnh"},
+			Dispatch: &DispatchOp{Agent: "editor", Task: "viết lại chương 3: giọng lạnh hơn"},
+			Reason:   "sửa chương đã viết",
 		}, writing, false},
-		{"非法派单目标", InterventionDecision{Dispatch: &DispatchOp{Agent: "coordinator", Task: "x"}, Reason: "r"}, writing, true},
-		{"写作期 reopen", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{3}}, Reason: "r"}, writing, true},
-		{"完本期 reopen", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{3}}, Reason: "返工"}, complete, false},
-		{"完本期 reopen 越界", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{99}}, Reason: "r"}, complete, true},
-		{"完本期直接派单", InterventionDecision{Dispatch: &DispatchOp{Agent: "writer", Task: "x"}, Reason: "r"}, complete, true},
-		{"规划期禁止 writer", InterventionDecision{Dispatch: &DispatchOp{Agent: "writer", Task: "写第1章"}, Reason: "r"}, InterventionFacts{Phase: string(domain.PhaseOutline)}, true},
-		{"规划期允许 architect", InterventionDecision{Dispatch: &DispatchOp{Agent: "architect_long", Task: "补齐大纲"}, Reason: "r"}, InterventionFacts{Phase: string(domain.PhaseOutline)}, false},
-		{"一次性暂停缺条件", InterventionDecision{Hold: &AdvanceHoldOp{Reason: "停"}, Reason: "r"}, writing, true},
-		{"一次性暂停缺摘要", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary}, Reason: "r"}, writing, true},
-		{"目标章节暂停", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, TargetChapter: 15, Reason: "写到第15章"}, Reason: "r"}, writing, false},
-		{"目标章节未填写", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, Reason: "写到目标章"}, Reason: "r"}, writing, true},
-		{"目标章节已经完成", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, TargetChapter: 10, Reason: "写到第10章"}, Reason: "r"}, writing, true},
-		{"非目标暂停携带章节", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, TargetChapter: 15, Reason: "停"}, Reason: "r"}, writing, true},
-		{"取消一次性暂停", InterventionDecision{Hold: &AdvanceHoldOp{Cancel: true}, Answer: "继续", Reason: "r"}, writing, false},
-		{"完本期设置一次性暂停", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "停"}, Reason: "r"}, complete, true},
+		{"đích phân công không hợp lệ", InterventionDecision{Dispatch: &DispatchOp{Agent: "coordinator", Task: "x"}, Reason: "r"}, writing, true},
+		{"reopen ở giai đoạn sáng tác", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{3}}, Reason: "r"}, writing, true},
+		{"reopen ở giai đoạn hoàn thành", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{3}}, Reason: "làm lại"}, complete, false},
+		{"reopen vượt phạm vi", InterventionDecision{Reopen: &ReopenOp{Chapters: []int{99}}, Reason: "r"}, complete, true},
+		{"phân công trực tiếp ở giai đoạn hoàn thành", InterventionDecision{Dispatch: &DispatchOp{Agent: "writer", Task: "x"}, Reason: "r"}, complete, true},
+		{"giai đoạn quy hoạch cấm writer", InterventionDecision{Dispatch: &DispatchOp{Agent: "writer", Task: "viết chương 1"}, Reason: "r"}, InterventionFacts{Phase: string(domain.PhaseOutline)}, true},
+		{"giai đoạn quy hoạch cho phép architect", InterventionDecision{Dispatch: &DispatchOp{Agent: "architect_long", Task: "bổ sung dàn ý"}, Reason: "r"}, InterventionFacts{Phase: string(domain.PhaseOutline)}, false},
+		{"tạm dừng một lần thiếu điều kiện", InterventionDecision{Hold: &AdvanceHoldOp{Reason: "dừng"}, Reason: "r"}, writing, true},
+		{"tạm dừng một lần thiếu tóm tắt", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary}, Reason: "r"}, writing, true},
+		{"tạm dừng tại chương đích", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, TargetChapter: 15, Reason: "viết tới chương 15"}, Reason: "r"}, writing, false},
+		{"tạm dừng chưa điền chương đích", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, Reason: "viết tới chương đích"}, Reason: "r"}, writing, true},
+		{"chương đích đã hoàn thành", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtChapter, TargetChapter: 10, Reason: "viết tới chương 10"}, Reason: "r"}, writing, true},
+		{"tạm dừng không theo chương lại mang chương", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, TargetChapter: 15, Reason: "dừng"}, Reason: "r"}, writing, true},
+		{"huỷ tạm dừng một lần", InterventionDecision{Hold: &AdvanceHoldOp{Cancel: true}, Answer: "tiếp tục", Reason: "r"}, writing, false},
+		{"đặt tạm dừng một lần ở giai đoạn hoàn thành", InterventionDecision{Hold: &AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "dừng"}, Reason: "r"}, complete, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -242,41 +243,41 @@ func TestInterventionDecision_ValidateAgainst(t *testing.T) {
 
 func TestDecideInterventionAcceptsTargetChapterHold(t *testing.T) {
 	m := &scriptedModel{outputs: []string{`{
-		"answer":"将连续写到第15章后暂停",
+		"answer":"sẽ viết liên tục tới chương 15 rồi dừng",
 		"rules":null,
-		"hold":{"cancel":false,"after":"chapter","target_chapter":15,"reason":"写到第15章后暂停"},
+		"hold":{"cancel":false,"after":"chapter","target_chapter":15,"reason":"viết tới chương 15 rồi dừng"},
 		"reopen":null,
 		"dispatch":null,
-		"reason":"用户指定了一次性运行终点"
+		"reason":"người dùng chỉ định điểm dừng một lần"
 	}`}}
 	d, err := DecideIntervention(t.Context(), m, "sys", InterventionFacts{
 		Phase: string(domain.PhaseWriting), CompletedChapters: 10, NextChapter: 11,
-	}, "写到第15章")
+	}, "viết tới chương 15")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if d.Hold == nil || d.Hold.After != domain.AdvanceHoldAtChapter || d.Hold.TargetChapter != 15 {
-		t.Fatalf("目标章节 hold 解码错误: %+v", d.Hold)
+		t.Fatalf("hold chương đích giải mã sai: %+v", d.Hold)
 	}
 }
 
 func TestFailureDecision_Validate(t *testing.T) {
 	facts := FailureFacts{Kind: "worker_failure", Phase: string(domain.PhaseWriting)}
-	ok := FailureDecision{Action: "reroute", Dispatch: &DispatchOp{Agent: "architect_long", Task: "先 expand_arc"}, Reason: "错误指明出路"}
+	ok := FailureDecision{Action: "reroute", Dispatch: &DispatchOp{Agent: "architect_long", Task: "expand_arc trước đã"}, Reason: "lỗi cần chỉ ra lối thoát"}
 	if err := ok.ValidateAgainst(facts); err != nil {
-		t.Fatalf("合法 reroute 被拒: %v", err)
+		t.Fatalf("reroute hợp lệ bị từ chối: %v", err)
 	}
 	bad := FailureDecision{Action: "reroute", Reason: "r"}
 	if err := bad.ValidateAgainst(facts); err == nil {
-		t.Fatal("reroute 无 dispatch 应被拒")
+		t.Fatal("reroute thiếu dispatch phải bị từ chối")
 	}
 	if err := (&FailureDecision{Action: "escalate", Reason: "r"}).ValidateAgainst(facts); err == nil {
-		t.Fatal("非法 action 应被拒")
+		t.Fatal("action không hợp lệ phải bị từ chối")
 	}
 	planning := FailureFacts{Kind: "worker_failure", Phase: string(domain.PhaseOutline)}
-	writer := FailureDecision{Action: "reroute", Dispatch: &DispatchOp{Agent: "writer", Task: "写第1章"}, Reason: "尝试绕过规划"}
+	writer := FailureDecision{Action: "reroute", Dispatch: &DispatchOp{Agent: "writer", Task: "viết chương 1"}, Reason: "cố vòng qua quy hoạch"}
 	if err := writer.ValidateAgainst(planning); err == nil {
-		t.Fatal("失败裁定不得在规划期派发 writer")
+		t.Fatal("phán quyết thất bại không được phân công writer ở giai đoạn quy hoạch")
 	}
 }
 
@@ -288,7 +289,7 @@ func TestCollectInterventionFacts(t *testing.T) {
 	if err := st.Progress.Init(30); err != nil {
 		t.Fatalf("progress: %v", err)
 	}
-	if err := st.Book.Save(domain.BookMetadata{Title: "测试书", Synopsis: "测试简介"}); err != nil {
+	if err := st.Book.Save(domain.BookMetadata{Title: "sách thử nghiệm", Synopsis: "tóm tắt thử nghiệm"}); err != nil {
 		t.Fatalf("book: %v", err)
 	}
 	if err := st.RunMeta.Init("default", "openrouter", "m"); err != nil {
@@ -297,10 +298,10 @@ func TestCollectInterventionFacts(t *testing.T) {
 	if err := st.RunMeta.SetAdvanceMode(domain.ChapterAdvanceReview); err != nil {
 		t.Fatalf("advance mode: %v", err)
 	}
-	if err := st.RunMeta.SetAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 20, Reason: "写到第20章"}); err != nil {
+	if err := st.RunMeta.SetAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 20, Reason: "viết tới chương 20"}); err != nil {
 		t.Fatalf("advance hold: %v", err)
 	}
-	if _, err := st.Decisions.Append(storepkg.DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "上次干预", Reason: "已入队"}); err != nil {
+	if _, err := st.Decisions.Append(storepkg.DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "can thiệp trước", Reason: "đã vào hàng đợi"}); err != nil {
 		t.Fatalf("append decision: %v", err)
 	}
 
@@ -308,21 +309,22 @@ func TestCollectInterventionFacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CollectInterventionFacts: %v", err)
 	}
-	if f.Title != "测试书" {
-		t.Fatalf("facts 应含书名, got %+v", f)
+	if f.Title != "sách thử nghiệm" {
+		t.Fatalf("facts phải có tên sách, got %+v", f)
 	}
-	if len(f.RecentDecisions) != 1 || f.RecentDecisions[0].Input != "上次干预" {
-		t.Fatalf("干预记忆缺失: %+v", f.RecentDecisions)
+	if len(f.RecentDecisions) != 1 || f.RecentDecisions[0].Input != "can thiệp trước" {
+		t.Fatalf("ký ức can thiệp thiếu: %+v", f.RecentDecisions)
 	}
 	if f.AdvanceMode != string(domain.ChapterAdvanceReview) || !f.HasAdvanceHold || f.AdvanceHoldAfter != string(domain.AdvanceHoldAtChapter) || f.AdvanceHoldTargetChapter != 20 {
-		t.Fatalf("推进控制事实缺失: %+v", f)
+		t.Fatalf("thiếu sự thật điều khiển tiến độ: %+v", f)
 	}
 	if len(f.FoundationMissing) == 0 {
-		t.Fatal("新书应有基础设定缺项")
+		t.Fatal("sách mới phải còn các mục thiết lập nền tảng bị thiếu")
 	}
 
-	// /reopen 是可枚举事实，必须进 facts：重开后的书章数已写满，缺了它模型会
-	// 据 completed=total 推断"已完结"、无视 phase=writing（实测事故）。
+	// /reopen là sự thật có thể liệt kê, bắt buộc phải vào facts: sau khi mở
+	// lại, số chương đã viết đã đầy, thiếu nó thì model sẽ suy ra "đã hoàn thành"
+	// từ completed=total và bỏ qua phase=writing (sự cố đã đo được).
 	if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("phase: %v", err)
 	}
@@ -337,7 +339,7 @@ func TestCollectInterventionFacts(t *testing.T) {
 		t.Fatalf("CollectInterventionFacts after reopen: %v", err)
 	}
 	if f.ReopenCount != 1 || f.Phase != string(domain.PhaseWriting) {
-		t.Fatalf("重开事实缺失: phase=%s reopen_count=%d", f.Phase, f.ReopenCount)
+		t.Fatalf("thiếu sự thật mở lại: phase=%s reopen_count=%d", f.Phase, f.ReopenCount)
 	}
 }
 
@@ -350,9 +352,9 @@ func TestCollectInterventionFactsDoesNotExposeLayeredEstimateAsTotal(t *testing.
 		t.Fatal(err)
 	}
 	volumes := []domain.VolumeOutline{{
-		Index: 1, Title: "卷一", Arcs: []domain.ArcOutline{
-			{Index: 1, Title: "当前弧", Chapters: []domain.OutlineEntry{{Title: "一"}, {Title: "二"}}},
-			{Index: 2, Title: "骨架弧", EstimatedChapters: 64},
+		Index: 1, Title: "tập một", Arcs: []domain.ArcOutline{
+			{Index: 1, Title: "cung hiện tại", Chapters: []domain.OutlineEntry{{Title: "một"}, {Title: "hai"}}},
+			{Index: 2, Title: "cung khung", EstimatedChapters: 64},
 		},
 	}}
 	if err := st.Outline.SaveLayeredOutline(volumes); err != nil {
@@ -372,23 +374,23 @@ func TestCollectInterventionFactsDoesNotExposeLayeredEstimateAsTotal(t *testing.
 		t.Fatal(err)
 	}
 	if !facts.DynamicPlanning || facts.OutlinedChapters != 2 {
-		t.Fatalf("动态规划事实错误: %+v", facts)
+		t.Fatalf("sự thật quy hoạch động sai: %+v", facts)
 	}
 	raw, err := json.Marshal(facts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(raw), "total_chapters") || strings.Contains(string(raw), `:66`) {
-		t.Fatalf("内部估算不得作为总章数进入 Arbiter: %s", raw)
+		t.Fatalf("ước tính nội bộ không được vào Arbiter như tổng số chương: %s", raw)
 	}
 }
 
 func TestExtractJSON(t *testing.T) {
 	cases := map[string]string{
-		`{"a":1}`:                        `{"a":1}`,
-		"前缀 ```json\n{\"a\":\"}\"}\n```": `{"a":"}"}`, // 字符串里的花括号不干扰平衡
-		"没有对象":                           "",
-		`{"nested":{"b":2},"c":3} 尾巴`:    `{"nested":{"b":2},"c":3}`,
+		`{"a":1}`: `{"a":1}`,
+		"tiền tố ```json\n{\"a\":\"}\"}\n```": `{"a":"}"}`, // dấu ngoặc nhọn trong chuỗi không làm lệch cân bằng
+		"không có object":                     "",
+		`{"nested":{"b":2},"c":3} đuôi`:       `{"nested":{"b":2},"c":3}`,
 	}
 	for in, want := range cases {
 		if got := llmcontract.ExtractJSONObject(in); got != want {
@@ -397,7 +399,7 @@ func TestExtractJSON(t *testing.T) {
 	}
 }
 
-// nativeModel 声明支持原生 JSON Schema 的模型:decide 应走 native 分支。
+// nativeModel khai báo hỗ trợ JSON Schema gốc: decide phải đi nhánh native.
 type nativeModel struct {
 	*scriptedModel
 	stop agentcore.StopReason
@@ -419,87 +421,93 @@ func (m *nativeModel) Generate(ctx context.Context, msgs []agentcore.Message, to
 	return resp, err
 }
 
-// 契约测试(RFC §11.1):根为 object、全属性(含嵌套)required、dispatch 为可空对象。
+// Kiểm thử hợp đồng (RFC §11.1): gốc là object, mọi thuộc tính (kể cả lồng) required, dispatch là đối tượng có thể null.
 func TestContractSchemasAreStrictReady(t *testing.T) {
-	for _, c := range []llmcontract.Contract{planStartContract, failureContract, interventionContract} {
-		if c.Schema["type"] != "object" {
-			t.Fatalf("%s: 根必须是 object", c.Name)
+	for _, lang := range []i18n.Lang{i18n.LangVI, i18n.LangZH} {
+		for _, c := range []llmcontract.Contract{
+			planStartContractFor(lang),
+			failureContractFor(lang),
+			interventionContractFor(lang),
+		} {
+			if c.Schema["type"] != "object" {
+				t.Fatalf("%s: gốc phải là object", c.Name)
+			}
+			if err := llmcontract.ValidateStrictReady(c.Schema); err != nil {
+				t.Fatalf("%s: %v", c.Name, err)
+			}
+			if len(c.Fingerprint()) != 12 {
+				t.Fatalf("%s: vân tay bất thường: %q", c.Name, c.Fingerprint())
+			}
 		}
-		if err := llmcontract.ValidateStrictReady(c.Schema); err != nil {
-			t.Fatalf("%s: %v", c.Name, err)
+		dispatch := failureContractFor(lang).Schema["properties"].(map[string]any)["dispatch"].(map[string]any)
+		types, ok := dispatch["type"].([]string)
+		if !ok || !slices.Contains(types, "null") || !slices.Contains(types, "object") {
+			t.Fatalf("dispatch phải là đối tượng có thể null: %v", dispatch["type"])
 		}
-		if len(c.Fingerprint()) != 12 {
-			t.Fatalf("%s: fingerprint 异常: %q", c.Name, c.Fingerprint())
-		}
-	}
-	dispatch := failureContract.Schema["properties"].(map[string]any)["dispatch"].(map[string]any)
-	types, ok := dispatch["type"].([]string)
-	if !ok || !slices.Contains(types, "null") || !slices.Contains(types, "object") {
-		t.Fatalf("dispatch 应为可空对象: %v", dispatch["type"])
 	}
 	var d FailureDecision
-	if err := json.Unmarshal([]byte(`{"action":"retry","dispatch":null,"reason":"瞬时错误"}`), &d); err != nil {
-		t.Fatalf("含 dispatch:null 的样本应可解码: %v", err)
+	if err := json.Unmarshal([]byte(`{"action":"retry","dispatch":null,"reason":"lỗi tạm thời"}`), &d); err != nil {
+		t.Fatalf("mẫu có dispatch:null phải giải mã được: %v", err)
 	}
 	if err := d.ValidateAgainst(FailureFacts{Phase: "writing"}); err != nil {
-		t.Fatalf("样本应过校验: %v", err)
+		t.Fatalf("mẫu phải qua kiểm tra: %v", err)
 	}
 }
 
 func TestDecideNativeSendsSchemaAndDecodesFullOutput(t *testing.T) {
 	m := &nativeModel{scriptedModel: &scriptedModel{outputs: []string{
-		`{"planner":"architect_short","task":"规划短篇","reason":"篇幅较短"}`,
+		`{"planner":"architect_short","task":"lập dàn ý truyện ngắn","reason":"yêu cầu ngắn"}`,
 	}}}
-	const semanticPrompt = "只根据需求判断规划方式。"
-	d, err := DecidePlanStart(t.Context(), m, semanticPrompt, "写一部短篇", "")
+	const semanticPrompt = "Chỉ căn cứ yêu cầu để chọn cách quy hoạch."
+	d, err := DecidePlanStart(t.Context(), m, semanticPrompt, "viết một truyện ngắn", "")
 	if err != nil || d.Planner != "architect_short" {
-		t.Fatalf("native 裁定失败: %+v %v", d, err)
+		t.Fatalf("phán quyết native thất bại: %+v %v", d, err)
 	}
 	rf := m.lastCfg.ResponseFormat
 	if rf == nil || rf.Type != agentcore.ResponseFormatJSONSchema || rf.JSONSchema == nil {
-		t.Fatalf("native 模式应发送 response_format: %+v", rf)
+		t.Fatalf("chế độ native phải gửi response_format: %+v", rf)
 	}
 	if rf.JSONSchema.Name != "arbiter_plan_start" || rf.JSONSchema.Strict == nil || !*rf.JSONSchema.Strict {
-		t.Fatalf("schema 参数不符: %+v", rf.JSONSchema)
+		t.Fatalf("tham số schema không khớp: %+v", rf.JSONSchema)
 	}
 	if got := m.lastMsgs[0].TextContent(); got != semanticPrompt {
-		t.Fatalf("native 模式不应向提示词重复注入 schema:\n%s", got)
+		t.Fatalf("chế độ native không được chèn schema vào prompt:\n%s", got)
 	}
 }
 
-// native 模式下解码失败=provider 契约违约:立即报错,不走 extractJSON 兜底、不重问。
+// Chế độ native mà giải mã hỏng = provider vi phạm hợp đồng: báo lỗi ngay, không dùng extractJSON và không hỏi lại.
 func TestDecideNativeFencedOutputIsContractViolation(t *testing.T) {
 	m := &nativeModel{scriptedModel: &scriptedModel{outputs: []string{
 		"```json\n{\"planner\":\"architect_short\",\"task\":\"x\",\"reason\":\"y\"}\n```",
 	}}}
-	_, err := DecidePlanStart(t.Context(), m, "sys", "写一部短篇", "")
-	if err == nil || !strings.Contains(err.Error(), "契约违约") {
-		t.Fatalf("期望契约违约错误, got %v", err)
+	_, err := DecidePlanStart(t.Context(), m, "sys", "viết một truyện ngắn", "")
+	if err == nil || !strings.Contains(err.Error(), "vi phạm hợp đồng") {
+		t.Fatalf("cần lỗi vi phạm hợp đồng, got %v", err)
 	}
 	if m.idx != 1 {
-		t.Fatalf("契约违约不应重问, 调用了 %d 次", m.idx)
+		t.Fatalf("vi phạm hợp đồng không được hỏi lại, đã gọi %d lần", m.idx)
 	}
 }
 
-// native 模式业务校验失败仍反馈重问,且重问请求保留 schema。
+// Chế độ native mà kiểm tra nghiệp vụ hỏng vẫn phản hồi để hỏi lại, và lượt hỏi lại giữ nguyên schema.
 func TestDecideNativeValidateFailureFeedbackKeepsSchema(t *testing.T) {
 	m := &nativeModel{scriptedModel: &scriptedModel{outputs: []string{
-		`{"action":"reroute","dispatch":null,"reason":"需要换路"}`,
-		`{"action":"retry","dispatch":null,"reason":"瞬时错误可重试"}`,
+		`{"action":"reroute","dispatch":null,"reason":"cần đổi hướng"}`,
+		`{"action":"retry","dispatch":null,"reason":"lỗi tạm thời có thể thử lại"}`,
 	}}}
 	d, err := DecideFailure(t.Context(), m, "sys", FailureFacts{Kind: "worker_failure", Phase: "writing"})
 	if err != nil || d.Action != "retry" {
-		t.Fatalf("反馈重问后应成功: %+v %v", d, err)
+		t.Fatalf("hỏi lại theo phản hồi phải thành công: %+v %v", d, err)
 	}
 	if m.idx != 2 {
-		t.Fatalf("应恰好两次调用, got %d", m.idx)
+		t.Fatalf("phải đúng hai lời gọi, got %d", m.idx)
 	}
 	if m.lastCfg.ResponseFormat == nil {
-		t.Fatal("重问请求丢失了 schema")
+		t.Fatal("lượt hỏi lại đã mất schema")
 	}
 }
 
-// native 模式先分类终止原因:截断/拒答/空响应是独立错误事实,不进重问循环。
+// Chế độ native phân loại lý do dừng trước: cắt ngắn/từ chối/nội dung rỗng là sự thật lỗi riêng, không vào vòng hỏi lại.
 func TestDecideNativeStopReasonClassification(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -507,31 +515,124 @@ func TestDecideNativeStopReasonClassification(t *testing.T) {
 		stop    agentcore.StopReason
 		wantErr string
 	}{
-		{"length 截断", `{"planner":`, agentcore.StopReasonLength, "截断"},
-		{"safety 拒答", `无法协助`, agentcore.StopReasonSafety, "拒答"},
-		{"空响应", ``, agentcore.StopReasonStop, "空内容"},
+		{"length cắt ngắn", `{"planner":`, agentcore.StopReasonLength, "giới hạn độ dài"},
+		{"safety từ chối", `không thể hỗ trợ`, agentcore.StopReasonSafety, "từ chối"},
+		{"nội dung rỗng", ``, agentcore.StopReasonStop, "nội dung rỗng"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &nativeModel{scriptedModel: &scriptedModel{outputs: []string{tc.output}}, stop: tc.stop}
-			_, err := DecidePlanStart(t.Context(), m, "sys", "写一部短篇", "")
+			_, err := DecidePlanStart(t.Context(), m, "sys", "viết một truyện ngắn", "")
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("期望 %q 错误, got %v", tc.wantErr, err)
+				t.Fatalf("cần lỗi %q, got %v", tc.wantErr, err)
 			}
 			if m.idx != 1 {
-				t.Fatalf("终止原因不应重问, 调用了 %d 次", m.idx)
+				t.Fatalf("lý do dừng không được hỏi lại, đã gọi %d lần", m.idx)
 			}
 		})
 	}
 }
 
-// marshalPayload 失败必须暴露:静默伪造 {} 会让模型基于假事实误判。
+// marshalPayload hỏng phải phơi bày: tự bịa {} sẽ khiến model phán đoán trên sự thật giả.
 func TestMarshalPayloadErrors(t *testing.T) {
 	if _, err := marshalPayload(func() {}); err == nil {
-		t.Fatal("不可序列化载荷应报错")
+		t.Fatal("tải không serialize được phải báo lỗi")
 	}
 	s, err := marshalPayload(map[string]int{"a": 1})
 	if err != nil || !strings.Contains(s, `"a"`) {
-		t.Fatalf("正常载荷: %q %v", s, err)
+		t.Fatalf("tải bình thường: %q %v", s, err)
+	}
+}
+
+// setActiveLang đặt ngôn ngữ tác phẩm ở cấp tiến trình và tự khôi phục sau
+// test. Không dùng t.Parallel() vì biến này là trạng thái toàn cục.
+func setActiveLang(t *testing.T, lang string) {
+	t.Helper()
+	previous := i18n.Active()
+	i18n.SetActive(lang)
+	t.Cleanup(func() { i18n.SetActive(string(previous)) })
+}
+
+// TestPlanStartPayloadFollowsWorkLanguage kiểm tra hợp đồng và nhãn schema của
+// kịch bản khởi chạy đổi theo ngôn ngữ tác phẩm.
+func TestPlanStartPayloadFollowsWorkLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		lang       string
+		wantSchema string
+		wantTask   string
+	}{
+		{"tiếng Việt", "vi", "Hợp đồng đầu ra", "Nhiệm vụ đầy đủ giao cho kiến trúc sư"},
+		{"tiếng Trung", "zh", "输出契约", "交给规划师的完整任务"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setActiveLang(t, tc.lang)
+			m := &scriptedModel{outputs: []string{
+				`{"planner":"architect_short","task":"t","reason":"r"}`,
+			}}
+			if _, err := DecidePlanStart(t.Context(), m, "sys", "yêu cầu", ""); err != nil {
+				t.Fatal(err)
+			}
+			prompt := m.lastMsgs[0].TextContent()
+			if !strings.Contains(prompt, tc.wantSchema) {
+				t.Fatalf("prompt thiếu hợp đồng đầu ra đúng ngôn ngữ:\n%s", prompt)
+			}
+			if !strings.Contains(prompt, tc.wantTask) {
+				t.Fatalf("prompt thiếu nhãn task đúng ngôn ngữ:\n%s", prompt)
+			}
+			// Tải người dùng vẫn là JSON sự thật, không phụ thuộc ngôn ngữ.
+			if !strings.Contains(m.lastMsgs[1].TextContent(), `"requirement"`) {
+				t.Fatalf("tải người dùng thiếu trường requirement:\n%s", m.lastMsgs[1].TextContent())
+			}
+		})
+	}
+}
+
+// TestDispatchTaskSchemaFollowsWorkLanguage kiểm tra nhãn của trường dispatch
+// (đích phân công + mô tả nhiệm vụ) đổi theo ngôn ngữ tác phẩm, vì đây là
+// mô tả mà model đọc để biết mình phải làm gì.
+func TestDispatchTaskSchemaFollowsWorkLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		lang     string
+		wantTask string
+	}{
+		{"tiếng Việt", "vi", "Mô tả nhiệm vụ đầy đủ giao cho worker này"},
+		{"tiếng Trung", "zh", "交给该 worker 的完整任务描述"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setActiveLang(t, tc.lang)
+			m := &scriptedModel{outputs: []string{
+				`{"action":"reroute","dispatch":{"agent":"writer","task":"t"},"reason":"r"}`,
+			}}
+			if _, err := DecideFailure(t.Context(), m, "sys", FailureFacts{Kind: "worker_failure", Phase: "writing"}); err != nil {
+				t.Fatal(err)
+			}
+			prompt := m.lastMsgs[0].TextContent()
+			if !strings.Contains(prompt, tc.wantTask) {
+				t.Fatalf("prompt thiếu nhãn nhiệm vụ phân công đúng ngôn ngữ:\n%s", prompt)
+			}
+		})
+	}
+}
+
+// TestPlanStartContractDescriptionFollowsWorkLanguage kiểm tra mô tả hợp
+// đồng — vốn được đưa vào response_format của provider — đổi theo ngôn ngữ.
+func TestPlanStartContractDescriptionFollowsWorkLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		lang string
+		want string
+	}{
+		{"tiếng Việt", "vi", "Phán quyết khởi chạy"},
+		{"tiếng Trung", "zh", "启动裁定"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setActiveLang(t, tc.lang)
+			contract := planStartContractFor(i18n.Active())
+			if !strings.Contains(contract.Description, tc.want) {
+				t.Fatalf("mô tả hợp đồng sai ngôn ngữ: %q", contract.Description)
+			}
+		})
 	}
 }
