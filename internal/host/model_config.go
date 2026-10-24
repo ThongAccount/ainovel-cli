@@ -19,7 +19,7 @@ const (
 	APIKeyClear   APIKeyAction = "clear"
 )
 
-// ProviderSnapshot 是供 TUI 使用的脱敏 provider 配置。
+// ProviderSnapshot là cấu hình provider đã khử nhạy cảm dành cho TUI.
 type ProviderSnapshot struct {
 	Name           string
 	Type           string
@@ -43,8 +43,8 @@ func (s ModelConfigurationSnapshot) ReferencesFor(provider, model string) []stri
 	return append([]string(nil), s.References[modelReferenceKey(provider, model)]...)
 }
 
-// ModelConfigurationDraft 是 /config 提交给 Host 的单个 provider 配置草稿。
-// 只描述该 provider 的定义（协议/凭证/模型库），不含“当前用哪个”——切换归 /model。
+// ModelConfigurationDraft là bản nháp cấu hình provider mà /config gửi cho Host.
+// Chỉ mô tả định nghĩa của provider đó (giao thức/credentials/kho mô hình), không chứa “đang dùng cái nào” — việc chuyển đổi thuộc /model.
 type ModelConfigurationDraft struct {
 	Provider     string
 	Type         string
@@ -56,8 +56,8 @@ type ModelConfigurationDraft struct {
 	APIKey       string
 }
 
-// ModelRename 描述同一条模型配置的 ID 变化。它不是“删旧增新”的猜测，
-// Host 只在 TUI 明确提交该关系时迁移 default、角色和 fallback 引用。
+// ModelRename mô tả sự thay đổi ID của cùng một cấu hình mô hình. Đây không phải phỏng đoán “xóa cũ thêm mới”,
+// Host chỉ chuyển các tham chiếu default, vai trò và fallback khi TUI trình bày tường minh quan hệ đó.
 type ModelRename struct {
 	From string
 	To   string
@@ -73,8 +73,8 @@ func modelReferenceKey(provider, model string) string {
 	return strings.TrimSpace(provider) + "\x00" + strings.TrimSpace(model)
 }
 
-// MaskAPIKey 仅保留足够识别凭证的首尾片段；短凭证全部隐藏。
-// TUI 只接收这个结果，绝不持有配置中的完整 API Key。
+// MaskAPIKey chỉ giữ lại đoạn đầu và đoạn cuối đủ để nhận diện credentials; credentials ngắn bị ẩn hoàn toàn.
+// TUI chỉ nhận kết quả này, không bao giờ giữ API Key đầy đủ trong cấu hình.
 func MaskAPIKey(value string) string {
 	runes := []rune(strings.TrimSpace(value))
 	if len(runes) == 0 {
@@ -86,7 +86,7 @@ func MaskAPIKey(value string) string {
 	return string(runes[:4]) + "******" + string(runes[len(runes)-4:])
 }
 
-// ModelConfiguration 返回脱敏配置、可写目标和模型引用，绝不暴露现有 API Key。
+// ModelConfiguration trả về cấu hình đã khử nhạy cảm, đích ghi được và các tham chiếu mô hình, không bao giờ lộ API Key hiện có.
 func (h *Host) ModelConfiguration() ModelConfigurationSnapshot {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -154,7 +154,7 @@ type preparedProviderDraft struct {
 	oldModels []bootstrap.ModelConfig
 }
 
-// prepareProviderDraftLocked 将 TUI 草稿规范化并合入配置副本，保存和连接测试共用同一条校验链路。
+// prepareProviderDraftLocked chuẩn hoá bản nháp TUI và hợp nhất vào bản sao cấu hình; lưu và kiểm thử kết nối dùng chung một chuỗi kiểm tra.
 func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (preparedProviderDraft, error) {
 	draft.Provider = strings.TrimSpace(draft.Provider)
 	draft.Type = strings.ToLower(strings.TrimSpace(draft.Type))
@@ -162,10 +162,10 @@ func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (prepar
 	draft.BaseURL = strings.TrimSpace(draft.BaseURL)
 	draft.APIKey = strings.TrimSpace(draft.APIKey)
 	if draft.Provider == "" {
-		return preparedProviderDraft{}, fmt.Errorf("provider 不能为空")
+		return preparedProviderDraft{}, fmt.Errorf("provider không được để trống")
 	}
 	if len(draft.Models) == 0 {
-		return preparedProviderDraft{}, fmt.Errorf("请至少配置一个模型")
+		return preparedProviderDraft{}, fmt.Errorf("hãy cấu hình ít nhất một mô hình")
 	}
 
 	candidate := bootstrap.CloneConfig(h.cfg)
@@ -179,13 +179,13 @@ func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (prepar
 	for _, model := range draft.Models {
 		model.Name = strings.TrimSpace(model.Name)
 		if model.Name == "" {
-			return preparedProviderDraft{}, fmt.Errorf("模型名称不能为空")
+			return preparedProviderDraft{}, fmt.Errorf("tên mô hình không được để trống")
 		}
 		if model.ContextWindow < 0 {
-			return preparedProviderDraft{}, fmt.Errorf("模型 %q 的上下文窗口不能为负数", model.Name)
+			return preparedProviderDraft{}, fmt.Errorf("cửa sổ ngữ cảnh của mô hình %q không thể âm", model.Name)
 		}
 		if seen[model.Name] {
-			return preparedProviderDraft{}, fmt.Errorf("模型 %q 重复", model.Name)
+			return preparedProviderDraft{}, fmt.Errorf("mô hình %q bị trùng", model.Name)
 		}
 		seen[model.Name] = true
 		configuredModels = append(configuredModels, model)
@@ -194,16 +194,16 @@ func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (prepar
 
 	switch draft.APIKeyAction {
 	case "", APIKeyKeep:
-		// 保留候选配置里的现有值；新增 provider 时自然为空。
+		// Giữ giá trị hiện có trong cấu hình ứng viên; khi thêm provider mới thì tự nhiên là rỗng.
 	case APIKeyReplace:
 		pc.APIKey = draft.APIKey
 	case APIKeyClear:
 		pc.APIKey = ""
 	default:
-		return preparedProviderDraft{}, fmt.Errorf("未知 API Key 操作 %q", draft.APIKeyAction)
+		return preparedProviderDraft{}, fmt.Errorf("thao tác API Key %q không hợp lệ", draft.APIKeyAction)
 	}
 	if pc.RequiresAPIKey(draft.Provider) && pc.APIKey == "" {
-		return preparedProviderDraft{}, fmt.Errorf("Provider %q 必须配置 API Key", draft.Provider)
+		return preparedProviderDraft{}, fmt.Errorf("Provider %q phải có API Key", draft.Provider)
 	}
 
 	if candidate.Providers == nil {
@@ -213,7 +213,7 @@ func (h *Host) prepareProviderDraftLocked(draft ModelConfigurationDraft) (prepar
 	return preparedProviderDraft{draft: draft, candidate: candidate, provider: pc, oldModels: oldModels}, nil
 }
 
-// ConfigureModels 校验、持久化并热应用一个 provider 的模型库。
+// ConfigureModels kiểm tra, lưu trữ và áp dụng nóng kho mô hình của một provider.
 func (h *Host) ConfigureModels(draft ModelConfigurationDraft) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -235,8 +235,8 @@ func (h *Host) ConfigureModels(draft ModelConfigurationDraft) error {
 	for _, model := range pc.Models {
 		newNames[model.Name] = true
 	}
-	// 删除模型前先查引用：被顶层默认或任何角色/fallback 指向的模型不能删，
-	// 让用户先去 /model 切走——/config 不再代切默认。
+	// Trước khi xóa mô hình phải kiểm tra tham chiếu: mô hình bị mặc định cấp cao nhất hoặc bất kỳ vai trò/fallback nào trỏ tới không thể xóa,
+	// hãy bắt người dùng chuyển trong /model trước — /config không còn tự đổi mặc định.
 	for _, old := range preparedDraft.oldModels {
 		if newNames[old.Name] {
 			continue
@@ -245,34 +245,34 @@ func (h *Host) ConfigureModels(draft ModelConfigurationDraft) error {
 			continue
 		}
 		if refs := h.modelReferencesLocked(draft.Provider, old.Name); len(refs) > 0 {
-			return fmt.Errorf("模型 %q 仍被 %s 引用，请先在 /model 切换后再删除", old.Name, strings.Join(refs, "、"))
+			return fmt.Errorf("mô hình %q vẫn được %s tham chiếu, hãy chuyển trong /model trước khi xóa", old.Name, strings.Join(refs, ", "))
 		}
 	}
 
-	// 普通编辑不改变“当前用哪个”；显式重命名只迁移同一模型的引用身份。
+	// Chỉnh sửa thường không đổi “đang dùng cái nào”; đổi tên tường minh chỉ chuyển danh tính tham chiếu của cùng một mô hình.
 	if err := candidate.ValidateBase(); err != nil {
 		return err
 	}
 	prepared, err := bootstrap.NewModelSet(candidate)
 	if err != nil {
-		return fmt.Errorf("创建模型客户端失败: %w", err)
+		return fmt.Errorf("tạo client mô hình thất bại: %w", err)
 	}
 
 	if h.configPath == "" {
-		return fmt.Errorf("无法定位配置文件路径")
+		return fmt.Errorf("không xác định được đường dẫn tệp cấu hình")
 	}
 	if err := h.saveModelConfigurationLocked(candidate, draft.Provider, pc, len(renames) > 0); err != nil {
-		return fmt.Errorf("保存配置失败: %w", err)
+		return fmt.Errorf("lưu cấu hình thất bại: %w", err)
 	}
 
 	h.models.ApplyPrepared(prepared)
 	h.cfg = candidate
-	// 模型客户端被重建后重新下发推理强度：applyThinkingLocked 按各角色的新模型能力钳制生效值，
-	// 存储的强度意图保持不变。
+	// Sau khi client mô hình được dựng lại, tái phát lại cường độ suy luận: applyThinkingLocked kẹp giá trị hiệu lực theo năng lực mô hình mới của từng vai trò,
+	// ý định cường độ đã lưu giữ nguyên.
 	h.applyThinkingLocked("default")
-	summary := fmt.Sprintf("Provider 配置已保存：%s → %s", draft.Provider, h.configPath)
+	summary := fmt.Sprintf("Đã lưu cấu hình Provider: %s → %s", draft.Provider, h.configPath)
 	if draft.Provider != h.cfg.Provider {
-		summary += "；使用 /model 切换"
+		summary += "; dùng /model để chuyển"
 	}
 	h.emitEvent(Event{
 		Time: time.Now(), Category: "SYSTEM", Level: "info",
@@ -296,22 +296,22 @@ func validateModelRenames(requested []ModelRename, oldModels, newModels []bootst
 		from := strings.TrimSpace(rename.From)
 		to := strings.TrimSpace(rename.To)
 		if from == "" || to == "" {
-			return nil, fmt.Errorf("模型重命名的原名称和新名称不能为空")
+			return nil, fmt.Errorf("tên cũ và tên mới của mô hình đổi tên không được để trống")
 		}
 		if from == to {
 			continue
 		}
 		if !oldNames[from] {
-			return nil, fmt.Errorf("无法重命名不存在的模型 %q", from)
+			return nil, fmt.Errorf("không thể đổi tên mô hình không tồn tại %q", from)
 		}
 		if !newNames[to] {
-			return nil, fmt.Errorf("重命名目标模型 %q 不在当前模型列表中", to)
+			return nil, fmt.Errorf("mô hình đích đổi tên %q không có trong danh sách mô hình hiện tại", to)
 		}
 		if _, exists := renames[from]; exists {
-			return nil, fmt.Errorf("模型 %q 被重复重命名", from)
+			return nil, fmt.Errorf("mô hình %q bị đổi tên trùng lặp", from)
 		}
 		if targets[to] {
-			return nil, fmt.Errorf("多个模型不能同时重命名为 %q", to)
+			return nil, fmt.Errorf("không thể đổi tên nhiều mô hình cùng lúc thành %q", to)
 		}
 		renames[from] = to
 		targets[to] = true
@@ -354,15 +354,15 @@ func renameModelReferences(cfg *bootstrap.Config, provider string, renames map[s
 
 func (h *Host) saveModelConfigurationLocked(candidate bootstrap.Config, provider string, pc bootstrap.ProviderConfig, renamed bool) error {
 	if renamed {
-		// 引用与 provider 定义必须在同一次文件替换中落盘，否则进程重启可能只看到一半。
-		// /model 也使用 SaveConfig 写回有效配置；重命名沿用同一语义。
+		// Tham chiếu và định nghĩa provider phải được ghi trong cùng một lần thay thế tệp, nếu không tiến trình khởi động lại có thể chỉ thấy một nửa.
+		// /model cũng dùng SaveConfig để ghi lại cấu hình hợp lệ; đổi tên dùng chung ngữ nghĩa đó.
 		return bootstrap.SaveConfig(h.configPath, candidate)
 	}
 	return bootstrap.SaveProviderConfig(h.configPath, provider, pc)
 }
 
-// TestModelConnection 使用当前草稿构造一个真实模型客户端并发送最小请求。
-// 它不保存配置、不切换运行时模型，也不在失败时降级到其他 Provider。
+// TestModelConnection dùng bản nháp hiện tại dựng một client mô hình thật và gửi yêu cầu tối thiểu.
+// Nó không lưu cấu hình, không chuyển mô hình thời gian chạy và không lùi về Provider khác khi thất bại.
 func (h *Host) TestModelConnection(ctx context.Context, draft ModelConfigurationDraft, modelName string) error {
 	h.mu.Lock()
 	preparedDraft, err := h.prepareProviderDraftLocked(draft)
@@ -380,7 +380,7 @@ func (h *Host) TestModelConnection(ctx context.Context, draft ModelConfiguration
 		}
 	}
 	if !found {
-		return fmt.Errorf("连接测试模型 %q 不在当前模型列表中", modelName)
+		return fmt.Errorf("mô hình kiểm thử kết nối %q không có trong danh sách mô hình hiện tại", modelName)
 	}
 
 	testConfig := preparedDraft.candidate
@@ -392,10 +392,10 @@ func (h *Host) TestModelConnection(ctx context.Context, draft ModelConfiguration
 	}
 	models, err := bootstrap.NewModelSet(testConfig)
 	if err != nil {
-		return fmt.Errorf("创建测试模型客户端失败: %w", err)
+		return fmt.Errorf("tạo client mô hình kiểm thử thất bại: %w", err)
 	}
 	if _, err := models.Default.Generate(ctx, []agentcore.Message{agentcore.UserMsg("Reply OK.")}, nil); err != nil {
-		return fmt.Errorf("连接测试失败（%s/%s）: %w", preparedDraft.draft.Provider, modelName, err)
+		return fmt.Errorf("kiểm thử kết nối thất bại (%s/%s): %w", preparedDraft.draft.Provider, modelName, err)
 	}
 	return nil
 }

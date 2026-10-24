@@ -9,48 +9,48 @@ import (
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
 )
 
-// 预算状态机：单调递进，每次迁移恰好触发一次副作用，不回退。
-// 上调预算 = 用户重新授权 = 改配置后重启/新 Host 实例，不在本实例内回退状态。
+// Máy trạng thái ngân sách: tiến triển đơn điệu, mỗi lần chuyển trạng thái kích hoạt đúng một tác dụng phụ, không lùi.
+// Tăng ngân sách = người dùng cấp phép lại = khởi động lại / tạo Host instance mới sau khi đổi cấu hình, không lùi trạng thái trong instance hiện tại.
 const (
-	budgetNormal      int32 = iota // 未到告警水位
-	budgetWarned                   // 已发告警，未越线
-	budgetStopPending              // 已越线，等子代理边界停机
-	budgetStopped                  // 已执行停机
+	budgetNormal      int32 = iota // chưa tới mực cảnh báo
+	budgetWarned                   // đã phát cảnh báo, chưa vượt hạn mức
+	budgetStopPending              // đã vượt hạn mức, chờ dừng tại ranh giới sub-agent
+	budgetStopped                  // đã thực hiện dừng
 )
 
-// BudgetSentinel 监视累计成本，执行用户的预算政策（config budget 块）。
+// BudgetSentinel theo dõi chi phí tích luỹ và thực thi chính sách ngân sách của người dùng (khối budget trong config).
 //
-// 合宪定位（architecture.md §8.3/§10）：不评估模型行为——越线停机等同于用户在
-// 那一刻手动 Abort，Host 只是代为执行一条预先签署的指令。它影响控制流，因此
-// 不是观察者，定位为与 flow.Dispatcher 平级的 Host 政策组件；Route/工具层不感知。
+// Định vị hợp lệ (architecture.md §8.3/§10): không đánh giá hành vi mô hình — dừng khi vượt hạn mức tương đương người dùng
+// tự tay bấm Abort đúng thời điểm đó, Host chỉ thay người dùng thực thi một chỉ thị đã ký trước. Vì nó ảnh hưởng dòng điều khiển nên
+// không phải là observer, mà là thành phần chính sách của Host ngang hàng với flow.Dispatcher; tầng Route/công cụ không nhận biết.
 //
-// 停机时机：默认在子代理边界（Host 同步调用 HandleBoundary），不浪费 in-flight 章节；
-// hardStop=true 时越线立即停。边界处理先于 flow.Dispatcher 派发下一步，Route/工具层不感知预算。
+// Thời điểm dừng: mặc định tại ranh giới sub-agent (Host gọi HandleBoundary đồng bộ), không lãng phí chương đang chạy dở;
+// khi hardStop=true thì vượt hạn mức là dừng ngay. Xử lý ranh giới diễn ra trước khi flow.Dispatcher phát bước kế tiếp, tầng Route/công cụ không nhận biết ngân sách.
 type BudgetSentinel struct {
 	limit     float64
 	warnRatio float64
 	hardStop  bool
 
-	costNow func() float64              // 当前累计成本（usage.Totals 包装；可注入测试桩）
-	abort   func(reason string)         // Host 停机包装（带原因事件）
-	report  func(level, summary string) // 告警出口（emitEvent + notify，由 Host 注入）
+	costNow func() float64              // chi phí tích luỹ hiện tại (bọc usage.Totals; có thể tiêm test stub)
+	abort   func(reason string)         // bọc dừng của Host (kèm sự kiện lý do)
+	report  func(level, summary string) // lối ra cảnh báo (emitEvent + notify, do Host tiêm)
 
 	state atomic.Int32
 
-	// 计费盲区检测：注册表无价且 provider 不自报 cost 的模型每笔记账增量为 $0，
-	// 预算静默失效。按"连续多笔零增量"判定而非 total==0——后者抓不住长跑中途
-	// /model 切到无价模型的场景（total 停在历史值非零但不再增长）。
-	// 免费模型同样命中，提示"预算不会触发"对其同样成立。
-	lastTotal   atomic.Uint64 // math.Float64bits(上次回调的累计成本)
+	// Phát hiện vùng mù tính phí: mô hình không có giá trong sổ đăng ký và provider không tự báo cost sẽ cho mỗi lần ghi $0,
+	// khiến ngân sách hỏng lặng lẽ. Đánh giá theo "nhiều lần liên tiếp tăng bằng 0" chứ không theo total==0 — cách sau không bắt được trường hợp
+	// giữa lúc chạy lâu người dùng /model chuyển sang mô hình không có giá (total đứng ở giá trị lịch sử khác 0 nhưng không tăng).
+	// Mô hình miễn phí cũng rơi vào trường hợp này, và cảnh báo "ngân sách sẽ không kích hoạt" vẫn đúng với chúng.
+	lastTotal   atomic.Uint64 // math.Float64bits(chi phí tích luỹ của lần gọi trước)
 	zeroStreak  atomic.Int32
 	blindWarned atomic.Bool
 }
 
-// blindZeroStreak 连续零增量记账多少笔后告警。正常计价模型每笔增量必 > 0
-// （cost 是 float 累计不取整），取 5 仅为避免极端毛刺，不是可调策略阈值。
+// blindZeroStreak số lần ghi tăng bằng 0 liên tiếp thì mới cảnh báo. Mô hình tính phí bình thường mỗi lần tăng chắc chắn > 0
+// (cost là float tích luỹ không làm tròn), lấy 5 chỉ để tránh nhiễu lạ, không phải ngưỡng chính sách có thể chỉnh.
 const blindZeroStreak = 5
 
-// NewBudgetSentinel 创建预算哨兵；政策未启用时返回 nil（所有方法 nil 安全）。
+// NewBudgetSentinel tạo sentinel ngân sách; khi chính sách chưa bật trả về nil (mọi phương thức an toàn với nil).
 func NewBudgetSentinel(cfg bootstrap.BudgetConfig, costNow func() float64, abort func(reason string), report func(level, summary string)) *BudgetSentinel {
 	if !cfg.Enabled() {
 		return nil
@@ -65,34 +65,34 @@ func NewBudgetSentinel(cfg bootstrap.BudgetConfig, costNow func() float64, abort
 	}
 }
 
-// OnCost 由 UsageTracker 每次记账后携带最新累计成本调用（锁外）。
-// 一次回调可能连跨两级（normal→warned→stopPending），两次副作用各触发一次。
+// OnCost do UsageTracker gọi sau mỗi lần ghi, mang theo chi phí tích luỹ mới nhất (ngoài khoá).
+// Một lần gọi có thể vượt qua hai bậc (normal→warned→stopPending), mỗi tác dụng phụ kích hoạt đúng một lần.
 func (s *BudgetSentinel) OnCost(total float64) {
 	if s == nil {
 		return
 	}
 	if prev := s.lastTotal.Swap(math.Float64bits(total)); total == math.Float64frombits(prev) {
 		if s.zeroStreak.Add(1) >= blindZeroStreak && s.blindWarned.CompareAndSwap(false, true) {
-			s.report("warn", fmt.Sprintf("预算盲区: 连续记账但累计成本停在 $%.2f 不再增长（当前模型注册表无价且 provider 未自报 cost，或为免费模型）——预算上限不会触发", total))
+			s.report("warn", fmt.Sprintf("vùng mù ngân sách: liên tục ghi nhận nhưng chi phí tích luỹ đứng ở $%.2f không tăng (mô hình hiện tại không có giá trong sổ đăng ký và provider không tự báo cost, hoặc là mô hình miễn phí) — hạn mức ngân sách sẽ không kích hoạt", total))
 		}
 	} else {
 		s.zeroStreak.Store(0)
 	}
 	if total >= s.limit*s.warnRatio && s.state.CompareAndSwap(budgetNormal, budgetWarned) {
-		s.report("warn", fmt.Sprintf("预算告警: 已花费 $%.2f，达到预算 $%.2f 的 %.0f%%", total, s.limit, s.warnRatio*100))
+		s.report("warn", fmt.Sprintf("cảnh báo ngân sách: đã chi $%.2f, đạt %.0f%% của ngân sách $%.2f", total, s.limit, s.warnRatio*100))
 	}
 	if total >= s.limit && s.state.CompareAndSwap(budgetWarned, budgetStopPending) {
 		if s.hardStop {
-			s.report("error", fmt.Sprintf("预算用尽: 已花费 $%.2f，超出预算 $%.2f，立即停机", total, s.limit))
+			s.report("error", fmt.Sprintf("ngân sách đã cạn: đã chi $%.2f, vượt ngân sách $%.2f, dừng ngay", total, s.limit))
 			s.stop(total)
 			return
 		}
-		s.report("error", fmt.Sprintf("预算用尽: 已花费 $%.2f，超出预算 $%.2f，将在当前子代理任务结束后停机", total, s.limit))
+		s.report("error", fmt.Sprintf("ngân sách đã cạn: đã chi $%.2f, vượt ngân sách $%.2f, sẽ dừng sau khi nhiệm vụ sub-agent hiện tại kết thúc", total, s.limit))
 	}
 }
 
-// HandleEvent 在子代理边界执行待定的停机。订阅必须先于 Dispatcher。
-// 不跳过 IsError——出错返回同样是边界，停机不应因子代理失败而推迟。
+// HandleEvent thực hiện lệnh dừng đang chờ tại ranh giới sub-agent. Đăng ký phải diễn ra trước Dispatcher.
+// Không bỏ qua IsError — trả về lỗi cũng là một ranh giới, lệnh dừng không nên hoãn vì sub-agent thất bại.
 func (s *BudgetSentinel) HandleEvent(ev agentcore.Event) {
 	if s == nil {
 		return
@@ -113,23 +113,23 @@ func (s *BudgetSentinel) HandleBoundary() bool {
 
 func (s *BudgetSentinel) stop(total float64) {
 	if s.state.CompareAndSwap(budgetStopPending, budgetStopped) {
-		s.abort(fmt.Sprintf("预算停机: 已花费 $%.2f，超出预算 $%.2f；上调 budget.book_usd 后可恢复续跑", total, s.limit))
+		s.abort(fmt.Sprintf("dừng vì ngân sách: đã chi $%.2f, vượt ngân sách $%.2f; tăng budget.book_usd rồi chạy tiếp được", total, s.limit))
 	}
 }
 
-// Refuse 启动前置检查：预算已超返回拒绝错误（Start/Resume/Continue 恢复路径调用）。
-// 用户上调预算 = 重新授权，新配置下 Refuse 自然放行。
+// Refuse kiểm tra trước khi khởi động: nếu đã vượt ngân sách thì trả lỗi từ chối (được gọi ở các đường khôi phục Start/Resume/Continue).
+// Người dùng tăng ngân sách = cấp phép lại, với cấu hình mới Refuse sẽ tự động cho qua.
 func (s *BudgetSentinel) Refuse() error {
 	if s == nil {
 		return nil
 	}
 	if cost := s.costNow(); cost >= s.limit {
-		return fmt.Errorf("本书已花费 $%.2f，达到预算上限 $%.2f；请上调配置 budget.book_usd 后重试", cost, s.limit)
+		return fmt.Errorf("tác phẩm này đã chi $%.2f, đạt hạn mức ngân sách $%.2f; hãy tăng cấu hình budget.book_usd rồi thử lại", cost, s.limit)
 	}
 	return nil
 }
 
-// Limit 返回预算上限（UI 展示用）；未启用返回 0。
+// Limit trả về hạn mức ngân sách (dùng để hiển thị trên UI); nếu chưa bật trả về 0.
 func (s *BudgetSentinel) Limit() float64 {
 	if s == nil {
 		return 0
