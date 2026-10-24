@@ -25,6 +25,11 @@ type hostTexts struct {
 	// Tiền tố can thiệp gửi Tài phán phán quyết.
 	stagePlanPrefix string
 
+	// Tiêu đề mục "xung đột cốt lõi" trong tiền đề truyện. Đây là tên mục mà
+	// mô hình đọc (prompt kiến trúc sư yêu cầu mục này), nên phải theo ngôn ngữ
+	// tác phẩm; nửa tiếng Trung giữ nguyên để dự án cũ vẫn nâng cấp được.
+	premiseConflictHeading string
+
 	// Nội dung công việc gửi Worker và đoạn can thiệp gốc của người dùng.
 	expandArcTask        string
 	interventionOriginal string
@@ -69,6 +74,8 @@ var hostTextsVI = &hostTexts{
 
 	stagePlanPrefix: "[Lập kế hoạch theo giai đoạn] Tôi tạm dừng viết và cùng trợ lý đồng sáng tác để sắp xếp hướng đi tiếp theo dưới đây. Hãy phán quyết theo phân loại can thiệp của bạn xem nên triển khai thế nào, rồi tiếp tục sáng tác. Hướng đi tiếp theo như sau:\n\n",
 
+	premiseConflictHeading: "Xung đột cốt lõi",
+
 	expandArcTask:        "Cung tiếp theo mới chỉ là khung (%s). Hãy gọi save_foundation(type=expand_arc) để triển khai cung tiếp theo; nếu tập hiện tại đã viết xong thì dùng type=append_volume để thêm tập và triển khai tập kế tiếp.",
 	interventionOriginal: "\n\nCan thiệp gốc của người dùng (nguồn duy nhất cho phép sửa đổi lần này; ngữ cảnh chỉ để hiểu, không được mở rộng mục tiêu hay phạm vi):\n",
 
@@ -108,6 +115,8 @@ var hostTextsZH = &hostTexts{
 	stageStateNote:  "（以下是已写内容的客观摘要，供你规划后续时参照，不要在 <draft> 里照抄原文）",
 
 	stagePlanPrefix: "[阶段规划] 我暂停创作，和共创助手一起梳理了下面的后续方向，请按你的干预分类裁定如何落地，然后继续创作。后续方向如下：\n\n",
+
+	premiseConflictHeading: "核心冲突",
 
 	expandArcTask:        "下一弧为骨架(%s)。调用 save_foundation(type=expand_arc) 展开下一弧;若当前卷已写完,改用 type=append_volume 追加并展开下一卷。",
 	interventionOriginal: "\n\n用户原始干预（本次修改授权的唯一来源；上下文只用于理解，不得扩大目标或范围）：\n",

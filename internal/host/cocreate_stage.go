@@ -7,13 +7,13 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// buildStoryStateSummary 组装一段精简的故事现状摘要，供阶段共创助手了解"已经写了什么"。
-// 复用 store 访问点，只取规划方向所需的高层事实（进度 / 罗盘 / 最近卷 / 主要人物 / 活跃伏笔）；
-// 不拉正文、不喂 novel_context 的全量 JSON——共创是对话，要的是可读概览，不是写作上下文。
-// 任一项缺失都跳过（best-effort），返回空串表示尚无可用进度。
+// buildStoryStateSummary dựng một đoạn tóm tắt gọn về trạng thái truyện, để trợ lý đồng sáng tác theo giai đoạn biết “đã viết được gì”.
+// Dùng lại các điểm truy cập của store, chỉ lấy sự thật cấp cao cần cho hướng quy hoạch (tiến độ / la bàn / tập gần nhất / nhân vật chính / manh mối đang hoạt động);
+// không kéo nội dung truyện, không nạp JSON đầy đủ của novel_context — đồng sáng tác là hội thoại, cần bản tóm tắt dễ đọc chứ không phải ngữ cảnh viết.
+// Mục nào thiếu thì bỏ qua (best-effort), trả về chuỗi rỗng nghĩa là chưa có tiến độ dùng được.
 //
-// 摘要会作为数据附录拼进系统提示，所以标签必须跟作品语种走：t 来自
-// hostTextsFor(store.Language())，由调用方按需选择 vi / zh。
+// Tóm tắt được ghép vào system prompt như một phụ lục dữ liệu, nên nhãn phải theo ngôn ngữ tác phẩm: t đến từ
+// hostTextsFor(store.Language()), phía gọi chọn vi / zh tuỳ nhu cầu.
 func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 	if s == nil {
 		return ""
@@ -66,7 +66,7 @@ func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 		warn("story_compass", err)
 	}
 
-	// 最近一卷摘要，让助手知道故事刚走到哪
+	// Tóm tắt tập gần nhất, để trợ lý biết truyện vừa đi tới đâu
 	if vols, err := s.Summaries.LoadAllVolumeSummaries(); len(vols) > 0 {
 		last := vols[len(vols)-1]
 		fmt.Fprintf(&b, t.stateLastVolume, last.Title, truncate(last.Summary, 200))
@@ -74,7 +74,7 @@ func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 		warn("volume_summaries", err)
 	}
 
-	// 主要人物（core/important），最多 8 个
+	// Nhân vật chính (core/important), tối đa 8 người
 	if chars, err := s.Characters.Load(); len(chars) > 0 {
 		var names []string
 		for _, c := range chars {
@@ -97,7 +97,7 @@ func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 		warn("characters", err)
 	}
 
-	// 未收伏笔，最多 6 条
+	// Manh mối chưa thu, tối đa 6 mục
 	if fs, err := s.World.LoadActiveForeshadow(); len(fs) > 0 {
 		var items []string
 		for _, f := range fs {
@@ -118,8 +118,8 @@ func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 	return strings.TrimSpace(b.String())
 }
 
-// stageSystemPrompt 组装阶段共创的完整系统提示：阶段 prompt + 当前故事状态摘要。
-// 摘要作为数据附录挂在末尾（用分隔线与格式规范隔开），呼应 prompt 里"进度见下方"的指引。
+// stageSystemPrompt dựng system prompt đầy đủ cho đồng sáng tác theo giai đoạn: prompt giai đoạn + tóm tắt trạng thái truyện hiện tại.
+// Tóm tắt được gắn ở cuối như phụ lục dữ liệu (ngăn cách bằng đường kẻ với quy tắc định dạng), khớp với chỉ dẫn “tiến độ nằm ở bên dưới” trong prompt.
 func stageSystemPrompt(s *store.Store, t *hostTexts) string {
 	prompt := t.stageCoCreateSystemPrompt
 	if summary := buildStoryStateSummary(s, t); summary != "" {

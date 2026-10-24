@@ -12,7 +12,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// 冷启动共创：从零澄清需求，产出整本书的创作指令。
+// Đồng sáng tác lạnh: làm rõ nhu cầu từ số 0, sinh ra chỉ dẫn sáng tác cho toàn bộ tác phẩm.
 const coCreateSystemPromptZH = `你是一个小说共创助手。你的任务不是直接开始写小说，而是通过多轮简短对话帮助用户澄清创作需求，并持续整理出一段可直接交给创作引擎的中文创作指令。
 
 每一轮回复严格按以下 XML 格式输出，包含四个标签，依次出现，每个标签都必须有正确的开闭标签：
@@ -26,8 +26,8 @@ const coCreateSystemPromptZH = `你是一个小说共创助手。你的任务不
 </draft>
 ` + coCreateProtocolTailZH
 
-// 阶段共创：小说已写了一部分，规划"后续阶段"的走向。调用方需把当前故事状态摘要
-// 追加到本 prompt 之后（"## 当前故事状态" 段），让模型在已写内容的基础上规划。
+// Đồng sáng tác theo giai đoạn: tiểu thuyết đã viết được một phần, quy hoạch hướng đi của "giai đoạn tiếp theo". Phía gọi phải gắn tóm tắt trạng thái truyện hiện tại
+// vào sau prompt này (mục "## Trạng thái truyện hiện tại"), để mô hình quy hoạch dựa trên nội dung đã viết.
 const stageCoCreateSystemPromptZH = `你是一个小说"阶段共创"助手。这本小说已经写了一部分（进度见下方"当前故事状态"）。用户暂停下来，想和你一起规划"后续阶段"的走向，再继续创作。
 
 你的任务不是续写正文，而是通过多轮简短对话帮用户想清楚后面这一段（接下来若干章 / 下一弧 / 下一卷）要往哪走，并持续整理出一段"后续方向 brief"，供创作引擎据此推进。
@@ -45,8 +45,8 @@ const stageCoCreateSystemPromptZH = `你是一个小说"阶段共创"助手。�
 </draft>
 ` + coCreateProtocolTailZH
 
-// coCreateProtocolTail 是两种共创模式共用的输出协议尾部（<ready> / <suggestions> + 输出规范）。
-// 两模式只在开场语境与 <draft> 语义上不同，协议完全一致。
+// coCreateProtocolTail là phần đuôi giao thức đầu ra dùng chung cho cả hai chế độ đồng sáng tác (<ready> / <suggestions> + quy tắc đầu ra).
+// Hai chế độ chỉ khác ở ngữ cảnh mở đầu và ngữ nghĩa của <draft>, giao thức hoàn toàn giống nhau.
 const coCreateProtocolTailZH = `
 <ready>false</ready>
 
@@ -122,15 +122,15 @@ Quy tắc đầu ra:
 - <ready> chỉ ghi true hoặc false. Khi thông tin đã đủ thì điền true.
 - Khi <ready>true</ready> thì <suggestions> có thể để trống (giữ nguyên thẻ rỗng <suggestions></suggestions>).`
 
-// CoCreateProgressKind 标识流式回调的内容类型。
+// CoCreateProgressKind định danh loại nội dung của callback truyền phát.
 const (
 	CoCreateProgressThinking = "thinking"
 	CoCreateProgressReply    = "reply"
 )
 
-// 四段式 XML 标签输出。XML 风格比方括号 marker 更鲁棒——Claude/GPT 训练数据里
-// 大量 <thinking>...</thinking> 这类格式，模型几乎不会把 <reply> 改写成 <REWRITE>
-// 或其他变体；闭合标签也让流式中段截断更精确（不依赖找下一个 marker 来断尾）。
+// Đầu ra dùng bốn thẻ XML. Kiểu XML bền hơn marker dấu ngoặc vuông — trong dữ liệu huấn luyện của Claude/GPT
+// có rất nhiều dạng <thinking>...</thinking>, mô hình hầu như không viết <reply> thành <REWRITE>
+// hay biến thể khác; thẻ đóng cũng giúp cắt chính xác giữa chừng khi truyền phát (không phụ thuộc tìm marker kế tiếp để chặn đuôi).
 const (
 	tagReply       = "reply"
 	tagDraft       = "draft"
@@ -161,8 +161,8 @@ func coCreateStream(ctx context.Context, models *bootstrap.ModelSet, sessions *s
 
 	var raw, thinking strings.Builder
 
-	// 排查 "cocreate empty response" 等偶发问题需要看到模型实际返回什么。
-	// 每轮全程落盘到 <output>/meta/sessions/cocreate.jsonl，与正式创作的 session 日志同位。
+	// Muốn truy ra các sự cố thoảng qua như "cocreate empty response" thì cần thấy mô hình thực sự trả về gì.
+	// Mỗi lượt được ghi trọn vẹn xuống <output>/meta/sessions/cocreate.jsonl, cùng vị trí với nhật ký session của phiên sáng tác chính.
 	start := time.Now()
 	defer func() {
 		if sessions == nil {
@@ -181,7 +181,7 @@ func coCreateStream(ctx context.Context, models *bootstrap.ModelSet, sessions *s
 			ParsedSugs:   reply.Suggestions,
 			Error:        errString(err),
 		}); logErr != nil {
-			slog.Warn("共创会话日志落盘失败", "module", "cocreate", "err", logErr)
+			slog.Warn("ghi nhật ký phiên đồng sáng tác thất bại", "module", "cocreate", "err", logErr)
 		}
 	}()
 
@@ -216,10 +216,10 @@ func coCreateStream(ctx context.Context, models *bootstrap.ModelSet, sessions *s
 		}
 	}
 
-	// Channel fallback：思考型模型（R1/GLM-Z1/QwQ 等）偶发把完整答案写进
-	// reasoning_content 后没切回 final answer 通道，导致 raw 为空但 thinking 含
-	// 完整四段。实测见 meta/sessions/cocreate.jsonl —— 直接拿 thinking 当 raw 解析，
-	// 协议层已有降级处理（无 [REPLY] 标记时整段当 reply），救场后 UI 体验无差别。
+	// Channel fallback: mô hình kiểu suy luận (R1/GLM-Z1/QwQ v.v.) đôi khi viết trọn đáp án vào
+	// reasoning_content rồi không quay lại kênh final answer, khiến raw rỗng nhưng thinking chứa
+	// đủ bốn đoạn. Thực đo thấy trong meta/sessions/cocreate.jsonl — cứ lấy thinking làm raw để phân tích,
+	// tầng giao thức đã có xử lý giảm cấp (không có marker [REPLY] thì coi cả đoạn là reply), nên sau khi cứu vãn trải nghiệm UI không khác gì.
 	rawText := raw.String()
 	if strings.TrimSpace(rawText) == "" {
 		if t := strings.TrimSpace(thinking.String()); t != "" {
@@ -230,8 +230,8 @@ func coCreateStream(ctx context.Context, models *bootstrap.ModelSet, sessions *s
 	return reply, err
 }
 
-// coCreateLogEntry 是写入 meta/sessions/cocreate.jsonl 的一行结构。
-// 字段命名贴近 jsonl 直查习惯（snake_case），方便 jq 过滤。
+// coCreateLogEntry là cấu trúc một dòng ghi vào meta/sessions/cocreate.jsonl.
+// Tên trường bám sát thói quen tra cứu trực tiếp jsonl (snake_case) để tiện lọc bằng jq.
 type coCreateLogEntry struct {
 	Time         time.Time         `json:"time"`
 	DurationMS   int64             `json:"duration_ms"`
@@ -261,8 +261,8 @@ func assistantMsg(text string) agentcore.Message {
 	}
 }
 
-// parseCoCreateResponse 解析 XML 标签输出。模型若没遵守协议（直接说自然语言），
-// 整段作为 reply 显示，draft 留空让 session 保留上一轮。
+// parseCoCreateResponse phân tích đầu ra theo thẻ XML. Nếu mô hình không tuân thủ giao thức (viết thẳng bằng văn xuôi),
+// cả đoạn hiển thị làm reply, draft để trống để phiên giữ lượt trước.
 func parseCoCreateResponse(raw string) (CoCreateReply, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -271,7 +271,7 @@ func parseCoCreateResponse(raw string) (CoCreateReply, error) {
 
 	reply, draft, ready, suggestions := splitCoCreateMarkers(raw)
 	if reply == "" {
-		// 模型没遵守 XML 协议：整段作为 reply。
+		// Mô hình không tuân thủ giao thức XML: cả đoạn làm reply.
 		return CoCreateReply{Message: raw, Prompt: "", Ready: false, Raw: raw}, nil
 	}
 	return CoCreateReply{
@@ -283,9 +283,9 @@ func parseCoCreateResponse(raw string) (CoCreateReply, error) {
 	}, nil
 }
 
-// splitCoCreateMarkers 按四个 XML 标签切分文本。
-// 标签可能缺失（流式中段或模型遗漏），缺失部分对应字段为空 / false / nil。
-// 缺失闭标签时，extractTagContent 会取到字符串末尾，仍尽力解析。
+// splitCoCreateMarkers cắt văn bản theo bốn thẻ XML.
+// Thẻ có thể thiếu (giữa chừng khi truyền phát hoặc do mô hình bỏ sót), phần thiếu ứng với trường rỗng / false / nil.
+// Khi thiếu thẻ đóng, extractTagContent lấy tới cuối chuỗi và vẫn cố gắng phân tích.
 func splitCoCreateMarkers(s string) (reply, draft string, ready bool, suggestions []string) {
 	reply = extractTagContent(s, tagReply)
 	draft = extractTagContent(s, tagDraft)
@@ -295,12 +295,12 @@ func splitCoCreateMarkers(s string) (reply, draft string, ready bool, suggestion
 	return
 }
 
-// extractTagContent 从 s 中抠出 <tag>...</tag> 之间的文本。
-// 三种偶发故障场景兜底，避免直接走降级丢字段：
-//  1. 有开无闭（流式中段）→ 切到下一个已知开标签前
-//  2. 无开有闭（模型 typo，如 <suggestions> 写成 <uggestions>）→ 从最近一个已知
-//     完整闭合标签的结束位置开始，到 </tag> 之前
-//  3. reply 完全无开标签（模型直接以自然语言开篇，末尾贴 </reply>）→ 从开头到 </reply>
+// extractTagContent bóc phần văn bản giữa <tag>...</tag> trong s.
+// Có ba tình huống lỗi thoảng qua cần dự phòng, để không phải rơi thẳng vào đường giảm cấp làm mất trường:
+//  1. Có thẻ mở không có thẻ đóng (giữa chừng khi truyền phát) → cắt tới trước thẻ mở đã biết kế tiếp
+//  2. Không có thẻ mở nhưng có thẻ đóng (mô hình sai chính tả, ví dụ <suggestions> viết thành <uggestions>) → bắt đầu từ thẻ đóng đầy đủ đã biết gần nhất
+//     cho tới trước </tag>
+//  3. reply hoàn toàn không có thẻ mở (mô hình mở đầu bằng văn xuôi rồi dán </reply> ở cuối) → từ đầu tới </reply>
 func extractTagContent(s, tag string) string {
 	open := "<" + tag + ">"
 	closeTag := "</" + tag + ">"
@@ -310,7 +310,7 @@ func extractTagContent(s, tag string) string {
 		if cIdx := strings.Index(rest, closeTag); cIdx >= 0 {
 			return strings.TrimSpace(rest[:cIdx])
 		}
-		// 有开无闭 → 切到下一个已知开标签前
+		// Có thẻ mở không có thẻ đóng → cắt tới trước thẻ mở đã biết kế tiếp
 		for _, other := range []string{"<reply>", "<draft>", "<ready>", "<suggestions>"} {
 			if other == open {
 				continue
@@ -322,7 +322,7 @@ func extractTagContent(s, tag string) string {
 		return strings.TrimSpace(rest)
 	}
 
-	// 无开有闭 → 从最近一个已知完整闭合标签的结束位置开始，到 </tag>。
+	// Không có thẻ mở nhưng có thẻ đóng → bắt đầu từ cuối thẻ đóng đầy đủ đã biết gần nhất, tới trước </tag>.
 	if cIdx := strings.Index(s, closeTag); cIdx >= 0 {
 		prefix := s[:cIdx]
 		start := 0
@@ -341,9 +341,9 @@ func extractTagContent(s, tag string) string {
 	return ""
 }
 
-// parseSuggestions 把 <suggestions> 段每行抠出来，去掉 "- " / "* " / "1. " 等列表前缀。
-// 最多保留 3 条；空行、过短（<2 字）、整行像 XML 标签的（typo 开标签兜底残留，
-// 例如 <uggestions>）忽略。
+// parseSuggestions bóc từng dòng trong mục <suggestions> và bỏ tiền tố danh sách như "- " / "* " / "1. ".
+// Giữ tối đa 3 mục; bỏ qua dòng trống, dòng quá ngắn (<2 ký tự), dòng trông như thẻ XML (thẻ mở sai chính tả còn sót lại do dự phòng,
+// ví dụ <uggestions>).
 func parseSuggestions(text string) []string {
 	if text == "" {
 		return nil
@@ -354,11 +354,11 @@ func parseSuggestions(text string) []string {
 		if line == "" {
 			continue
 		}
-		// 整行像 XML 标签 → 跳过（防 typo 开标签污染）
+		// Cả dòng trông như thẻ XML → bỏ qua (tránh thẻ mở sai chính tả làm nhiễu)
 		if strings.HasPrefix(line, "<") && strings.HasSuffix(line, ">") {
 			continue
 		}
-		// 剥列表前缀
+		// Bóc tiền tố danh sách
 		switch {
 		case strings.HasPrefix(line, "- "):
 			line = strings.TrimSpace(line[2:])
@@ -378,7 +378,7 @@ func parseSuggestions(text string) []string {
 	return out
 }
 
-// isOrderedSuggestion 判断行首是否形如 "1. " / "12. "（数字+点+空格）。
+// isOrderedSuggestion xác định đầu dòng có dạng "1. " / "12. " (số + dấu chấm + khoảng trắng) hay không.
 func isOrderedSuggestion(line string) bool {
 	i := 0
 	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
@@ -398,9 +398,9 @@ func stripOrderedPrefix(line string) string {
 	return strings.TrimSpace(line[i+2:])
 }
 
-// extractReplyPreview 流式预览：raw 还在生长时给 UI 一段可显示的文本。
-// 找到 <reply> 之后的内容，切到 </reply> 或下一个开标签 <draft> 之前。
-// 模型半遵守（漏 <reply> 开标签）时，开头到 </reply> 或 <draft> 都算 reply。
+// extractReplyPreview phục vụ xem trước khi truyền phát: khi raw còn đang lớn dần, đưa cho UI một đoạn văn bản hiển thị được.
+// Lấy phần sau <reply> và cắt tới </reply> hoặc trước thẻ mở kế tiếp <draft>.
+// Khi mô hình tuân thủ nửa vời (thiếu thẻ mở <reply>), từ đầu tới </reply> hoặc <draft> đều tính là reply.
 func extractReplyPreview(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	open := "<" + tagReply + ">"
