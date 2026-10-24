@@ -1,67 +1,64 @@
-# Step 2 RFC:Engine 直接运行 Worker(七道必答题答案)
+# Step 2 RFC:Engine chạy trực tiếp Worker (đáp án cho bảy câu hỏi bắt buộc)
 
-> 状态:定稿(2026-07-12)。基于对 host/observer/subagent/usage/cocreate 的代码侦察。
-> 结论:全部七题有低风险答案,进入实施。关联:docs/engine-arbiter.md。
+> Trạng thái: chốt (2026-07-12). Dựa trên việc trinh sát mã nguồn host/observer/subagent/usage/cocreate.
+> Kết luận: cả bảy câu đều có đáp án rủi ro thấp, chuyển sang triển khai. Liên quan: docs/engine-arbiter.md.
 
-## 1. Worker 执行面：程序化调用 subagent.Runner
+## 1. Mặt phẳng thực thi của Worker: gọi subagent.Runner theo lập trình
 
-> 后记(2026-07-22)：agentcore 已把类型化执行与模型工具协议拆开。`Runner.Run` 是宿主入口；
-> `Runner.AsTool()` 仅供需要让 LLM 自主派发 subagent 的宿主使用。AINovel 只依赖 Runner。
+> Ghi chú bổ sung (2026-07-22): agentcore đã tách phần thực thi có kiểu khỏi giao thức công cụ của model. `Runner.Run` là điểm vào phía host;
+> `Runner.AsTool()` chỉ dành cho những host cần để LLM tự điều phối subagent. AINovel chỉ phụ thuộc Runner.
 
-`Runner.Run(agent, task)` 每次启动一个完整 `agentcore.AgentLoop`。Engine 直接调用它，build.go 的
-**全部装配原样生效**：角色模型+failover、prompt cache key(#seq 每次自增)、ThinkingLevel、
-UsageRecorder/SessionLogger(OnMessage)、Writer ContextManagerFactory、RestorePack、StopGuardFactory、
-StopAfterTools。类型化结果与错误链直接返回，不经过 JSON 编解码或工具结果嗅探。
+`Runner.Run(agent, task)` mỗi lần khởi chạy một `agentcore.AgentLoop` trọn vẹn. Engine gọi trực tiếp, nên **toàn bộ phần lắp ráp trong build.go vẫn hiệu lực nguyên vẹn**: mô hình theo vai trò + failover, prompt cache key (#seq tự tăng mỗi lần), ThinkingLevel,
+UsageRecorder/SessionLogger(OnMessage), Writer ContextManagerFactory, RestorePack, StopGuardFactory,
+StopAfterTools. Kết quả có kiểu cùng chuỗi lỗi được trả về thẳng, không đi qua mã hoá/giải mã JSON hay dò tìm kết quả từ tool.
 
-**事件投影**:子代理进度中继读的是 **ctx 里的 ToolProgress 回调**(`agentcore.ReportToolProgress(ctx,...)`)。
-Engine 以 `agentcore.WithToolProgress(ctx, relay)` 调 `Runner.Run`,中继照常工作;relay 把 ProgressPayload 合成
-`EventToolExecUpdate` 喂给现有 `observer.handleToolUpdate`——observer 的 worker 侧处理(TOOL 行/流式正文/
-thinking/retry/context)**复用率 ~95%**。DISPATCH 行改由 Engine 直接发起/收尾(新增 observer 两个入口)。
-Coordinator 左栏叙述流消失,由 Engine 叙述事件替代。
+**Chiếu sự kiện**: bộ chuyển tiếp tiến độ của subagent đọc **callback ToolProgress nằm trong ctx** (`agentcore.ReportToolProgress(ctx,...)`).
+Engine gọi `Runner.Run` với `agentcore.WithToolProgress(ctx, relay)`, relay vẫn hoạt động như cũ; relay tổng hợp ProgressPayload thành
+`EventToolExecUpdate` rồi đẩy vào `observer.handleToolUpdate` sẵn có — phía worker của observer (dòng TOOL / nội dung truyện streaming /
+thinking / retry / context) **được tái sử dụng khoảng ~95%**. Dòng DISPATCH nay do Engine trực tiếp mở và kết thúc (thêm hai điểm vào trong observer).
+Luồng tự sự ở cột trái của Coordinator biến mất, được thay bằng sự kiện tự sự của Engine.
 
-**/model 与推理强度**:模型切换经 ModelSet swap(configs 持 failover wrapper,原机制);推理强度经
-`runner.SetThinkingLevel`(applyThinking 保留,删 coordinator 分支)。
+**/model và cường độ suy luận**: đổi model thông qua ModelSet swap (configs giữ failover wrapper, cơ chế cũ); cường độ suy luận thông qua
+`runner.SetThinkingLevel` (giữ applyThinking, bỏ nhánh coordinator).
 
-## 2. Engine 生命周期
+## 2. Vòng đời của Engine
 
-单 goroutine 串行循环;`ctx` cancel = 暂停/中止(传播进 worker loop,checkpoint 保证无损);
-Resume/Continue = 起新循环。单 Worker 串行由循环结构天然保证。预算/停靠点哨兵在每轮边界由
-Engine 直接调用(替代事件订阅与 FlowBoundaryHook)。
+Một goroutine duy nhất chạy vòng lặp tuần tự; huỷ `ctx` = tạm dừng / huỷ (lan truyền vào worker loop, checkpoint bảo đảm không mất mát);
+Resume/Continue = khởi chạy vòng lặp mới. Việc một Worker chạy tuần tự được bảo đảm tự nhiên bởi cấu trúc vòng lặp. Sentinel ngân sách / điểm dừng
+được Engine gọi trực tiếp ở ranh giới mỗi vòng (thay cho việc đăng ký sự kiện và FlowBoundaryHook).
 
-## 3. 状态提交协议 → 串行使其近乎消失
+## 3. Giao thức commit trạng thái → cơ chế tuần tự khiến nó gần như biến mất
 
-Engine 每轮 spawn 前才 `LoadState+Route`,指令永远基于最新事实——Route 指令无 TOCTOU,无需 Expect 对账。
-Expect 快照仅用于 **Arbiter 决策的 dispatch**(咨询与执行之间隔着 worker 运行):边界执行前比对
-{Phase, QueueHead},不符 → 丢弃 + 以新事实重询。前置校验(原 Gate 职责)成为 Engine 普通代码:
-phase=complete 不派发;writer 目标章未展开 → 改派 architect_long expand(确定性,无需教学文案)。
-干预的控制态动作(hold/reopen/dispatch)进 Engine 队列边界提交;answer/rules 即时。
+Chỉ ngay trước khi spawn mỗi vòng, Engine mới `LoadState+Route`, nên lệnh luôn dựa trên sự thật mới nhất — lệnh do Route sinh ra không có TOCTOU, không cần đối soát Expect.
+Ảnh chụp Expect chỉ dùng cho **dispatch quyết định của Arbiter** (giữa lúc tham vấn và lúc thực thi có một lần chạy worker): trước khi thực thi tại ranh giới, so sánh
+{Phase, QueueHead}; không khớp → bỏ + hỏi lại bằng sự thật mới. Kiểm tra tiền điều kiện (trách nhiệm cũ của Gate) trở thành code thường của Engine:
+phase=complete thì không phát lệnh; chương mục tiêu của writer chưa được mở rộng → đổi sang phái architect_long expand (tất định, không cần văn bản hướng dẫn).
+Các hành động trạng thái điều khiển khi can thiệp (hold/reopen/dispatch) được commit tại ranh giới hàng đợi của Engine; answer/rules thì tức thì.
 
-## 4. 错误分类学(确定性先行)
+## 4. Phân loại lỗi (tính tất định đi trước)
 
-- retryable(网络/限流/stream-idle):subagent 内部 MaxRetries=7 已就近消化,不出循环
-- worker 返回 error(escalate/hard_stop/工具硬错):同一指令 Engine 重试 1 次 → 仍败 → Arbiter
-  `worker_failure` 咨询(retry/reroute/abort)→ abort 或 Arbiter 自身失败 → 暂停 + notify
-- 参数错/未知 agent 等确定性错误:直接暂停 + notify(代码 bug,重试无意义)
+- retryable (mạng / giới hạn tần suất / stream-idle): MaxRetries=7 bên trong subagent đã xử lý tại chỗ, không thoát ra vòng lặp
+- worker trả về error (escalate/hard_stop / lỗi cứng của tool): Engine thử lại 1 lần với cùng lệnh → vẫn thất bại → tham vấn Arbiter `worker_failure` (retry/reroute/abort) → abort, hoặc bản thân Arbiter thất bại → tạm dừng + notify
+- lỗi tham số / agent lạ và các lỗi tất định khác: tạm dừng + notify ngay (lỗi code, thử lại vô nghĩa)
 
-## 5. 僵局协议
+## 5. Giao thức bế tắc
 
-每轮记录指令键 `Agent+Task`。上一轮执行后 Route 仍产生同键，说明任务后置条件未满足，`repeat++`；指令改变则清零。Worker 内部 `plan/draft/edit` 等中间 checkpoint 不算 Engine 级推进。
-repeat==3 → Arbiter `deadlock` 咨询;Arbiter 建议 retry **不清零**;repeat==5 → 硬熔断:暂停 + notify。
-(Coordinator 时代"不设阈值"依赖其自主性;确定性 Engine 必须有限界。)
+Mỗi vòng ghi lại khóa lệnh `Agent+Task`. Nếu sau khi vòng trước thực thi, Route vẫn sinh ra cùng khóa, nghĩa là điều kiện hậu quả của nhiệm vụ chưa được thoả mãn, `repeat++`; lệnh thay đổi thì đặt lại về 0. Các checkpoint trung gian bên trong worker như `plan/draft/edit` không tính là tiến triển ở cấp Engine.
+repeat==3 → tham vấn Arbiter `deadlock`; khuyến nghị retry của Arbiter **không** đặt lại bộ đếm; repeat==5 → ngắt mạch cứng: tạm dừng + notify.
+(Thời đại Coordinator, việc "không đặt ngưỡng" dựa vào tính tự chủ của nó; Engine tất định buộc phải có giới hạn.)
 
-## 6. 崩溃语义 → 免费
+## 6. Ngữ nghĩa khi sập → miễn phí
 
-不需要判断"上个 Worker 是否产生有效事实":工具层 checkpoint+digest 幂等,Route 从 store 重算,
-重复派发安全。agentcore 的模型流重试不会跨越工具执行边界。恢复 = 直接进循环。PendingSteer 在循环启动前作为
-干预走 Arbiter。
+Không cần phán đoán "Worker trước có tạo ra sự thật hợp lệ hay không": ở tầng tool, checkpoint+digest là idempotent, Route tính lại từ store,
+nên phát lệnh lặp lại vẫn an toàn. Việc thử lại luồng model của agentcore không vượt qua ranh giới thực thi tool. Khôi phục = vào thẳng vòng lặp. PendingSteer, trước khi vòng lặp khởi chạy, được xử lý như một can thiệp và đưa qua Arbiter.
 
-## 7. 原型验收
+## 7. Tiêu chí nghiệm thu của prototype
 
-端到端集成测试(fake ChatModel):规划→补齐→写章→弧末评审/摘要→展开→完本 全链路;干预分诊落 store;
-暂停/恢复;僵局熔断;usage 记录;observer 事件形状(DISPATCH/TOOL 行、流式 delta)。加上既有的
-60k Route 规格、agentcore 契约、editor 流测试作为回归网。
+Kiểm thử tích hợp đầu-cuối (fake ChatModel): quy hoạch → bổ sung → viết chương → thẩm duyệt / tóm tắt cuối cung → mở rộng → hoàn thành toàn tuyến; can thiệp được phân loại và ghi vào store;
+tạm dừng/khôi phục; ngắt mạch bế tắc; ghi nhận usage; hình dạng sự kiện của observer (dòng DISPATCH/TOOL, delta streaming). Cộng thêm lưới hồi quy gồm
+spec Route 60k sẵn có, hợp đồng agentcore và kiểm thử luồng editor.
 
-## 完成期总结(设计决定)
+## Tổng kết giai đoạn hoàn thành (quyết định thiết kế)
 
-完本总结改为**确定性生成**:store 已有全部事实(章节摘要/角色/伏笔台账/字数),Engine 直接渲染报告,
-不再花一次 LLM 调用产出仪式性文本。原 coordinator 的 LLM 总结取消(engine-arbiter.md §三:总结非裁定)。
+Tổng kết hoàn thành tác phẩm đổi thành **sinh tất định**: store đã có toàn bộ sự thật (tóm tắt chương / nhân vật / sổ cái manh mối / số từ), Engine trực tiếp kết xuất báo cáo,
+không tốn thêm một lượt gọi LLM để tạo ra văn bản nghi lễ. Tổng kết LLM của coordinator cũ bị huỷ (engine-arbiter.md §3: tổng kết không phải phán quyết).
