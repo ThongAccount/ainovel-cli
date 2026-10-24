@@ -9,62 +9,73 @@ import (
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 )
 
-// Properties 返回完整章节事实共用的 JSON Schema 字段。
+// Properties trả về các trường JSON Schema dùng chung cho đầy đủ sự thật
+// chương.
+//
+// Mô tả schema là văn bản model đọc nên được dịch song ngữ theo ngôn ngữ tác
+// phẩm; tên trường và giá trị enum là ký hiệu kỹ thuật nên giữ nguyên.
 func Properties(includeFeedback bool) []schema.Prop {
+	texts := activeTexts()
 	textList := func(description string) map[string]any {
 		return schema.Array(description, schema.String(description))
 	}
 	timeline := schema.Object(
-		schema.Property("time", schema.String("故事内时间")).Required(),
-		schema.Property("event", schema.String("事件")).Required(),
-		schema.Property("characters", textList("涉及角色")).Required(),
+		schema.Property("time", schema.String(texts.storyTime)).Required(),
+		schema.Property("event", schema.String(texts.event)).Required(),
+		schema.Property("characters", textList(texts.involvedCharacter)).Required(),
 	)
 	foreshadow := schema.Object(
-		schema.Property("id", schema.String("伏笔 ID")).Required(),
-		schema.Property("action", schema.Enum("操作", "plant", "advance", "resolve")).Required(),
-		schema.Property("description", llmcontract.Nullable(schema.String("plant 描述，其它操作为 null"))).Required(),
+		schema.Property("id", schema.String(texts.foreshadowID)).Required(),
+		schema.Property("action", schema.Enum(texts.operation, "plant", "advance", "resolve")).Required(),
+		schema.Property("description", llmcontract.Nullable(schema.String(texts.plantDescription))).Required(),
 	)
 	relationship := schema.Object(
-		schema.Property("character_a", schema.String("角色 A")).Required(),
-		schema.Property("character_b", schema.String("角色 B")).Required(),
-		schema.Property("relation", schema.String("本章结束时关系")).Required(),
+		schema.Property("character_a", schema.String(texts.characterA)).Required(),
+		schema.Property("character_b", schema.String(texts.characterB)).Required(),
+		schema.Property("relation", schema.String(texts.relationAtEnd)).Required(),
 	)
 	stateChange := schema.Object(
-		schema.Property("entity", schema.String("实体")).Required(),
-		schema.Property("field", schema.String("属性")).Required(),
-		schema.Property("old_value", llmcontract.Nullable(schema.String("变化前值"))).Required(),
-		schema.Property("new_value", schema.String("变化后值")).Required(),
-		schema.Property("reason", llmcontract.Nullable(schema.String("原因"))).Required(),
+		schema.Property("entity", schema.String(texts.entity)).Required(),
+		schema.Property("field", schema.String(texts.field)).Required(),
+		schema.Property("old_value", llmcontract.Nullable(schema.String(texts.oldValue))).Required(),
+		schema.Property("new_value", schema.String(texts.newValue)).Required(),
+		schema.Property("reason", llmcontract.Nullable(schema.String(texts.reason))).Required(),
 	)
 	props := []schema.Prop{
-		schema.Property("title", schema.String("最终标题")).Required(),
-		schema.Property("summary", schema.String("章节摘要")).Required(),
-		schema.Property("characters", textList("出场角色")).Required(),
-		schema.Property("key_events", textList("关键事件")).Required(),
-		schema.Property("timeline_events", schema.Array("时间线事件", timeline)).Required(),
-		schema.Property("foreshadow_updates", schema.Array("伏笔操作", foreshadow)).Required(),
-		schema.Property("relationship_changes", schema.Array("关系变化", relationship)).Required(),
-		schema.Property("state_changes", schema.Array("状态变化", stateChange)).Required(),
-		schema.Property("cast_intros", schema.Array("新配角", schema.Object(
-			schema.Property("name", schema.String("姓名")).Required(),
-			schema.Property("brief_role", schema.String("定位")).Required(),
+		schema.Property("title", schema.String(texts.finalTitle)).Required(),
+		schema.Property("summary", schema.String(texts.chapterSummary)).Required(),
+		schema.Property("characters", textList(texts.presentCharacters)).Required(),
+		schema.Property("key_events", textList(texts.keyEvents)).Required(),
+		schema.Property("timeline_events", schema.Array(texts.timelineEvents, timeline)).Required(),
+		schema.Property("foreshadow_updates", schema.Array(texts.foreshadowOps, foreshadow)).Required(),
+		schema.Property("relationship_changes", schema.Array(texts.relationshipMoves, relationship)).Required(),
+		schema.Property("state_changes", schema.Array(texts.stateChanges, stateChange)).Required(),
+		schema.Property("cast_intros", schema.Array(texts.newCast, schema.Object(
+			schema.Property("name", schema.String(texts.name)).Required(),
+			schema.Property("brief_role", schema.String(texts.briefRole)).Required(),
 		))).Required(),
-		schema.Property("hook_type", llmcontract.Nullable(schema.Enum("章末钩子", domain.HookTypes()...))).Required(),
-		schema.Property("dominant_strand", llmcontract.Nullable(schema.Enum("主导叙事线", domain.DominantStrands()...))).Required(),
+		schema.Property("hook_type", llmcontract.Nullable(schema.Enum(texts.hookType, domain.HookTypes()...))).Required(),
+		schema.Property("dominant_strand", llmcontract.Nullable(schema.Enum(texts.dominantStrand, domain.DominantStrands()...))).Required(),
 	}
 	if includeFeedback {
 		feedback := schema.Object(
-			schema.Property("deviation", schema.String("偏离大纲的描述")).Required(),
-			schema.Property("suggestion", schema.String("对后续大纲的调整建议")).Required(),
+			schema.Property("deviation", schema.String(texts.deviation)).Required(),
+			schema.Property("suggestion", schema.String(texts.suggestion)).Required(),
 		)
-		feedback["description"] = "对后续大纲的建议对象；必须直接传 JSON object，不要传字符串化 JSON"
+		feedback["description"] = texts.feedbackObject
 		props = append(props, schema.Property("feedback", llmcontract.Nullable(feedback)).Required())
 	}
 	return props
 }
 
-// Validate 校验普通提交与人工修订共用的确定性约束。
+// Validate kiểm tra các ràng buộc tất định dùng chung cho cả đề nghị gửi bình
+// thường lẫn bản sửa thủ công.
+//
+// Các thông báo kỹ thuật ở đây là lỗi lập trình, giữ nguyên tiếng Anh để
+// không lẫn với lỗi nghiệp vụ mà model phải tự sửa; lỗi "id manh mối là giá
+// trị giữ chỗ" thì được dịch song ngữ vì nó đưa lại cho model.
 func Validate(facts domain.ChapterFacts) error {
+	texts := activeTexts()
 	if strings.TrimSpace(facts.Title) == "" {
 		return fmt.Errorf("title is required")
 	}
@@ -93,11 +104,7 @@ func Validate(facts domain.ChapterFacts) error {
 			return fmt.Errorf("foreshadow_updates[%d].id is required", i)
 		}
 		if placeholderForeshadowID(update.ID) {
-			return fmt.Errorf(
-				"foreshadow_updates[%d].id = %q 是占位符，不是标识符。每条伏笔要一个唯一且稳定的 id"+
-					"（如 FORESHADOW_OBSERVER、jade-pendant），后续章节靠它 advance/resolve；"+
-					"复用占位符会让新伏笔撞上旧条目",
-				i, update.ID)
+			return fmt.Errorf(texts.placeholderID, i, update.ID)
 		}
 		switch update.Action {
 		case "plant":
@@ -148,9 +155,11 @@ func validateTextItems(name string, items []string) error {
 	return nil
 }
 
-// placeholderForeshadowIDs 是模型常写进 id 字段的占位词。它们本身没有标识作用，
-// 而伏笔 id 必须跨章稳定——实测模型把每条新伏笔都命名为 "new"，第二条起就撞上
-// 第一条，被静默丢弃：22 章里 plant 了 6 次，最终只入账 2 条。
+// placeholderForeshadowIDs là các từ giữ chỗ mà model hay điền vào trường id.
+// Bản thân chúng không mang ý nghĩa định danh, mà id manh mối phải ổn định
+// xuyên suốt các chương — đo được việc model đặt mọi manh mối mới là "new",
+// từ mục thứ hai trở đi đâm vào bản ghi cũ và bị nuốt lặng: 22 chương gieo 6
+// lần, vào sổ 2.
 var placeholderForeshadowIDs = map[string]struct{}{
 	"new": {}, "none": {}, "null": {}, "nil": {}, "tbd": {}, "todo": {},
 	"auto": {}, "id": {}, "-": {}, "n/a": {}, "na": {}, "unknown": {}, "?": {},
