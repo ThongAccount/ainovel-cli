@@ -15,15 +15,15 @@ func TestStartsForwardChapter(t *testing.T) {
 		pending *domain.PendingCommit
 		want    bool
 	}{
-		{"正常下一章", &Instruction{Agent: "writer", Chapter: 2}, base, nil, true},
-		{"零章节按事实推导", &Instruction{Agent: "writer"}, base, nil, true},
-		{"文案不参与", &Instruction{Agent: "writer", Chapter: 2, Task: "任意", Reason: "任意"}, base, nil, true},
-		{"返工 Writer", &Instruction{Agent: "writer", Chapter: 1}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1}, PendingRewrites: []int{1}}, nil, false},
-		{"章节恢复", &Instruction{Agent: "writer", Chapter: 2}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1}, InProgressChapter: 2}, nil, false},
-		{"提交恢复", &Instruction{Agent: "writer", Chapter: 2}, base, &domain.PendingCommit{Chapter: 2}, false},
-		{"非下一章", &Instruction{Agent: "writer", Chapter: 3}, base, nil, false},
+		{"Chương kế tiếp bình thường", &Instruction{Agent: "writer", Chapter: 2}, base, nil, true},
+		{"Số chương bằng 0 thì suy từ sự thật", &Instruction{Agent: "writer"}, base, nil, true},
+		{"Văn bản không tham gia", &Instruction{Agent: "writer", Chapter: 2, Task: "tuỳ ý", Reason: "tuỳ ý"}, base, nil, true},
+		{"Writer đang làm lại", &Instruction{Agent: "writer", Chapter: 1}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1}, PendingRewrites: []int{1}}, nil, false},
+		{"Khôi phục chương", &Instruction{Agent: "writer", Chapter: 2}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1}, InProgressChapter: 2}, nil, false},
+		{"Khôi phục commit", &Instruction{Agent: "writer", Chapter: 2}, base, &domain.PendingCommit{Chapter: 2}, false},
+		{"Không phải chương kế tiếp", &Instruction{Agent: "writer", Chapter: 3}, base, nil, false},
 		{"Editor", &Instruction{Agent: "editor"}, base, nil, false},
-		{"空指令", nil, base, nil, false},
+		{"Chỉ dẫn rỗng", nil, base, nil, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,16 +42,16 @@ func TestResolveAdvanceHold(t *testing.T) {
 		want    AdvanceHoldResolution
 		wantErr bool
 	}{
-		{"无 hold", nil, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, false},
-		{"边界暂停", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "停"}, &domain.Progress{Phase: domain.PhaseWriting, PendingRewrites: []int{1}}, AdvanceHoldConsumeAndStop, false},
-		{"返工未排空", &domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "验收"}, &domain.Progress{Phase: domain.PhaseWriting, PendingRewrites: []int{1}}, AdvanceHoldKeep, false},
-		{"返工已排空", &domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "验收"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldConsumeAndStop, false},
-		{"目标章节未完成", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 3, Reason: "写到第3章"}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1, 2}}, AdvanceHoldKeep, false},
-		{"目标章节已完成", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 3, Reason: "写到第3章"}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1, 2, 3}}, AdvanceHoldConsumeAndStop, false},
-		{"目标章节缺失", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, Reason: "写到目标章"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, true},
-		{"完本只消费", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "停"}, &domain.Progress{Phase: domain.PhaseComplete}, AdvanceHoldConsume, false},
-		{"未知条件", &domain.AdvanceHold{After: "unknown", Reason: "停"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, true},
-		{"缺少进度", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "停"}, nil, AdvanceHoldKeep, true},
+		{"Không có hold", nil, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, false},
+		{"Tạm dừng tại ranh giới", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "Dừng"}, &domain.Progress{Phase: domain.PhaseWriting, PendingRewrites: []int{1}}, AdvanceHoldConsumeAndStop, false},
+		{"Làm lại chưa ráo", &domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "Nghiệm thu"}, &domain.Progress{Phase: domain.PhaseWriting, PendingRewrites: []int{1}}, AdvanceHoldKeep, false},
+		{"Làm lại đã ráo", &domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "Nghiệm thu"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldConsumeAndStop, false},
+		{"Chương đích chưa xong", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 3, Reason: "Viết tới chương 3"}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1, 2}}, AdvanceHoldKeep, false},
+		{"Chương đích đã xong", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 3, Reason: "Viết tới chương 3"}, &domain.Progress{Phase: domain.PhaseWriting, CompletedChapters: []int{1, 2, 3}}, AdvanceHoldConsumeAndStop, false},
+		{"Thiếu chương đích", &domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, Reason: "Viết tới chương đích"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, true},
+		{"Hoàn thành chỉ tiêu thụ", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "Dừng"}, &domain.Progress{Phase: domain.PhaseComplete}, AdvanceHoldConsume, false},
+		{"Điều kiện lạ", &domain.AdvanceHold{After: "unknown", Reason: "Dừng"}, &domain.Progress{Phase: domain.PhaseWriting}, AdvanceHoldKeep, true},
+		{"Thiếu tiến độ", &domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "Dừng"}, nil, AdvanceHoldKeep, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
