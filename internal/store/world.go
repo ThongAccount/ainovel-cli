@@ -194,7 +194,7 @@ func (s *WorldStore) UpdateForeshadow(chapter int, updates []domain.ForeshadowUp
 					// ("1" và "new"), 4 phục bút biến mất không dấu vết và không chỗ nào báo lỗi.
 					if planted := entries[i].PlantedAt; planted != 0 && planted != chapter {
 						return fmt.Errorf(
-							"id của phục bút %q đã bị chương %d chiếm dùng（%s）；mỗi phục bút cần id riêng, duy nhất và ổn định，"+
+							"id của phục bút %q đã bị chương %d chiếm dùng (%s); mỗi phục bút cần id riêng, duy nhất và ổn định, "+
 								"đừng dùng lại id giữ chỗ kiểu \"new\"/\"1\" — các chương sau cần id đó để tìm lại và advance/resolve: %w",
 							u.ID, planted, truncateForError(entries[i].Description), errs.ErrToolArgs)
 					}
