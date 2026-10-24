@@ -14,138 +14,153 @@ func stringList(description string) map[string]any {
 	return schema.Array(description, schema.String(description))
 }
 
-var segmentContract = llmcontract.Contract{
-	Name:        "import_segment",
-	Description: "识别导入文本中的章节、卷篇与附属文本边界",
-	Schema: schema.Object(
-		schema.Property("boundaries", schema.Array("按原文顺序排列的边界", schema.Object(
-			schema.Property("unit_id", schema.String("owned 区间内的 unit id")).Required(),
-			schema.Property("anchor", nullableString("同一 unit 多边界时的原文定位片段；否则为 null")).Required(),
-			schema.Property("kind", schema.Enum("边界类型", kindChapter, kindGroup, kindFrontMatter, kindBackMatter)).Required(),
-			schema.Property("title", nullableString("标题原文；没有标题时为 null")).Required(),
-			schema.Property("uncertain", schema.Bool("是否需要用户确认")).Required(),
-			schema.Property("reason", nullableString("不确定原因；无需说明时为 null")).Required(),
-		))).Required(),
-	),
+// segmentContract là hợp đồng nhận diện ranh giới.
+// Mô tả hợp đồng và mô tả thuộc tính đều là văn bản mô hình đọc nên lấy theo
+// ngôn ngữ tác phẩm (t); tên hợp đồng và tên thuộc tính JSON giữ nguyên.
+func segmentContract(t *importTexts) llmcontract.Contract {
+	return llmcontract.Contract{
+		Name:        "import_segment",
+		Description: t.segmentDesc,
+		Schema: schema.Object(
+			schema.Property("boundaries", schema.Array(t.boundariesDesc, schema.Object(
+				schema.Property("unit_id", schema.String(t.unitIDDesc)).Required(),
+				schema.Property("anchor", nullableString(t.anchorDesc)).Required(),
+				schema.Property("kind", schema.Enum(t.kindDesc, kindChapter, kindGroup, kindFrontMatter, kindBackMatter)).Required(),
+				schema.Property("title", nullableString(t.titleDesc)).Required(),
+				schema.Property("uncertain", schema.Bool(t.uncertainDesc)).Required(),
+				schema.Property("reason", nullableString(t.reasonDesc)).Required(),
+			))).Required(),
+		),
+	}
 }
 
-var analysisContract = llmcontract.Contract{
-	Name:        "import_chapter_analysis",
-	Description: "提取连续章节的可追溯故事事实",
-	Schema: schema.Object(
-		schema.Property("chapters", schema.Array("与输入章号顺序一致的逐章事实", chapterFactsSchema())).Required(),
-	),
+// analysisContract là hợp đồng trích xuất sự thật theo chương.
+func analysisContract(t *importTexts) llmcontract.Contract {
+	return llmcontract.Contract{
+		Name:        "import_chapter_analysis",
+		Description: t.analysisDesc,
+		Schema: schema.Object(
+			schema.Property("chapters", schema.Array(t.chaptersDesc, chapterFactsSchema(t))).Required(),
+		),
+	}
 }
 
-func chapterFactsSchema() map[string]any {
+// chapterFactsSchema dựng schema của một đối tượng sự thật theo chương.
+func chapterFactsSchema(t *importTexts) map[string]any {
 	characterEvidence := schema.Object(
-		schema.Property("chapter", schema.Int("证据所在章")).Required(),
-		schema.Property("name", schema.String("人物名")).Required(),
-		schema.Property("note", nullableString("人物事实；无则为 null")).Required(),
+		schema.Property("chapter", schema.Int(t.evidenceChapterDesc)).Required(),
+		schema.Property("name", schema.String(t.characterNameDesc)).Required(),
+		schema.Property("note", nullableString(t.characterNoteDesc)).Required(),
 	)
 	worldEvidence := schema.Object(
-		schema.Property("chapter", schema.Int("证据所在章")).Required(),
-		schema.Property("category", nullableString("世界事实类别；无法归类时为 null")).Required(),
-		schema.Property("fact", schema.String("正文明确揭示的世界事实")).Required(),
+		schema.Property("chapter", schema.Int(t.evidenceChapterDesc)).Required(),
+		schema.Property("category", nullableString(t.worldCategoryDesc)).Required(),
+		schema.Property("fact", schema.String(t.worldFactDesc)).Required(),
 	)
 	timelineEvent := schema.Object(
-		schema.Property("chapter", schema.Int("章号")).Required(),
-		schema.Property("time", schema.String("故事内时间")).Required(),
-		schema.Property("event", schema.String("事件")).Required(),
-		schema.Property("characters", stringList("相关人物")).Required(),
+		schema.Property("chapter", schema.Int(t.chapterNoDesc)).Required(),
+		schema.Property("time", schema.String(t.storyTimeDesc)).Required(),
+		schema.Property("event", schema.String(t.eventDesc)).Required(),
+		schema.Property("characters", stringList(t.relatedCharactersDesc)).Required(),
 	)
 	foreshadow := schema.Object(
-		schema.Property("id", schema.String("复用 ledger 中的伏笔 ID")).Required(),
-		schema.Property("action", schema.Enum("伏笔动作", "plant", "advance", "resolve")).Required(),
-		schema.Property("description", nullableString("plant 时的伏笔说明；其他情况可为 null")).Required(),
+		schema.Property("id", schema.String(t.foreshadowIDDesc)).Required(),
+		schema.Property("action", schema.Enum(t.foreshadowActionDesc, "plant", "advance", "resolve")).Required(),
+		schema.Property("description", nullableString(t.plantDescriptionDesc)).Required(),
 	)
 	relationship := schema.Object(
-		schema.Property("character_a", schema.String("人物 A")).Required(),
-		schema.Property("character_b", schema.String("人物 B")).Required(),
-		schema.Property("relation", schema.String("关系变化")).Required(),
-		schema.Property("chapter", schema.Int("章号")).Required(),
+		schema.Property("character_a", schema.String(t.charADesc)).Required(),
+		schema.Property("character_b", schema.String(t.charBDesc)).Required(),
+		schema.Property("relation", schema.String(t.relationChangeDesc)).Required(),
+		schema.Property("chapter", schema.Int(t.chapterNoDesc)).Required(),
 	)
 	stateChange := schema.Object(
-		schema.Property("chapter", schema.Int("章号")).Required(),
-		schema.Property("entity", schema.String("角色或实体")).Required(),
-		schema.Property("field", schema.String("发生变化的属性")).Required(),
-		schema.Property("old_value", nullableString("变化前状态；首次出现时为 null")).Required(),
-		schema.Property("new_value", schema.String("变化后状态")).Required(),
-		schema.Property("reason", nullableString("变化原因；正文未说明时为 null")).Required(),
+		schema.Property("chapter", schema.Int(t.chapterNoDesc)).Required(),
+		schema.Property("entity", schema.String(t.entityDesc)).Required(),
+		schema.Property("field", schema.String(t.changedFieldDesc)).Required(),
+		schema.Property("old_value", nullableString(t.oldValueDesc)).Required(),
+		schema.Property("new_value", schema.String(t.newValueDesc)).Required(),
+		schema.Property("reason", nullableString(t.changeReasonDesc)).Required(),
 	)
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章号")).Required(),
-		schema.Property("title", schema.String("章节标题")).Required(),
-		schema.Property("summary", schema.String("本章概要")).Required(),
-		schema.Property("key_events", stringList("关键事件")).Required(),
-		schema.Property("core_event", schema.String("本章最关键的一件事")).Required(),
-		schema.Property("hook", nullableString("章末钩子；无则为 null")).Required(),
-		schema.Property("scenes", stringList("场景序列")).Required(),
-		schema.Property("characters", stringList("出场人物")).Required(),
-		schema.Property("character_evidence", schema.Array("人物证据", characterEvidence)).Required(),
-		schema.Property("world_evidence", schema.Array("世界事实证据", worldEvidence)).Required(),
-		schema.Property("timeline_events", schema.Array("时间线事件", timelineEvent)).Required(),
-		schema.Property("foreshadow_updates", schema.Array("伏笔增量", foreshadow)).Required(),
-		schema.Property("relationship_changes", schema.Array("关系变化", relationship)).Required(),
-		schema.Property("state_changes", schema.Array("状态变化", stateChange)).Required(),
-		schema.Property("hook_type", schema.Enum("章末钩子类型", domain.HookTypes()...)).Required(),
-		schema.Property("dominant_strand", schema.Enum("主导叙事线", domain.DominantStrands()...)).Required(),
+		schema.Property("chapter", schema.Int(t.chapterNoDesc)).Required(),
+		schema.Property("title", schema.String(t.chapterTitleDesc)).Required(),
+		schema.Property("summary", schema.String(t.summaryDesc)).Required(),
+		schema.Property("key_events", stringList(t.keyEventsDesc)).Required(),
+		schema.Property("core_event", schema.String(t.coreEventDesc)).Required(),
+		schema.Property("hook", nullableString(t.hookDesc)).Required(),
+		schema.Property("scenes", stringList(t.scenesDesc)).Required(),
+		schema.Property("characters", stringList(t.castDesc)).Required(),
+		schema.Property("character_evidence", schema.Array(t.characterEvidenceDesc, characterEvidence)).Required(),
+		schema.Property("world_evidence", schema.Array(t.worldEvidenceDesc, worldEvidence)).Required(),
+		schema.Property("timeline_events", schema.Array(t.timelineEventsDesc, timelineEvent)).Required(),
+		schema.Property("foreshadow_updates", schema.Array(t.foreshadowUpdatesDesc, foreshadow)).Required(),
+		schema.Property("relationship_changes", schema.Array(t.relationChangeDesc, relationship)).Required(),
+		schema.Property("state_changes", schema.Array(t.stateChangesDesc, stateChange)).Required(),
+		schema.Property("hook_type", schema.Enum(t.hookTypeDesc, domain.HookTypes()...)).Required(),
+		schema.Property("dominant_strand", schema.Enum(t.dominantStrandDesc, domain.DominantStrands()...)).Required(),
 	)
 }
 
-var rangeContract = llmcontract.Contract{
-	Name:        "import_range_digest",
-	Description: "归纳一个连续章节区间的剧情与事实",
-	Schema: schema.Object(
-		schema.Property("start_chapter", schema.Int("区间首章")).Required(),
-		schema.Property("end_chapter", schema.Int("区间末章")).Required(),
-		schema.Property("plot", schema.String("跨章主线剧情推进")).Required(),
-		schema.Property("characters", stringList("有实质进展的人物")).Required(),
-		schema.Property("world_facts", stringList("已确立的世界事实")).Required(),
-		schema.Property("opened_threads", stringList("本区间新开的长线")).Required(),
-		schema.Property("resolved_threads", stringList("本区间收束的长线")).Required(),
-	),
+// rangeContract là hợp đồng tóm tắt một đoạn chương liên tục.
+func rangeContract(t *importTexts) llmcontract.Contract {
+	return llmcontract.Contract{
+		Name:        "import_range_digest",
+		Description: t.rangeDesc,
+		Schema: schema.Object(
+			schema.Property("start_chapter", schema.Int(t.rangeStartDesc)).Required(),
+			schema.Property("end_chapter", schema.Int(t.rangeEndDesc)).Required(),
+			schema.Property("plot", schema.String(t.rangePlotDesc)).Required(),
+			schema.Property("characters", stringList(t.rangeCharsDesc)).Required(),
+			schema.Property("world_facts", stringList(t.rangeWorldDesc)).Required(),
+			schema.Property("opened_threads", stringList(t.rangeOpenedDesc)).Required(),
+			schema.Property("resolved_threads", stringList(t.rangeResolvedDesc)).Required(),
+		),
+	}
 }
 
-var synthesisContract = llmcontract.Contract{
-	Name:        "import_book_synthesis",
-	Description: "综合全书事实并给出连续完整的卷弧范围",
-	Schema: schema.Object(
-		schema.Property("title", nullableString("正文中的正式书名；无法确认时为 null")).Required(),
-		schema.Property("synopsis", schema.String("面向读者的无剧透小说简介")).Required(),
-		schema.Property("premise", schema.String("故事前提的 Markdown 描述")).Required(),
-		schema.Property("characters", schema.Array("主要人物", schema.Object(
-			schema.Property("name", schema.String("人物名")).Required(),
-			schema.Property("aliases", stringList("别名与称号")).Required(),
-			schema.Property("role", schema.String("叙事角色")).Required(),
-			schema.Property("description", schema.String("人物描述")).Required(),
-			schema.Property("arc", schema.String("人物弧")).Required(),
-			schema.Property("traits", stringList("人物特质")).Required(),
-			schema.Property("tier", nullableString("人物层级；无法判断时为 null")).Required(),
-		))).Required(),
-		schema.Property("world_rules", schema.Array("正文确立的世界规则", schema.Object(
-			schema.Property("category", schema.String("规则类别")).Required(),
-			schema.Property("rule", schema.String("规则描述")).Required(),
-			schema.Property("boundary", schema.String("不可违反的边界")).Required(),
-		))).Required(),
-		schema.Property("structure", schema.Array("卷与弧的连续章节范围", schema.Object(
-			schema.Property("title", schema.String("卷标题")).Required(),
-			schema.Property("theme", schema.String("卷核心冲突或主题")).Required(),
-			schema.Property("arcs", schema.Array("卷内故事弧", schema.Object(
-				schema.Property("title", schema.String("弧标题")).Required(),
-				schema.Property("goal", schema.String("弧目标")).Required(),
-				schema.Property("start_chapter", schema.Int("起始章")).Required(),
-				schema.Property("end_chapter", schema.Int("结束章")).Required(),
+// synthesisContract là hợp đồng tổng hợp toàn tác phẩm.
+func synthesisContract(t *importTexts) llmcontract.Contract {
+	return llmcontract.Contract{
+		Name:        "import_book_synthesis",
+		Description: t.synthesisDesc,
+		Schema: schema.Object(
+			schema.Property("title", nullableString(t.bookTitleDesc)).Required(),
+			schema.Property("synopsis", schema.String(t.synopsisDesc)).Required(),
+			schema.Property("premise", schema.String(t.premiseDesc)).Required(),
+			schema.Property("characters", schema.Array(t.mainCharactersDesc, schema.Object(
+				schema.Property("name", schema.String(t.characterNameDesc)).Required(),
+				schema.Property("aliases", stringList(t.aliasesDesc)).Required(),
+				schema.Property("role", schema.String(t.narrativeRoleDesc)).Required(),
+				schema.Property("description", schema.String(t.characterDescDesc)).Required(),
+				schema.Property("arc", schema.String(t.characterArcDesc)).Required(),
+				schema.Property("traits", stringList(t.characterTraitsDesc)).Required(),
+				schema.Property("tier", nullableString(t.characterTierDesc)).Required(),
 			))).Required(),
-		))).Required(),
-		schema.Property("compass", schema.Object(
-			schema.Property("ending_direction", schema.String("终局方向")).Required(),
-			schema.Property("open_threads", stringList("仍未收束的长线")).Required(),
-			schema.Property("estimated_scale", nullableString("模糊规模；无法判断时为 null")).Required(),
-			schema.Property("last_updated", llmcontract.Nullable(schema.Int("依据的最新章号；无需填写时为 null"))).Required(),
-		)).Required(),
-		schema.Property("planning_tier", schema.Enum("规划层级", "short", "mid", "long")).Required(),
-		schema.Property("story_status", schema.Enum("故事是否完结", storyOpen, storyClosed, storyUncertain)).Required(),
-		schema.Property("status_reason", nullableString("状态判断理由")).Required(),
-	),
+			schema.Property("world_rules", schema.Array(t.worldRulesDesc, schema.Object(
+				schema.Property("category", schema.String(t.ruleCategoryDesc)).Required(),
+				schema.Property("rule", schema.String(t.ruleDesc)).Required(),
+				schema.Property("boundary", schema.String(t.boundaryDesc)).Required(),
+			))).Required(),
+			schema.Property("structure", schema.Array(t.structureDesc, schema.Object(
+				schema.Property("title", schema.String(t.volumeTitleDesc)).Required(),
+				schema.Property("theme", schema.String(t.volumeThemeDesc)).Required(),
+				schema.Property("arcs", schema.Array(t.volumeArcsDesc, schema.Object(
+					schema.Property("title", schema.String(t.arcTitleDesc)).Required(),
+					schema.Property("goal", schema.String(t.arcGoalDesc)).Required(),
+					schema.Property("start_chapter", schema.Int(t.arcStartDesc)).Required(),
+					schema.Property("end_chapter", schema.Int(t.arcEndDesc)).Required(),
+				))).Required(),
+			))).Required(),
+			schema.Property("compass", schema.Object(
+				schema.Property("ending_direction", schema.String(t.endingDirectionDesc)).Required(),
+				schema.Property("open_threads", stringList(t.openThreadsDesc)).Required(),
+				schema.Property("estimated_scale", nullableString(t.estimatedScaleDesc)).Required(),
+				schema.Property("last_updated", llmcontract.Nullable(schema.Int(t.lastUpdatedDesc))).Required(),
+			)).Required(),
+			schema.Property("planning_tier", schema.Enum(t.planningTierDesc, "short", "mid", "long")).Required(),
+			schema.Property("story_status", schema.Enum(t.storyStatusDesc, storyOpen, storyClosed, storyUncertain)).Required(),
+			schema.Property("status_reason", nullableString(t.statusReasonDesc)).Required(),
+		),
+	}
 }

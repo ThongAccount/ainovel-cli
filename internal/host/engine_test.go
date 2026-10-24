@@ -94,18 +94,27 @@ func TestIsNonSemanticWorkerFailure(t *testing.T) {
 }
 
 func TestInterventionDispatchTaskPreservesOriginalAuthority(t *testing.T) {
-	const task = "检查重复内容并安排必要返工"
-	const original = "  后续不要重复解释能力来源；不要改动无关内容。\n"
+	const task = "kiểm tra nội dung trùng lặp và sắp xếp làm lại cần thiết"
+	const original = "  đừng giải thích lại nguồn gốc năng lực; đừng sửa nội dung không liên quan.\n"
 
-	got := interventionDispatchTask(task, original)
+	got := interventionDispatchTask(task, original, hostTextsVI)
 	if !strings.Contains(got, task) {
 		t.Fatalf("派单任务丢失: %q", got)
 	}
 	if !strings.Contains(got, original) {
 		t.Fatalf("用户原始干预未被逐字保留: %q", got)
 	}
-	if !strings.Contains(got, "修改授权的唯一来源") {
+	if !strings.Contains(got, "nguồn duy nhất cho phép sửa đổi") {
 		t.Fatalf("缺少授权边界说明: %q", got)
+	}
+
+	// bản tiếng Trung phải giữ nguyên câu gốc của dự án
+	gotZH := interventionDispatchTask(task, original, hostTextsZH)
+	if !strings.Contains(gotZH, "修改授权的唯一来源") {
+		t.Fatalf("bản tiếng Trung thiếu giới hạn ủy quyền: %q", gotZH)
+	}
+	if !strings.Contains(gotZH, original) {
+		t.Fatalf("bản tiếng Trung mất can thiệp gốc: %q", gotZH)
 	}
 }
 

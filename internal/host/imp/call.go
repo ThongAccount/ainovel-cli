@@ -40,6 +40,9 @@ func (e *errSemantic) Unwrap() error { return e.Err }
 // 结构化协议由 callStructured 依据模型事实和静态 Contract 独立选择。
 type callProfile struct {
 	thinking agentcore.ThinkingLevel
+	// texts là bảng văn bản mô hình đọc (mô tả hợp đồng, lệnh trong payload) theo
+	// ngôn ngữ tác phẩm; nil thì dùng bản tiếng Việt mặc định.
+	texts *importTexts
 	// notify 可选：把请求退避重试/校验重问回显给界面；nil 时静默（§14.1）。
 	// retryAt 非零 = 下次重试的截止时刻，UI 据此渲染逐秒倒计时（事件只带截止点，剩余时间渲染时算）。
 	notify func(msg string, retryAt time.Time)

@@ -640,7 +640,9 @@ func contentFilterAdvice(werr error) string {
 
 // errInvalidWriteTarget 标记 runWorker 前置校验拦下的非法写作目标，供错误链和
 // Arbiter 事实保留稳定语义；是否重试或改派仍由统一失败流程决定。
-var errInvalidWriteTarget = errors.New("非法写作目标")
+// 文本固定为 tiếng Việt（sentinel dùng cho errors.Is）； bản theo ngôn ngữ tác phẩm
+// cho gói sự thật gửi Tài phán nằm ở hostTexts.invalidWriteTarget.
+var errInvalidWriteTarget = errors.New("mục tiêu ghi không hợp lệ")
 
 func (e *engine) failureFacts(kind string, inst *flow.Instruction, workerErr error) arbiter.FailureFacts {
 	t := hostTextsFor(e.store.Language())
@@ -798,7 +800,7 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		// 已知窗口(best-effort 边界,见 engine-arbiter.md 澄清③):派单自此存于内存,
 		// worker 启动前被硬杀(kill -9,defer 不执行)会丢失本次派单意图——
 		// 正常退出/Abort 由 run 的 defer 回存 PendingSteer 兜底。
-		e.next = &flow.Instruction{Agent: op.dispatch.Agent, Task: interventionDispatchTask(op.dispatch.Task, op.text), Reason: "用户干预裁定"}
+		e.next = &flow.Instruction{Agent: op.dispatch.Agent, Task: interventionDispatchTask(op.dispatch.Task, op.text, hostTextsFor(e.store.Language())), Reason: "用户干预裁定"}
 		e.deferGateForNext = op.hold != nil && !op.hold.Cancel
 		e.mu.Unlock()
 	}
@@ -807,12 +809,13 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 
 // interventionDispatchTask 保留用户原始干预，避免 Arbiter 在转述任务时无意扩大
 // 修改目标。下游可以读取更广上下文做判断，但只能把原文当作动作授权来源。
-func interventionDispatchTask(task, original string) string {
+// 追加的说明段会进 Worker 的任务文本，因此随作品语种走（t.interventionOriginal）。
+func interventionDispatchTask(task, original string, t *hostTexts) string {
 	task = strings.TrimSpace(task)
 	if strings.TrimSpace(original) == "" {
 		return task
 	}
-	return task + "\n\n用户原始干预（本次修改授权的唯一来源；上下文只用于理解，不得扩大目标或范围）：\n" + original
+	return task + t.interventionOriginal + original
 }
 
 func (e *engine) recordStale(op controlOp) {

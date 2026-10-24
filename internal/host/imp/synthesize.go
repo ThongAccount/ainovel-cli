@@ -134,6 +134,7 @@ func compactFacts(facts []ImportedChapterFacts) string {
 // bookPrompt 描述 BookSynthesis 契约，rangePrompt 描述 RangeDigest 契约——两阶段输出结构不同，
 // 必须各用对应系统提示词，否则模型收到 BookSynthesis 指令却被要求 RangeDigest，指令自相矛盾。
 func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string, w *Workspace, facts []ImportedChapterFacts, budgetBytes, maxTokens int, prof callProfile) (*BookSynthesis, error) {
+	t := importTextsOrDefault(prof.texts)
 	ranges := planFactRanges(facts, budgetBytes)
 	if len(ranges) <= 1 {
 		return synthesizeBook(ctx, m, bookPrompt, compactFacts(facts), len(facts), maxTokens, prof)
@@ -150,7 +151,7 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 			continue
 		}
 		prof.step(ri+1, len(ranges), "区间摘要 %d/%d（第 %d-%d 章）...", ri+1, len(ranges), startCh, endCh)
-		rd, err := callStructured[RangeDigest](ctx, m, rangeContract, rangePrompt, buildRangePayload(rangeFacts), maxTokens, prof, func(d *RangeDigest) error {
+		rd, err := callStructured[RangeDigest](ctx, m, rangeContract(t), rangePrompt, buildRangePayload(rangeFacts, t), maxTokens, prof, func(d *RangeDigest) error {
 			return validateRangeDigest(d, startCh, endCh, "range digest")
 		})
 		if err != nil {
@@ -175,6 +176,7 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 // 每轮严格减少摘要数量，故必然收敛；单个摘要即便超预算也不再拆（下层已是最小语义单元），
 // 交最终调用，若因此截断由 callStructured 显式报错而非静默溢出。
 func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests []RangeDigest, budgetBytes, maxTokens int, prof callProfile) ([]RangeDigest, error) {
+	t := importTextsOrDefault(prof.texts)
 	round := 0
 	for len(digests) > 1 {
 		if budgetBytes <= 0 {
@@ -194,7 +196,7 @@ func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests [
 			startCh, endCh := g[0].StartChapter, g[len(g)-1].EndChapter
 			prof.step(gi+1, len(groups), "归并区间摘要（第 %d 轮 %d/%d，第 %d-%d 章）...",
 				round, gi+1, len(groups), startCh, endCh)
-			rd, err := callStructured[RangeDigest](ctx, m, rangeContract, rangePrompt, buildDigestReducePayload(g), maxTokens, prof, func(d *RangeDigest) error {
+			rd, err := callStructured[RangeDigest](ctx, m, rangeContract(t), rangePrompt, buildDigestReducePayload(g, t), maxTokens, prof, func(d *RangeDigest) error {
 				return validateRangeDigest(d, startCh, endCh, "合并区间")
 			})
 			if err != nil {
@@ -238,9 +240,10 @@ func groupDigestsByBudget(digests []RangeDigest, budgetBytes int) [][]RangeDiges
 }
 
 // buildDigestReducePayload 组装"把若干下层区间摘要合并为一个 RangeDigest"的输入。
-func buildDigestReducePayload(digests []RangeDigest) string {
+// payload 是模型可见内容，指令随作品语种走（t）。
+func buildDigestReducePayload(digests []RangeDigest, t *importTexts) string {
 	data, _ := json.Marshal(digests)
-	return fmt.Sprintf("请把第 %d-%d 章的多个下层区间摘要合并为一个 RangeDigest（连续区间摘要）。下层摘要：\n%s",
+	return fmt.Sprintf(t.reduceInstruction,
 		digests[0].StartChapter, digests[len(digests)-1].EndChapter, string(data))
 }
 
@@ -255,8 +258,9 @@ func rangeInputDigest(facts []ImportedChapterFacts) string {
 }
 
 func synthesizeBook(ctx context.Context, m callModel, systemPrompt, payload string, n, maxTokens int, prof callProfile) (*BookSynthesis, error) {
+	t := importTextsOrDefault(prof.texts)
 	prof.step(0, 0, "生成全书综合（作品信息/premise/characters/大纲结构）...")
-	s, err := callStructured[BookSynthesis](ctx, m, synthesisContract, systemPrompt, buildBookPayload(payload, n), maxTokens, prof, func(s *BookSynthesis) error {
+	s, err := callStructured[BookSynthesis](ctx, m, synthesisContract(t), systemPrompt, buildBookPayload(payload, n, t), maxTokens, prof, func(s *BookSynthesis) error {
 		return validateSynthesis(s, n)
 	})
 	if err != nil {
@@ -267,13 +271,16 @@ func synthesizeBook(ctx context.Context, m callModel, systemPrompt, payload stri
 	return &s, nil
 }
 
-func buildRangePayload(facts []ImportedChapterFacts) string {
-	return fmt.Sprintf("请为第 %d-%d 章生成一个 RangeDigest（连续区间摘要）。逐章事实：\n%s",
+// buildRangePayload 组装"为一个连续章节区间生成 RangeDigest"的输入。
+// payload 是模型可见内容，指令随作品语种走（t）。
+func buildRangePayload(facts []ImportedChapterFacts, t *importTexts) string {
+	return fmt.Sprintf(t.rangeInstruction,
 		facts[0].Chapter, facts[len(facts)-1].Chapter, compactFacts(facts))
 }
 
-func buildBookPayload(inner string, n int) string {
-	return fmt.Sprintf("以下是全书 %d 章的紧凑事实/区间摘要。请生成 BookSynthesis：title、synopsis、premise、characters、world_rules、卷弧范围 structure、compass、planning_tier、story_status。\n\n%s", n, inner)
+// buildBookPayload 组装全书综合的输入；payload 是模型可见内容，指令随作品语种走（t）。
+func buildBookPayload(inner string, n int, t *importTexts) string {
+	return fmt.Sprintf(t.bookInstruction, n, inner)
 }
 
 // validateSynthesis 校验综合结果的结构约束（值域/闭集/范围），不复判文学质量。

@@ -152,7 +152,8 @@ func loadPriorFactsStrict(w *Workspace, count int) ([]ImportedChapterFacts, erro
 }
 
 // buildLedger 从已分析章节派生紧凑连续性上下文：人物别名 + 活跃伏笔 ID + 最近状态。
-func buildLedger(prior []ImportedChapterFacts) string {
+// 这段 ledger 会进批次输入，属模型可见内容，故标签与分隔符随作品语种走（t）。
+func buildLedger(prior []ImportedChapterFacts, t *importTexts) string {
 	if len(prior) == 0 {
 		return ""
 	}
@@ -184,19 +185,19 @@ func buildLedger(prior []ImportedChapterFacts) string {
 	}
 	var b strings.Builder
 	if len(names) > 0 {
-		b.WriteString("已知人物：")
-		b.WriteString(strings.Join(slices.Sorted(maps.Keys(names)), "、"))
+		b.WriteString(t.ledgerKnownCharsDesc)
+		b.WriteString(strings.Join(slices.Sorted(maps.Keys(names)), t.ledgerListSep))
 		b.WriteString("\n")
 	}
 	if len(active) > 0 {
-		b.WriteString("活跃伏笔（复用 ID，勿新造）：\n")
+		b.WriteString(t.ledgerActiveForeshadow)
 		for _, id := range slices.Sorted(maps.Keys(active)) {
-			fmt.Fprintf(&b, "- %s：%s\n", id, active[id])
+			fmt.Fprintf(&b, "- %s%s%s\n", id, t.ledgerForeshadowSep, active[id])
 		}
 	}
 	if len(recent) > 0 {
-		b.WriteString("最近状态：")
-		b.WriteString(strings.Join(recent, "；"))
+		b.WriteString(t.ledgerRecentStateDesc)
+		b.WriteString(strings.Join(recent, t.ledgerItemSep))
 		b.WriteString("\n")
 	}
 	return b.String()
@@ -285,12 +286,12 @@ func AnalyzeNext(ctx context.Context, m callModel, systemPrompt string, w *Works
 	if start >= total {
 		return 0, nil
 	}
-	ledger := buildLedger(loadPriorFacts(w, start))
+	ledger := buildLedger(loadPriorFacts(w, start), importTextsOrDefault(prof.texts))
 	end := planBatch(seg.Chapters, start, len(ledger), budget)
 
 	for {
-		payload := buildAnalyzePayload(normalized, seg, ledger, start, end)
-		res, err := callStructured[AnalysisBatchResult](ctx, m, analysisContract, systemPrompt, payload, budget.MaxOutputTokens, prof, func(r *AnalysisBatchResult) error {
+		payload := buildAnalyzePayload(normalized, seg, ledger, start, end, importTextsOrDefault(prof.texts))
+		res, err := callStructured[AnalysisBatchResult](ctx, m, analysisContract(importTextsOrDefault(prof.texts)), systemPrompt, payload, budget.MaxOutputTokens, prof, func(r *AnalysisBatchResult) error {
 			return validateBatch(r, seg, start, end)
 		})
 		if err != nil {
@@ -349,17 +350,18 @@ func echoChapterFacts(prof callProfile, facts []ImportedChapterFacts) {
 }
 
 // buildAnalyzePayload 组装批次输入：连续章节原文 + 批次前 ledger。
-func buildAnalyzePayload(normalized []byte, seg *Segmentation, ledger string, start, end int) string {
+// payload 是模型可见内容，指令与标题随作品语种走（t）。
+func buildAnalyzePayload(normalized []byte, seg *Segmentation, ledger string, start, end int, t *importTexts) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "请分析第 %d-%d 章，返回 {\"chapters\":[每章一个事实对象]}，数组顺序与章号一致。\n\n", start+1, end)
+	fmt.Fprintf(&b, t.analyzeInstruction, start+1, end)
 	if ledger != "" {
-		b.WriteString("## 连续性 ledger（参考）\n\n")
+		b.WriteString(t.analyzeLedgerHeader)
 		b.WriteString(ledger)
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
 		c := seg.Chapters[i]
-		fmt.Fprintf(&b, "## 第 %d 章：%s\n\n", c.Number, c.Title)
+		fmt.Fprintf(&b, t.analyzeChapterHeader, c.Number, c.Title)
 		b.WriteString(seg.Content(normalized, i))
 		b.WriteString("\n\n---\n\n")
 	}

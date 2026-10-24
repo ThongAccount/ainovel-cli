@@ -266,6 +266,7 @@ func (r *runner) facts() (Facts, error) {
 func (r *runner) profileFor(c Caller, stage Stage) callProfile {
 	prof := c.Runtime.profile()
 	prof.log = r.log
+	prof.texts = r.modelTexts()
 	prof.notify = func(msg string, retryAt time.Time) {
 		ev := Event{Time: time.Now(), Stage: stage, Message: msg, Level: "warn", RetryAt: retryAt}
 		if !retryAt.IsZero() {
@@ -277,6 +278,15 @@ func (r *runner) profileFor(c Caller, stage Stage) callProfile {
 		r.send(Event{Time: time.Now(), Stage: stage, Current: current, Total: total, Message: msg})
 	}
 	return prof
+}
+
+// modelTexts chọn bảng văn bản mô hình đọc theo ngôn ngữ tác phẩm.
+// Đọc lazily từ store mỗi lần gọi để đổi ngôn ngữ giữa phiên có hiệu lực ngay.
+func (r *runner) modelTexts() *importTexts {
+	if r.deps.Store == nil {
+		return importTextsVI
+	}
+	return importTextsFor(r.deps.Store.Language())
 }
 
 // applyGuidance 把本次 --guide 显式指导持久化为工作区语义输入（RFC §18.3）。
