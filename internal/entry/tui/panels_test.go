@@ -14,7 +14,7 @@ func TestRenderTopBarShowsVersion(t *testing.T) {
 	out := renderTopBar(host.UISnapshot{
 		Provider:  "openrouter",
 		ModelName: "test-model",
-		BookTitle: "测试小说",
+		BookTitle: "Tiểu thuyết thử nghiệm",
 	}, 120, "", "v1.2.3")
 	if !strings.Contains(out, "ainovel-cli v1.2.3") {
 		t.Fatalf("top bar missing version: %q", out)
@@ -22,21 +22,21 @@ func TestRenderTopBarShowsVersion(t *testing.T) {
 }
 
 func TestRenderDetailContentShowsSynopsis(t *testing.T) {
-	out := ansi.Strip(renderDetailContent(host.UISnapshot{Synopsis: "少年在永夜中寻找黎明。"}, 40))
-	if !strings.Contains(out, "Tóm Tắt") || !strings.Contains(out, "少年在永夜中寻找黎明。") {
+	out := ansi.Strip(renderDetailContent(host.UISnapshot{Synopsis: "Tìm bình minh giữa đêm vĩnh cửu."}, 40))
+	if !strings.Contains(out, "Tóm Tắt") || !strings.Contains(out, "Tìm bình minh giữa đêm vĩnh cửu.") {
 		t.Fatalf("detail panel missing synopsis: %q", out)
 	}
 }
 
 func TestSameDetailSnapshotDetectsOutlineStateChanges(t *testing.T) {
-	base := host.UISnapshot{Outline: []host.OutlineSnapshot{{Chapter: 1, Title: "第一章"}}}
+	base := host.UISnapshot{Outline: []host.OutlineSnapshot{{Chapter: 1, Title: "Chương một"}}}
 	if !sameDetailSnapshot(base, base) {
-		t.Fatal("相同详情不应触发重建")
+		t.Fatal("chi tiết giống nhau không nên kích hoạt dựng lại")
 	}
 	changed := base
 	changed.InProgressChapter = 1
 	if sameDetailSnapshot(base, changed) {
-		t.Fatal("章节状态变化必须触发详情重建")
+		t.Fatal("thay đổi trạng thái chương phải kích hoạt dựng lại chi tiết")
 	}
 }
 
@@ -44,18 +44,19 @@ func TestRenderErrorEventKeepsOneLineSummary(t *testing.T) {
 	out := ansi.Strip(renderEventLine(host.Event{
 		Time:     time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC),
 		Category: "ERROR",
-		Summary:  "commit_chapter 参数错误：" + strings.Repeat("秦越在材料中发现线索", 20),
+		Summary:  "commit_chapter tham số sai: " + strings.Repeat("Qin Việt phát hiện manh mối trong tài liệu", 20),
 	}, 60, 0))
 	if strings.Contains(out, "\n") {
-		t.Fatalf("ERROR 事件应保持单行摘要，got %q", out)
+		t.Fatalf("sự kiện ERROR phải giữ tóm tắt một dòng, got %q", out)
 	}
 	if !strings.HasSuffix(out, "...") {
-		t.Fatalf("超宽 ERROR 摘要应在 TUI 截断，got %q", out)
+		t.Fatalf("tóm tắt ERROR quá rộng phải bị TUI cắt, got %q", out)
 	}
 }
 
-// TestRenderStatusBar 守护底部状态栏的信息契约：模型身份（窗口+思考）、会话令牌、
-// 花费/预算、书目录都必须在（样式剥离后按纯文本断言）。
+// TestRenderStatusBar bảo vệ hợp đồng thông tin của thanh trạng thái dưới cùng: định danh model
+// (cửa sổ + mức suy luận), token của phiên, chi phí/ngân sách và thư mục truyện đều phải có
+// (sau khi bóc style thì assert theo văn bản thuần).
 func TestRenderStatusBar(t *testing.T) {
 	out := ansi.Strip(renderStatusBar(host.UISnapshot{
 		Provider:           "openrouter",
@@ -70,7 +71,7 @@ func TestRenderStatusBar(t *testing.T) {
 	}, "/tmp/output", 120))
 	for _, want := range []string{"test-model(200K,med)", "↑1.2M", "↓89.3k", "$0.31/$5.00", "tiết kiệm $0.12", "./output"} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("状态栏缺少 %q：%q", want, out)
+			t.Fatalf("thanh trạng thái thiếu %q: %q", want, out)
 		}
 	}
 }
@@ -81,10 +82,10 @@ func TestRenderStatusBarAutoThinkingAndEmpty(t *testing.T) {
 		ModelContextWindow: 128000,
 	}, "", 120))
 	if !strings.Contains(out, "test-model(128K,auto)") {
-		t.Fatalf("缺思考等级 auto 括注：%q", out)
+		t.Fatalf("thiếu ghi chú mức suy luận auto: %q", out)
 	}
 	if out := ansi.Strip(renderStatusBar(host.UISnapshot{}, "", 120)); out != "SẴN SÀNG" {
-		t.Fatalf("空快照应回退 READY，得 %q", out)
+		t.Fatalf("snapshot rỗng phải rơi về READY, được %q", out)
 	}
 }
 
@@ -96,20 +97,20 @@ func TestRenderUsageLineSeparatesFullWidthNameAndTokens(t *testing.T) {
 }
 
 func TestTruncateByDisplayWidth(t *testing.T) {
-	// 纯中文按视觉宽度截：10 列预算 = 3 个汉字(6列) + "..."(3列)，按 rune 截会溢出到 17 列
+	// Chữ Trung cắt theo bề rộng hiển thị: ngân sách 10 cột = 3 chữ Hán (6 cột) + "..." (3 cột), cắt theo rune sẽ tràn ra 17 cột
 	got := truncate("临港市公共算法伦理审计员", 10)
 	if w := lipgloss.Width(got); w > 10 {
-		t.Errorf("truncate 溢出列宽: %d > 10 (%q)", w, got)
+		t.Errorf("truncate vượt bề rộng cột: %d > 10 (%q)", w, got)
 	}
 	if !strings.HasSuffix(got, "...") {
-		t.Errorf("超宽截断应带省略号: %q", got)
+		t.Errorf("cắt quá rộng phải kèm dấu chấm lửng: %q", got)
 	}
-	// ASCII 行为与旧实现一致
+	// Hành vi với ASCII giữ nguyên như bản triển khai cũ
 	if got := truncate("abcdef", 6); got != "abcdef" {
-		t.Errorf("未超宽不应截断: %q", got)
+		t.Errorf("chưa vượt rộng thì không cắt: %q", got)
 	}
 	if got := truncate("abcdefgh", 6); got != "abc..." {
-		t.Errorf("ASCII 截断: got %q want %q", got, "abc...")
+		t.Errorf("cắt ASCII: got %q want %q", got, "abc...")
 	}
 }
 
@@ -124,12 +125,12 @@ func TestRenderDetailContentWrapsCJK(t *testing.T) {
 	}, contentW)
 	for line := range strings.SplitSeq(out, "\n") {
 		if w := lipgloss.Width(line); w > contentW {
-			t.Errorf("行溢出面板宽度: %d > %d (%q)", w, contentW, line)
+			t.Errorf("dòng tràn bề rộng panel: %d > %d (%q)", w, contentW, line)
 		}
 	}
-	// 长描述应折成多行（悬挂缩进续行），而不是截断丢信息
+	// Mô tả dài phải được xuống dòng (dòng nối thụt lề treo), chứ không cắt bỏ mất thông tin
 	joined := strings.ReplaceAll(strings.ReplaceAll(out, "\n", ""), " ", "")
 	if !strings.Contains(joined, "坚持程序正义") {
-		t.Errorf("折行后应保留完整描述，实际输出:\n%s", out)
+		t.Errorf("sau khi xuống dòng phải giữ nguyên mô tả, output thực tế:\n%s", out)
 	}
 }

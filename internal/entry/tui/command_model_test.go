@@ -80,7 +80,7 @@ func TestModelSwitchAppliesExplicitThinkingChange(t *testing.T) {
 	}
 	st := newModelSwitchState(rt, "writer")
 	st.focus = modelFocusThinking
-	st.cycle(1, rt) // 移动强度字段
+	st.cycle(1, rt) // chuyển sang trường mức độ
 	want := st.thinkingKey()
 	if want == "" {
 		t.Fatal("tiền đề kiểm thử: phải đã chuyển tới một mức độ khác rỗng")
