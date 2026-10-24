@@ -9,6 +9,9 @@ import (
 // không có trong bảng này sẽ không tham gia dựng dạng luồng
 // (observer bỏ thẳng DeltaToolCall).
 //
+// Nhãn tiêu đề không nằm trong bảng này: nó phụ thuộc ngôn ngữ tác phẩm nên được
+// tra từ bảng văn bản quan sát (xem observer_texts.go) lúc tạo extractor.
+//
 // Chế độ chung (nakedKey rỗng): tokenizer biến args JSON do LLM xuất thành văn bản
 // "key: value" có thụt lề, object/mảng lồng nhau thụt lề theo tầng,
 // string/number/bool hiển thị dạng luồng.
@@ -26,21 +29,21 @@ import (
 var toolDisplays = map[string]toolDisplay{
 	"draft_chapter": {nakedKey: "content"},
 
-	"plan_chapter":        {header: "✻ 规划"},
-	"edit_chapter":        {header: "✻ 打磨"},
-	"commit_chapter":      {header: "✻ 章节提交"},
-	"save_review":         {header: "✻ 审阅"},
-	"save_arc_summary":    {header: "✻ 弧摘要"},
-	"save_volume_summary": {header: "✻ 卷摘要"},
-	"save_foundation":     {header: "✻ 设定"},
-	"revise_outline":      {header: "✻ 修订大纲"},
-	"read_chapter":        {header: "✻ 读章节"},
-	"check_consistency":   {header: "✻ 一致性检查"},
-	"novel_context":       {header: "✻ 查询上下文"},
+	"plan_chapter":        {},
+	"edit_chapter":        {},
+	"commit_chapter":      {},
+	"save_review":         {},
+	"save_arc_summary":    {},
+	"save_volume_summary": {},
+	"save_foundation":     {},
+	"revise_outline":      {},
+	"read_chapter":        {},
+	"check_consistency":   {},
+	"novel_context":       {},
 }
 
+// toolDisplay mô tả cách trình bày args JSON của một công cụ trên bảng luồng.
 type toolDisplay struct {
-	header   string
 	nakedKey string
 }
 
@@ -48,7 +51,8 @@ type toolDisplay struct {
 // biến luồng args công cụ của LLM thành văn bản dễ đọc. Một thể hiện chỉ phục vụ
 // một lần gọi công cụ, sau khi container cấp ngoài cùng đóng thì Done()=true.
 type jsonFieldExtractor struct {
-	cfg toolDisplay
+	cfg    toolDisplay
+	header string // nhãn tiêu đề theo ngôn ngữ tác phẩm; rỗng nếu công cụ không có nhãn
 
 	state pState
 	stack []byte // ngăn xếp container: 'O' obj / 'A' arr
@@ -80,12 +84,18 @@ const (
 	psDone                // container cấp ngoài cùng đã đóng
 )
 
-func newToolExtractor(tool string) *jsonFieldExtractor {
+// newToolExtractor tạo bộ trích cho một công cụ theo bảng văn bản đã chọn.
+// Nhãn tiêu đề lấy theo ngôn ngữ tác phẩm; trả về nil nếu công cụ không có trong
+// bảng hiển thị.
+func newToolExtractor(tool string, texts *observerTexts) *jsonFieldExtractor {
 	cfg, ok := toolDisplays[tool]
 	if !ok {
 		return nil
 	}
-	return &jsonFieldExtractor{cfg: cfg}
+	if texts == nil {
+		texts = observerTextsVI
+	}
+	return &jsonFieldExtractor{cfg: cfg, header: texts.toolHeader(tool)}
 }
 
 func (e *jsonFieldExtractor) Done() bool { return e.done }
@@ -238,8 +248,8 @@ func (e *jsonFieldExtractor) emitKeyLine(out *strings.Builder, key string) {
 		return
 	}
 	if !e.started {
-		if e.cfg.header != "" {
-			out.WriteString(e.cfg.header)
+		if e.header != "" {
+			out.WriteString(e.header)
 			out.WriteByte('\n')
 		}
 		e.started = true
@@ -259,8 +269,8 @@ func (e *jsonFieldExtractor) emitArrayItem(out *strings.Builder) {
 		return
 	}
 	if !e.started {
-		if e.cfg.header != "" {
-			out.WriteString(e.cfg.header)
+		if e.header != "" {
+			out.WriteString(e.header)
 			out.WriteByte('\n')
 		}
 		e.started = true
@@ -362,8 +372,8 @@ func (e *jsonFieldExtractor) closeContainer(out *strings.Builder) {
 		// Xử lý dự phòng cho args rỗng (ví dụ novel_context không truyền tham số):
 		// emitKeyLine không có cơ hội xuất header, ở đây bổ sung một lần để tránh
 		// rơi vào trạng thái "không tiêu đề lẫn không nội dung".
-		if !e.started && e.cfg.nakedKey == "" && e.cfg.header != "" {
-			out.WriteString(e.cfg.header)
+		if !e.started && e.cfg.nakedKey == "" && e.header != "" {
+			out.WriteString(e.header)
 			out.WriteByte('\n')
 			e.started = true
 		}

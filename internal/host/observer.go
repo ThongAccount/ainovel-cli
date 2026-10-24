@@ -129,6 +129,17 @@ func newObserver(s *storepkg.Store, emitEv func(Event), emitD func(string), emit
 	}
 }
 
+// texts trả về bảng văn bản của cụm quan sát theo ngôn ngữ tác phẩm.
+// Ngôn ngữ được đọc lười từ store.Language() ở mỗi lần dùng, không ghi cứng vào
+// cấu trúc lúc khởi tạo, nên việc đổi ngôn ngữ giữa phiên vẫn có hiệu lực.
+// Khi không có store (kịch bản kiểm thử) thì dùng bản tiếng Việt.
+func (o *observer) texts() *observerTexts {
+	if o == nil || o.store == nil {
+		return observerTextsVI
+	}
+	return observerTextsFor(o.store.Language())
+}
+
 // ── Cửa vào Engine gọi trực tiếp ──
 //
 // Engine chạy Worker trực tiếp, nguồn sự kiện chia làm hai nhánh:

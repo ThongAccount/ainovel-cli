@@ -40,7 +40,7 @@ func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 	}
 	// Tên công cụ đổi hoặc chưa từng tạo: tạo mới.
 	if !ok || cur.tool != p.Tool {
-		ext := newToolExtractor(p.Tool)
+		ext := newToolExtractor(p.Tool, o.texts())
 		if ext == nil {
 			delete(o.streamExtractors, p.Agent)
 			return

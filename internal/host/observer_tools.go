@@ -30,7 +30,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 		if ev.Progress.Agent == "" || ev.Progress.Tool == "" {
 			break
 		}
-		toolName := displayToolName(ev.Progress.Tool, ev.Progress.Args)
+		toolName := displayToolName(ev.Progress.Tool, ev.Progress.Args, o.texts())
 		if _, ok := o.toolStarts[ev.Progress.Agent]; ok {
 			o.updateToolCallSummary(ev.Progress.Agent, ev.Progress.Tool, toolName)
 			o.updateAgent(ev.Progress.Agent, func(a *agentState) {
@@ -335,7 +335,12 @@ func (o *observer) emitCallFinish(call *activeCall, category, agentName string, 
 	o.persistEvent(finishEv)
 }
 
-func displayToolName(tool string, args json.RawMessage) string {
+// displayToolName dựng nhãn hiển thị của một dòng công cụ từ tên công cụ và args
+// JSON. Các nhãn tham số lấy theo ngôn ngữ tác phẩm qua bảng văn bản quan sát.
+func displayToolName(tool string, args json.RawMessage, texts *observerTexts) string {
+	if texts == nil {
+		texts = observerTextsVI
+	}
 	if len(args) == 0 {
 		return tool
 	}
@@ -352,7 +357,7 @@ func displayToolName(tool string, args json.RawMessage) string {
 			Chapter int `json:"chapter"`
 		}
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
-			return fmt.Sprintf("%s(第%d章)", tool, p.Chapter)
+			return fmt.Sprintf(texts.toolArgChapter, tool, p.Chapter)
 		}
 	case "save_review":
 		var p struct {
@@ -364,12 +369,12 @@ func displayToolName(tool string, args json.RawMessage) string {
 			label := ""
 			switch p.Scope {
 			case "arc":
-				label = "本弧"
+				label = texts.arcScope
 			case "global":
-				label = "全局"
+				label = texts.globalScope
 			default:
 				if p.Chapter > 0 {
-					label = fmt.Sprintf("第%d章", p.Chapter)
+					label = fmt.Sprintf(texts.chapterLabel, p.Chapter)
 				}
 			}
 			if label == "" {
@@ -385,7 +390,7 @@ func displayToolName(tool string, args json.RawMessage) string {
 			Chapter int `json:"chapter"`
 		}
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
-			return fmt.Sprintf("%s(第%d章)", tool, p.Chapter)
+			return fmt.Sprintf(texts.toolArgChapter, tool, p.Chapter)
 		}
 	case "read_chapter":
 		var p struct {
@@ -396,11 +401,11 @@ func displayToolName(tool string, args json.RawMessage) string {
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
 			suffix := ""
 			if p.Character != "" {
-				suffix = "·" + p.Character + "对话"
+				suffix = fmt.Sprintf(texts.dialogSuffix, p.Character)
 			} else if p.Source == "draft" {
-				suffix = "·草稿"
+				suffix = texts.draftSuffix
 			}
-			return fmt.Sprintf("%s(第%d章%s)", tool, p.Chapter, suffix)
+			return fmt.Sprintf(texts.toolArgChapterExtra, tool, p.Chapter, suffix)
 		}
 	}
 	return tool
