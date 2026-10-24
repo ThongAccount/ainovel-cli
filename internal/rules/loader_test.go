@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestEnsureRulesDirAt 验证备好目录 + README.txt：写入说明、始终覆盖为最新模板，
-// 且 README.txt（非 .md）不会被扫描当成规则。
+// TestEnsureRulesDirAt kiểm tra việc chuẩn bị thư mục + README.txt: ghi hướng dẫn,
+// luôn ghi đè bằng mẫu mới nhất, và README.txt (không phải .md) không bị quét thành quy tắc.
 func TestEnsureRulesDirAt(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "rules")
 	if err := ensureRulesDirAt(dir); err != nil {
@@ -19,12 +19,13 @@ func TestEnsureRulesDirAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("README.txt should be written: %v", err)
 	}
-	// 砍 YAML 后引导改讲"大白话 + 自动归一化"，不再教 front matter。
-	if !strings.Contains(string(data), "归一化") {
-		t.Errorf("README.txt 应说明自然语言会被归一化，got %q", data)
+	// Sau khi bỏ YAML, hướng dẫn chuyển sang "ngôn ngữ tự nhiên + tự động chuẩn hóa",
+	// không còn dạy front matter.
+	if !strings.Contains(string(data), "chuẩn hóa") {
+		t.Errorf("README.txt phải nói rõ ngôn ngữ tự nhiên sẽ được chuẩn hóa, got %q", data)
 	}
 	if strings.Contains(string(data), "front matter") {
-		t.Errorf("README.txt 不应再教 YAML front matter，got %q", data)
+		t.Errorf("README.txt không được dạy YAML front matter, got %q", data)
 	}
 
 	// 始终覆盖为最新模板：旧版本写的过时文案再次 ensure 时被刷新
