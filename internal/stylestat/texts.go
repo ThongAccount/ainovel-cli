@@ -15,16 +15,20 @@ type styleTexts struct {
 	patterns []string
 }
 
+// Bản tiếng Việt giữ nguyên các mảnh tiếng Trung trong ngoặc 『』, vì đó chính
+// là các dấu hiệu cụ thể mà biểu thức phát hiện dò ra: model phải nhận ra
+// đúng cấu trúc đang được nói tới, nên phần tiếng Việt chỉ giải thích cấu trúc
+// đó chứ không thay tên mẫu.
 var styleTextsVI = &styleTexts{
 	patterns: []string{
-		"Câu đối lệch『không phải…(mà)là…』",
-		"Đo thời gian bằng lượng từ『X hít/X khoảnh khắc』",
-		"So sánh tương đương『như một/giống như/như là/tựa như』",
-		"Nhịp im lặng『im lặng/không nói/không quay đầu』",
-		"Mẫu biểu cảm『ánh mắt lóe/môi cong/cắn môi』",
-		"Phản ứng thân thể『tim thắt ngực/người run/hít một hơi lạnh』",
-		"Dấu hiệu tư duy『nghĩ/nhận ra/cảm thấy/thấy rằng』",
-		"Cụm từ trừu tượng『một thứ không nói nên/ý nghĩa nằm ở』",
+		"Câu chữ đính chính『不是…(而)是…』",
+		"Lượng từ đo thời gian『X息/X瞬』",
+		"So sánh tương đương『像一/仿佛/如同/宛如』",
+		"Nhịp im lặng『沉默了/没有说话/没有回头』",
+		"Mẫu biểu cảm『眼中闪过/嘴角勾起/咬了咬唇』",
+		"Phản ứng thân thể『心头一紧/身子一颤/倒吸凉气』",
+		"Dấu hiệu tư duy『心想/意识到/感到/觉得』",
+		"Cụm từ trừu tượng『一种说不出的/的意义在于』",
 	},
 }
 

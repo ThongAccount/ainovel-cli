@@ -105,7 +105,16 @@ var patternDefs = []struct {
 var (
 	sentenceSplit = regexp.MustCompile(`[。！？\n]+`)
 	openingTimeRe = regexp.MustCompile(`夜|清晨|黎明|天亮|醒来|晨光|一整夜`)
+	// titlePrefixRe là đường cơ sở Trung: giữ nguyên theo quy ước [P], vì nó
+	// dò chữ "第 N 章" trong văn bản Trung.
 	titlePrefixRe = regexp.MustCompile(`^#{0,2}\s*第[零〇一二三四五六七八九十百千万\d]+章`)
+	// titlePrefixVIRe là đường cơ sở tiếng Việt, theo cùng quy ước với
+	// internal/domain.chapterNumberRe ("Chương 12" / "Chapter 12").
+	//
+	// Thêm nhánh này vì bản port xuất tiêu đề chương theo định dạng "Chương %d";
+	// nếu không, một cuốn sách tiếng Việt trộn "Chương 1" với tiêu đề trần sẽ
+	// không bị báo trộn định dạng (âm tính giả do chính bản port tạo ra).
+	titlePrefixVIRe = regexp.MustCompile(`^#{0,2}\s*(?i:chương|chapter)\s*\d+`)
 )
 
 // shortEndingRunes: dòng cuối không quá số ký tự này thì tính là "kết chương
@@ -342,7 +351,7 @@ func titleFormats(titles []string) *TitleStat {
 		if strings.TrimSpace(title) == "" {
 			continue
 		}
-		if titlePrefixRe.MatchString(title) {
+		if titlePrefixRe.MatchString(title) || titlePrefixVIRe.MatchString(title) {
 			t.WithPrefix++
 		} else {
 			t.WithoutPrefix++

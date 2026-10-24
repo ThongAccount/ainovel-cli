@@ -150,3 +150,22 @@ func TestComputeTitleFormats(t *testing.T) {
 		t.Errorf("tiêu đề thống nhất không được báo: %+v", s.TitleFormats)
 	}
 }
+
+// TestComputeTitleFormatsVietnamese kiểm tra định dạng tiêu đề tiếng Việt
+// "Chương N" cũng được tính là có tiền tố, để một cuốn sách tiếng Việt trộn
+// "Chương 1" với tiêu đề trần vẫn bị báo trộn định dạng.
+func TestComputeTitleFormatsVietnamese(t *testing.T) {
+	chapters := make([]string, 5)
+	for i := range chapters {
+		chapters[i] = chapterWith("正文。")
+	}
+	s := Compute(Input{Chapters: chapters, Titles: []string{"Chương 1 Phong lên", " mây dâng", "Chương 3 Sấm động"}})
+	if s.TitleFormats == nil || s.TitleFormats.WithPrefix != 2 || s.TitleFormats.WithoutPrefix != 1 {
+		t.Errorf("định dạng tiêu đề tiếng Việt: %+v", s.TitleFormats)
+	}
+	// Thống nhất "Chương N" → không báo
+	s = Compute(Input{Chapters: chapters, Titles: []string{"Chương 1", "Chương 2"}})
+	if s.TitleFormats != nil {
+		t.Errorf("tiêu đề «Chương N» thống nhất không được báo: %+v", s.TitleFormats)
+	}
+}
