@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// --- 辅助函数 ---
+// --- Hàm phụ trợ ---
 
 func renderField(label, value string) string {
 	if value == "" {
@@ -36,9 +36,9 @@ func contextPercentColor(percent float64) lipgloss.AdaptiveColor {
 	}
 }
 
-// formatContextWindow 把 token 数格式化成紧凑窗口标记："128K" / "200K" / "1M" / "2M"。
-// Gemini 的 1048576 (2^20) 等技术意义上的 1M 会展示为 "1M" 而非 "1.0M"。
-// n<=0 返回空串，调用方应据此决定是否展示。
+// formatContextWindow định dạng số token thành nhãn cửa sổ gọn: "128K" / "200K" / "1M" / "2M".
+// 1048576 (2^20) của Gemini — về mặt kỹ thuật là 1M — sẽ hiện là "1M" chứ không phải "1.0M".
+// n<=0 trả về chuỗi rỗng, lời gọi dựa vào đó để quyết định có hiển thị hay không.
 func formatContextWindow(n int) string {
 	if n <= 0 {
 		return ""
@@ -57,7 +57,8 @@ func formatContextWindow(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
-// formatCostUSD 格式化美元成本。<$0.01 用 4 位小数，否则 2 位。0 返回空。
+// formatCostUSD định dạng chi phí bằng đô la. Dưới $0.01 dùng 4 chữ số thập phân, từ đó trở lên
+// dùng 2 chữ số. Giá trị 0 trả về chuỗi rỗng.
 func formatCostUSD(usd float64) string {
 	if usd <= 0 {
 		return ""
@@ -83,9 +84,11 @@ func formatNumber(n int) string {
 	return string(result)
 }
 
-// truncate 按视觉宽度截断（中文算 2 列），超宽时以"..."收尾。
-// 不能按 rune 数截：纯中文行会溢出近一倍列宽，被外层 viewport 贴边硬裁，
-// 连省略号一起裁掉，用户看到的就是"文本贴边截断、不换行"。
+// truncate cắt theo bề rộng hiển thị (ký tự tiếng Trung chiếm 2 cột), phần bị cắt kết
+// thúc bằng "...".
+// Không được cắt theo số rune: dòng toàn tiếng Trung sẽ tràn gần gấp đôi số cột, bị viewport
+// bên ngoài cắt cứng sát mép, cả dấu chấm lửng cũng mất, người dùng chỉ thấy
+// "nội dung bị cắt sát mép, không xuống dòng".
 func truncate(s string, max int) string {
 	if max <= 0 {
 		return ""
