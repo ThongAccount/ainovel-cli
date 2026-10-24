@@ -157,7 +157,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 	}
 }
 
-// retryCountdown trả về văn bản đếm ngược thử lại ("7s sau sẽ thử lại"); chưa đặt mốc chặn
+// retryCountdown trả về văn bản đếm ngược thử lại ("Thử lại sau 7s"); chưa đặt mốc chặn
 // hoặc đã tới mốc (request đã bay) thì trả về rỗng.
 // Sự kiện chỉ mang mốc chặn, số giây còn lại tính lúc render — nhịp tick của spinner thúc
 // vẽ lại tạo thành đếm ngược từng giây.
