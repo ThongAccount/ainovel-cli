@@ -26,7 +26,7 @@ type InterventionFacts struct {
 	DynamicPlanning          bool             `json:"dynamic_planning"`
 	NextChapter              int              `json:"next_chapter,omitempty"`
 	PendingRewrites          []int            `json:"pending_rewrites,omitempty"`
-	ReopenCount              int              `json:"reopen_count,omitempty"` // 用户显式 /reopen 重开完结书的累计次数
+	ReopenCount              int              `json:"reopen_count,omitempty"` // Số lần người dùng chủ động /reopen mở lại một cuốn sách đã hoàn thành
 	FoundationMissing        []string         `json:"foundation_missing,omitempty"`
 	PlanningTier             string           `json:"planning_tier,omitempty"`
 	AdvanceMode              string           `json:"advance_mode,omitempty"`
@@ -34,8 +34,8 @@ type InterventionFacts struct {
 	AdvanceHoldAfter         string           `json:"advance_hold_after,omitempty"`
 	AdvanceHoldTargetChapter int              `json:"advance_hold_target_chapter,omitempty"`
 	AdvanceHoldReason        string           `json:"advance_hold_reason,omitempty"`
-	Running                  bool             `json:"running"`                  // 干预到达时是否有 run 在进行
-	CheckpointSeq            int64            `json:"checkpoint_seq,omitempty"` // Collect 时刻最新 checkpoint;Engine 对账用
+	Running                  bool             `json:"running"`                  // Có run đang diễn ra tại thời điểm can thiệp tới không
+	CheckpointSeq            int64            `json:"checkpoint_seq,omitempty"` // Checkpoint mới nhất tại thời điểm Collect; Engine dùng để đối soát…
 	RecentDecisions          []RecentDecision `json:"recent_decisions,omitempty"`
 }
 

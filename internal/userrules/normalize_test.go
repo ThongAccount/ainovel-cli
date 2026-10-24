@@ -129,7 +129,7 @@ type scriptedModel struct {
 	calls    int
 	lastMsgs []agentcore.Message
 	lastCfg  agentcore.CallConfig
-	err      error // 非 nil 时 Generate 恒返回该错误
+	err      error // Khi khác nil, Generate luôn trả về lỗi này
 	cancel   context.CancelFunc
 	cancelAt int
 }
