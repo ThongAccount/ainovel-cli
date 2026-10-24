@@ -4,10 +4,15 @@ import (
 	"slices"
 	"sort"
 	"sync"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
-// Tracker 按章节维护全书风格统计。首次载入每章一次；新增或重写时只分析变化章节。
-// Snapshot 会缓存派生结果，同一书状态下 Writer/Editor 的重复读取不再重算。
+// Tracker bảo trì thống kê văn phong toàn sách theo từng chương. Lần nạp đầu
+// phân tích mỗi chương một lần; khi thêm hoặc viết lại thì chỉ phân tích
+// chương thay đổi.
+// Snapshot cache kết quả dẫn xuất, nên việc Writer/Editor đọc lại trong cùng
+// trạng thái sách không phải tính lại.
 type Tracker struct {
 	mu sync.Mutex
 
@@ -18,6 +23,7 @@ type Tracker struct {
 	version       uint64
 
 	cacheVersion   uint64
+	cacheLang      i18n.Lang
 	cacheTitles    []string
 	cacheStopwords []string
 	cacheReady     bool
@@ -46,7 +52,8 @@ func NewTracker() *Tracker {
 	}
 }
 
-// Upsert 新增或替换一章。正文未变化时不推进版本。
+// Upsert thêm hoặc thay một chương. Khi nội dung không đổi thì không đẩy
+// phiên bản.
 func (t *Tracker) Upsert(chapter int, text string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -65,7 +72,7 @@ func (t *Tracker) Upsert(chapter int, text string) {
 	t.cacheReady = false
 }
 
-// Remove 删除一章；不存在时无操作。
+// Remove xoá một chương; không có thì không làm gì.
 func (t *Tracker) Remove(chapter int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -81,14 +88,16 @@ func (t *Tracker) Remove(chapter int) {
 	t.cacheReady = false
 }
 
-// Snapshot 返回与 Compute 等价的当前统计快照。
+// Snapshot trả ảnh chụp thống kê hiện tại, tương đương với Compute.
 func (t *Tracker) Snapshot(titles, stopwords []string) *Stats {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.ensure()
 
+	lang := i18n.Active()
 	if t.cacheReady &&
 		t.cacheVersion == t.version &&
+		t.cacheLang == lang &&
 		slices.Equal(t.cacheTitles, titles) &&
 		slices.Equal(t.cacheStopwords, stopwords) {
 		return cloneStats(t.cache)
@@ -97,6 +106,7 @@ func (t *Tracker) Snapshot(titles, stopwords []string) *Stats {
 	stats := t.snapshot(titles, stopwords)
 	t.cache = stats
 	t.cacheVersion = t.version
+	t.cacheLang = lang
 	t.cacheTitles = append(t.cacheTitles[:0], titles...)
 	t.cacheStopwords = append(t.cacheStopwords[:0], stopwords...)
 	t.cacheReady = true
@@ -162,12 +172,13 @@ func (t *Tracker) snapshot(titles, stopwords []string) *Stats {
 	sort.Ints(ids)
 
 	stats := &Stats{Chapters: n}
+	texts := activeTexts()
 	for i, total := range t.patternTotals {
 		if total == 0 {
 			continue
 		}
 		stats.Patterns = append(stats.Patterns, PatternStat{
-			Name:       patternDefs[i].name,
+			Name:       texts.patterns[i],
 			Total:      total,
 			PerChapter: round1(float64(total) / float64(n)),
 		})

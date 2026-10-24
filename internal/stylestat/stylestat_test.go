@@ -3,54 +3,69 @@ package stylestat
 import (
 	"strings"
 	"testing"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
 func chapterWith(body string) string {
 	return "# 标题\n" + body
 }
 
+// setActiveLang đặt ngôn ngữ tác phẩm ở cấp tiến trình và tự khôi phục sau
+// test. Không dùng t.Parallel() vì biến này là trạng thái toàn cục.
+func setActiveLang(t *testing.T, lang i18n.Lang) {
+	t.Helper()
+	previous := i18n.Active()
+	i18n.SetActive(string(lang))
+	t.Cleanup(func() { i18n.SetActive(string(previous)) })
+}
+
 func TestComputeBelowMinChapters(t *testing.T) {
 	in := Input{Chapters: []string{"a", "b", "c", "d"}}
 	if Compute(in) != nil {
-		t.Fatal("below minChapters should return nil")
+		t.Fatal("dưới minChapters phải trả nil")
 	}
 }
 
+// TestComputePatterns kiểm tra các lớp mẫu câu: biểu thức phát hiện giữ nguyên
+// trên văn bản Trung, còn tên hiển thị đổi theo ngôn ngữ tác phẩm.
 func TestComputePatterns(t *testing.T) {
 	body := "他不是愤怒，而是恐惧。沉默了几息。像一盏灯。她眼中闪过慌乱，心头一紧。他觉得这是一种说不出的寒意。\n正文。\n"
 	chapters := make([]string, 6)
 	for i := range chapters {
 		chapters[i] = chapterWith(body)
 	}
-	s := Compute(Input{Chapters: chapters})
-	if s == nil {
-		t.Fatal("expected stats")
-	}
-	want := map[string]int{
-		"矫正句『不是…(而)是…』":        6,
-		"计时量词『X息/X瞬』":          6,
-		"明喻『像一/仿佛/如同/宛如』":      6,
-		"沉默节拍『沉默了/没有说话/没有回头』":  6,
-		"神态模板『眼中闪过/嘴角勾起/咬了咬唇』": 6,
-		"躯体反应『心头一紧/身子一颤/倒吸凉气』": 6,
-		"思维标记『心想/意识到/感到/觉得』":   6,
-		"抽象套话『一种说不出的/的意义在于』":   6,
-	}
-	for _, p := range s.Patterns {
-		if w, ok := want[p.Name]; ok && p.Total != w {
-			t.Errorf("%s total: got %d want %d", p.Name, p.Total, w)
-		}
-		if p.PerChapter != 1.0 {
-			t.Errorf("%s per_chapter: got %v want 1.0", p.Name, p.PerChapter)
-		}
-	}
-	if len(s.Patterns) != len(want) {
-		t.Errorf("want %d pattern classes, got %d: %+v", len(want), len(s.Patterns), s.Patterns)
+	for _, lang := range []i18n.Lang{i18n.LangVI, i18n.LangZH} {
+		t.Run(string(lang), func(t *testing.T) {
+			setActiveLang(t, lang)
+			s := Compute(Input{Chapters: chapters})
+			if s == nil {
+				t.Fatal("phải có thống kê")
+			}
+			names := styleTextsFor(lang).patterns
+			if len(names) != len(patternDefs) {
+				t.Fatalf("bảng tên phải khớp số lớp mẫu: %d vs %d", len(names), len(patternDefs))
+			}
+			if len(s.Patterns) != len(patternDefs) {
+				t.Fatalf("phải có %d lớp mẫu, got %d: %+v", len(patternDefs), len(s.Patterns), s.Patterns)
+			}
+			for i, p := range s.Patterns {
+				if p.Name != names[i] {
+					t.Errorf("tên lớp mẫu %d sai ngôn ngữ: got %q want %q", i, p.Name, names[i])
+				}
+				if p.Total != 6 {
+					t.Errorf("%s total: got %d want 6", p.Name, p.Total)
+				}
+				if p.PerChapter != 1.0 {
+					t.Errorf("%s per_chapter: got %v want 1.0", p.Name, p.PerChapter)
+				}
+			}
+		})
 	}
 }
 
 func TestComputeTopPhrasesWithStopwords(t *testing.T) {
-	// 「青云山巅」高频出现；「陆九渊」是角色名应被过滤
+	// 「青云山巅」 xuất hiện nhiều; 「陆九渊」 là tên nhân vật nên bị lọc
 	line := "众人望向青云山巅，陆九渊负手而立。\n"
 	chapters := make([]string, 10)
 	for i := range chapters {
@@ -58,7 +73,7 @@ func TestComputeTopPhrasesWithStopwords(t *testing.T) {
 	}
 	s := Compute(Input{Chapters: chapters, Stopwords: []string{"陆九渊"}})
 	if s == nil {
-		t.Fatal("expected stats")
+		t.Fatal("phải có thống kê")
 	}
 	var hasMountain, hasName bool
 	for _, p := range s.TopPhrases {
@@ -70,10 +85,10 @@ func TestComputeTopPhrasesWithStopwords(t *testing.T) {
 		}
 	}
 	if !hasMountain {
-		t.Errorf("expected 青云山 phrase mined, got %+v", s.TopPhrases)
+		t.Errorf("phải đào được cụt 青云山, got %+v", s.TopPhrases)
 	}
 	if hasName {
-		t.Errorf("character name should be filtered, got %+v", s.TopPhrases)
+		t.Errorf("tên nhân vật phải bị lọc, got %+v", s.TopPhrases)
 	}
 }
 
@@ -89,17 +104,17 @@ func TestComputeRepeatedSentences(t *testing.T) {
 	}
 	s := Compute(Input{Chapters: chapters})
 	if s == nil {
-		t.Fatal("expected stats")
+		t.Fatal("phải có thống kê")
 	}
 	if len(s.RepeatedSentences) == 0 {
-		t.Fatalf("expected repeated sentence, got none")
+		t.Fatalf("phải có câu lặp, không có")
 	}
 	got := s.RepeatedSentences[0]
 	if got.Chapters != 3 || got.Count != 3 {
-		t.Errorf("repeated sentence: %+v", got)
+		t.Errorf("câu lặp: %+v", got)
 	}
 	if !strings.HasPrefix(got.Text, "此生未能远行") {
-		t.Errorf("text: %q", got.Text)
+		t.Errorf("nội dung: %q", got.Text)
 	}
 }
 
@@ -109,7 +124,7 @@ func TestComputeEndingAndOpening(t *testing.T) {
 	chapters := []string{short, short, short, long, long}
 	s := Compute(Input{Chapters: chapters})
 	if s == nil {
-		t.Fatal("expected stats")
+		t.Fatal("phải có thống kê")
 	}
 	if s.Ending.ShortRatio != 0.6 {
 		t.Errorf("short_ratio: got %v want 0.6", s.Ending.ShortRatio)
@@ -124,14 +139,14 @@ func TestComputeTitleFormats(t *testing.T) {
 	for i := range chapters {
 		chapters[i] = chapterWith("正文。")
 	}
-	// 混用 → 上报
+	// Trộn lẫn → phải báo
 	s := Compute(Input{Chapters: chapters, Titles: []string{"第一章 风起", "云涌", "第3章 雷动"}})
 	if s.TitleFormats == nil || s.TitleFormats.WithPrefix != 2 || s.TitleFormats.WithoutPrefix != 1 {
-		t.Errorf("title formats: %+v", s.TitleFormats)
+		t.Errorf("định dạng tiêu đề: %+v", s.TitleFormats)
 	}
-	// 统一 → 不上报
+	// Thống nhất → không báo
 	s = Compute(Input{Chapters: chapters, Titles: []string{"风起", "云涌"}})
 	if s.TitleFormats != nil {
-		t.Errorf("uniform titles should not report: %+v", s.TitleFormats)
+		t.Errorf("tiêu đề thống nhất không được báo: %+v", s.TitleFormats)
 	}
 }

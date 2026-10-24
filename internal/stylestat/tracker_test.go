@@ -44,13 +44,13 @@ func TestTrackerSnapshotReturnsIndependentCopy(t *testing.T) {
 
 	first := tracker.Snapshot(nil, nil)
 	if first == nil || len(first.Patterns) == 0 {
-		t.Fatalf("unexpected first snapshot: %+v", first)
+		t.Fatalf("ảnh chụp đầu không như mong đợi: %+v", first)
 	}
 	first.Patterns[0].Total = 999
 
 	second := tracker.Snapshot(nil, nil)
 	if second.Patterns[0].Total == 999 {
-		t.Fatal("cached snapshot was mutated through caller result")
+		t.Fatal("ảnh chụp trong cache đã bị sửa qua kết quả trả về")
 	}
 }
 
@@ -97,6 +97,6 @@ func assertTrackerMatchesCompute(
 	want := Compute(Input{Chapters: texts, Titles: titles, Stopwords: stopwords})
 	got := tracker.Snapshot(titles, stopwords)
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("tracker mismatch\n got: %+v\nwant: %+v", got, want)
+		t.Fatalf("tracker không khớp\n got: %+v\nwant: %+v", got, want)
 	}
 }
