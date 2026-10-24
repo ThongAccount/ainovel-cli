@@ -11,10 +11,10 @@ import (
 
 func TestConfigResolveReasoningEffort(t *testing.T) {
 	cfg := Config{
-		ReasoningEffort: "low", // 顶层默认
+		ReasoningEffort: "low", // mặc định cấp cao nhất
 		Roles: map[string]RoleConfig{
-			"writer":    {Provider: "p", Model: "m", ReasoningEffort: "high"}, // 角色覆盖
-			"architect": {Provider: "p", Model: "m"},                          // 无 reasoning_effort，应回落默认
+			"writer":    {Provider: "p", Model: "m", ReasoningEffort: "high"}, // ghi đè ở cấp vai trò
+			"architect": {Provider: "p", Model: "m"},                          // không có reasoning_effort, phải rơi về mặc định
 		},
 	}
 
@@ -22,12 +22,12 @@ func TestConfigResolveReasoningEffort(t *testing.T) {
 		role string
 		want string
 	}{
-		{"writer", "high"},   // 角色覆盖优先
-		{"architect", "low"}, // 角色未配 → 回落顶层默认
-		{"editor", "low"},    // 角色不存在 → 顶层默认
-		{"", "low"},          // 空 → 顶层默认
-		{"default", "low"},   // default → 顶层默认
-		{"arbiter", "low"},   // 非配置角色（裁定恒随顶层默认）
+		{"writer", "high"},   // ghi đè cấp vai trò được ưu tiên
+		{"architect", "low"}, // vai trò chưa cấu hình → rơi về mặc định cấp cao nhất
+		{"editor", "low"},    // vai trò không tồn tại → mặc định cấp cao nhất
+		{"", "low"},          // rỗng → mặc định cấp cao nhất
+		{"default", "low"},   // default → mặc định cấp cao nhất
+		{"arbiter", "low"},   // vai trò không cấu hình được (Tài phán luôn theo mặc định cấp cao nhất)
 	}
 	for _, c := range cases {
 		if got := cfg.ResolveReasoningEffort(c.role); got != c.want {
@@ -35,13 +35,13 @@ func TestConfigResolveReasoningEffort(t *testing.T) {
 		}
 	}
 
-	// 顶层默认也为空时，未覆盖角色返回 ""（不覆盖）。
+	// Khi mặc định cấp cao nhất cũng rỗng, vai trò chưa ghi đè trả về "" (không ghi đè).
 	empty := Config{Roles: map[string]RoleConfig{"writer": {ReasoningEffort: "xhigh"}}}
 	if got := empty.ResolveReasoningEffort("editor"); got != "" {
-		t.Errorf("空默认下 editor 应返回 \"\"，得 %q", got)
+		t.Errorf("với mặc định rỗng, editor phải trả về \"\", được %q", got)
 	}
 	if got := empty.ResolveReasoningEffort("writer"); got != "xhigh" {
-		t.Errorf("空默认下 writer 覆盖应生效，得 %q", got)
+		t.Errorf("với mặc định rỗng, ghi đè của writer phải có hiệu lực, được %q", got)
 	}
 }
 
@@ -61,10 +61,10 @@ func TestValidateBaseRejectsNonConfigurableRoles(t *testing.T) {
 
 			err := cfg.ValidateBase()
 			if err == nil {
-				t.Fatalf("roles.%s 应被拒绝", role)
+				t.Fatalf("roles.%s phải bị từ chối", role)
 			}
 			if !errors.Is(err, errs.ErrConfig) {
-				t.Fatalf("应包装 errs.ErrConfig，得到: %v", err)
+				t.Fatalf("phải bọc errs.ErrConfig, được: %v", err)
 			}
 		})
 	}
@@ -84,12 +84,12 @@ func TestValidateBaseNotifyEventsMatchRuntimeContract(t *testing.T) {
 
 	cfg := validConfig(notify.Kinds())
 	if err := cfg.ValidateBase(); err != nil {
-		t.Fatalf("当前通知事件契约应全部通过配置校验: %v", err)
+		t.Fatalf("hợp đồng sự kiện thông báo hiện tại phải qua hết kiểm tra cấu hình: %v", err)
 	}
 
 	cfg = validConfig([]string{"repeat"})
 	if err := cfg.ValidateBase(); !errors.Is(err, errs.ErrConfig) {
-		t.Fatalf("旧 repeat 事件应被拒绝，得到: %v", err)
+		t.Fatalf("sự kiện repeat cũ phải bị từ chối, được: %v", err)
 	}
 }
 
@@ -104,13 +104,13 @@ func TestProviderStreamIdleTimeoutValue(t *testing.T) {
 		{"15m", 15 * time.Minute, false},
 		{"abc", 0, true},
 		{"-5s", 0, true},
-		{"0", 0, true}, // 不提供"关闭看门狗"——真死流需要有限界
+		{"0", 0, true}, // không cung cấp "tắt watchdog" — luồng chết thật vẫn cần chặn trên
 	}
 	for _, c := range cases {
 		got, err := ProviderConfig{StreamIdleTimeout: c.in}.StreamIdleTimeoutValue()
 		if c.wantErr {
 			if err == nil {
-				t.Errorf("%q 应报错", c.in)
+				t.Errorf("%q phải báo lỗi", c.in)
 			}
 			continue
 		}
@@ -129,6 +129,6 @@ func TestValidateBaseRejectsBadStreamIdleTimeout(t *testing.T) {
 		},
 	}
 	if err := cfg.ValidateBase(); !errors.Is(err, errs.ErrConfig) {
-		t.Fatalf("非法 stream_idle_timeout 应拒绝并包装 ErrConfig，得到: %v", err)
+		t.Fatalf("stream_idle_timeout không hợp lệ phải bị từ chối và bọc ErrConfig, được: %v", err)
 	}
 }
