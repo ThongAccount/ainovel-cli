@@ -16,20 +16,20 @@ func TestDecisionStore_AppendAndRecent(t *testing.T) {
 
 	first, err := s.Decisions.Append(DecisionRecord{
 		Kind: "intervention", Decider: "arbiter",
-		Input: "重写第3章", Facts: json.RawMessage(`{"phase":"writing"}`),
+		Input: "viết lại chương 3", Facts: json.RawMessage(`{"phase":"writing"}`),
 	})
 	if err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if first.ID == "" || first.At == "" || first.SchemaVersion != decisionSchemaVersion {
-		t.Fatalf("Append 应补齐 ID/At/SchemaVersion: %+v", first)
+		t.Fatalf("Append phải bổ sung ID/At/SchemaVersion: %+v", first)
 	}
 
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "继续写"}); err != nil {
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "tiếp tục viết"}); err != nil {
 		t.Fatalf("append 2: %v", err)
 	}
-	// 失败裁定:error 是审计事实,必须原样落盘并可读回。
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "plan_start", Decider: "arbiter", Input: "凡人修仙", Error: "USER_INACTIVE"}); err != nil {
+	// Phán quyết thất bại: error là sự thật kiểm toán, phải ghi xuống nguyên trạng và đọc lại được.
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "plan_start", Decider: "arbiter", Input: "phàm tu luyện sinh", Error: "USER_INACTIVE"}); err != nil {
 		t.Fatalf("append 3: %v", err)
 	}
 
@@ -38,19 +38,19 @@ func TestDecisionStore_AppendAndRecent(t *testing.T) {
 		t.Fatalf("recent: %v", err)
 	}
 	if len(recent) != 3 {
-		t.Fatalf("应有 3 条记录, got %d", len(recent))
+		t.Fatalf("phải có 3 bản ghi, got %d", len(recent))
 	}
 	if recent[2].Error != "USER_INACTIVE" || len(recent[2].Decision) != 0 {
-		t.Fatalf("失败裁定应带 error 且无 decision: %+v", recent[2])
+		t.Fatalf("phán quyết thất bại phải có error và không có decision: %+v", recent[2])
 	}
-	if recent[0].Input != "重写第3章" || recent[1].Input != "继续写" {
-		t.Fatalf("记录顺序应为旧→新: %+v", recent)
+	if recent[0].Input != "viết lại chương 3" || recent[1].Input != "tiếp tục viết" {
+		t.Fatalf("thứ tự bản ghi phải là cũ→mới: %+v", recent)
 	}
 
-	// n 截取:只要最近 1 条
+	// Cắt theo n: chỉ lấy 1 bản ghi gần nhất
 	last, err := s.Decisions.Recent(1)
-	if err != nil || len(last) != 1 || last[0].Input != "凡人修仙" {
-		t.Fatalf("Recent(1) 应取最新一条, got %+v err=%v", last, err)
+	if err != nil || len(last) != 1 || last[0].Input != "phàm tu luyện sinh" {
+		t.Fatalf("Recent(1) phải lấy bản ghi mới nhất, got %+v err=%v", last, err)
 	}
 }
 
@@ -59,97 +59,101 @@ func TestDecisionStore_InputTruncation(t *testing.T) {
 	if err := s.Init(); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	huge := strings.Repeat("长", maxDecisionInputBytes) // 3 字节/字,远超上限
+	huge := strings.Repeat("á", maxDecisionInputBytes) // 2 byte/ký tự, vượt xa ngưỡng
 	rec, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: huge})
 	if err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if !rec.InputTruncated || len(rec.Input) > maxDecisionInputBytes {
-		t.Fatalf("超限 input 必须截断并标记: truncated=%v len=%d", rec.InputTruncated, len(rec.Input))
+		t.Fatalf("input vượt ngưỡng phải bị cắt và đánh dấu: truncated=%v len=%d", rec.InputTruncated, len(rec.Input))
 	}
-	// 截断后的记录仍然可读回
+	// Bản ghi sau khi cắt vẫn phải đọc lại được
 	recent, err := s.Decisions.Recent(1)
 	if err != nil || len(recent) != 1 {
-		t.Fatalf("读回失败: %v", err)
+		t.Fatalf("đọc lại thất bại: %v", err)
 	}
 }
 
-// 文件中部的已提交损坏行(其后仍有完整提交的行)必须硬失败——不能在残缺历史上裁定。
+// Dòng hỏng đã ghi ký ở giữa tệp (sau đó vẫn có dòng đã ghi ký hoàn chỉnh) phải hỏng cứng
+// — không được phán quyết trên lịch sử bị khuyết.
 func TestDecisionStore_RecentRejectsCommittedCorruptLine(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "好的"}); err != nil {
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "được"}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// 已 '\n' 收尾的损坏行(完整提交却损坏),其后再追加一条完整记录。
+	// Dòng hỏng đã kết thúc bằng '\n' (đã ghi ký nhưng hỏng), sau đó ghi nối một bản ghi hoàn chỉnh.
 	if err := s.Decisions.io.AppendLine(decisionsFile, []byte("{\"schema_version\":1,\"kind\":\"interv\n")); err != nil {
 		t.Fatalf("append corrupt: %v", err)
 	}
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "之后"}); err != nil {
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "sau đó"}); err != nil {
 		t.Fatalf("append trailing: %v", err)
 	}
 	if _, err := s.Decisions.Recent(10); err == nil {
-		t.Fatal("文件中部的已提交损坏行必须显式报错")
+		t.Fatal("dòng hỏng đã ghi ký ở giữa tệp phải báo lỗi tường minh")
 	}
 }
 
-// 崩溃留下的尾部残行(末字节非 '\n' 的未提交追加)按 not-exist 容忍:丢弃残行、返回其前
-// 的完整记录,不硬失败——否则一次崩溃就永久毒化 append-only 审计。
+// Dòng cuối sót lại do sập (byte cuối khác '\n', phần ghi nối chưa ghi ký) được dung thứ
+// như not-exist: bỏ dòng sót, trả về các bản ghi hoàn chỉnh trước đó, không hỏng cứng —
+// nếu không, một lần sập sẽ làm hỏng vĩnh viễn nhật ký audit append-only.
 func TestDecisionStore_RecentToleratesUncommittedTail(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
 	if err := s.Init(); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "好的"}); err != nil {
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "được"}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// 模拟崩溃打断的尾部残行:无换行结尾。
+	// Mô phỏng dòng cuối sót lại do sập: không có dấu xuống dòng.
 	if err := s.Decisions.io.AppendLine(decisionsFile, []byte(`{"schema_version":1,"kind":"interv`)); err != nil {
 		t.Fatalf("append partial: %v", err)
 	}
 	recent, err := s.Decisions.Recent(10)
 	if err != nil {
-		t.Fatalf("尾部残行应被容忍,不应报错: %v", err)
+		t.Fatalf("dòng cuối sót lại phải được dung thứ, không được báo lỗi: %v", err)
 	}
-	if len(recent) != 1 || recent[0].Input != "好的" {
-		t.Fatalf("应丢弃残行并保留已提交记录,得到: %+v", recent)
+	if len(recent) != 1 || recent[0].Input != "được" {
+		t.Fatalf("phải bỏ dòng sót và giữ bản ghi đã ghi ký, got: %+v", recent)
 	}
-	// 恢复必须真正截断磁盘尾部，而不是只在本次读取中忽略；否则下一次追加会把两段
-	// JSON 拼成永久损坏。追加后再次读取应保持完整闭环。
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "恢复后"}); err != nil {
+	// Việc khôi phục phải thực sự cắt phần cuối trên đĩa, chứ không chỉ bỏ qua trong lần đọc
+	// này; nếu không, lần ghi nối kế tiếp sẽ nối hai đoạn JSON thành dữ liệu hỏng vĩnh viễn.
+	// Sau khi ghi nối, đọc lại phải giữ được vòng khép hoàn chỉnh.
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "sau khi khôi phục"}); err != nil {
 		t.Fatalf("append after recovery: %v", err)
 	}
 	recent, err = s.Decisions.Recent(10)
 	if err != nil {
 		t.Fatalf("recent after append: %v", err)
 	}
-	if len(recent) != 2 || recent[0].Input != "好的" || recent[1].Input != "恢复后" {
-		t.Fatalf("尾部恢复后应可继续追加，得到: %+v", recent)
+	if len(recent) != 2 || recent[0].Input != "được" || recent[1].Input != "sau khi khôi phục" {
+		t.Fatalf("sau khi khôi phục phần cuối phải ghi nối tiếp được, got: %+v", recent)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, decisionsFile))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasSuffix(string(raw), "\n") {
-		t.Fatalf("恢复后的审计文件必须以提交换行结尾: %q", raw)
+		t.Fatalf("tệp audit sau khi khôi phục phải kết thúc bằng dấu xuống dòng của bản ghi: %q", raw)
 	}
 }
 
-// 即使尾部恰好是完整 JSON，只要没有协议要求的换行，也属于未提交记录；恢复必须丢弃
-// 它并确保后续追加不会发生 `}{` 拼接。
+// Dù phần cuối có đúng là JSON hoàn chỉnh, chừng nào thiếu dấu xuống dòng mà giao thức
+// yêu cầu thì vẫn là bản ghi chưa ghi ký; việc khôi phục phải bỏ nó và bảo đảm các lần
+// ghi nối sau không tạo ra chuỗi `}{`.
 func TestDecisionStore_RecoveryDropsValidJSONWithoutCommitNewline(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
 	if err := s.Init(); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "已提交"}); err != nil {
+	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "đã ghi ký"}); err != nil {
 		t.Fatal(err)
 	}
-	partial, err := json.Marshal(DecisionRecord{SchemaVersion: decisionSchemaVersion, Kind: "intervention", Input: "未提交"})
+	partial, err := json.Marshal(DecisionRecord{SchemaVersion: decisionSchemaVersion, Kind: "intervention", Input: "chưa ghi ký"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,19 +161,19 @@ func TestDecisionStore_RecoveryDropsValidJSONWithoutCommitNewline(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	// 模拟重启：下一次读取或追加就是审计恢复边界。
+	// Mô phỏng khởi động lại: lần đọc hoặc ghi nối kế tiếp chính là ranh giới khôi phục audit.
 	reopened := NewStore(dir)
 	if err := reopened.Init(); err != nil {
 		t.Fatalf("restart init: %v", err)
 	}
-	if _, err := reopened.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "重启后"}); err != nil {
+	if _, err := reopened.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "sau khi khởi động lại"}); err != nil {
 		t.Fatal(err)
 	}
 	recent, err := reopened.Decisions.Recent(10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recent) != 2 || recent[0].Input != "已提交" || recent[1].Input != "重启后" {
-		t.Fatalf("未提交的无换行 JSON 不应被接纳，得到: %+v", recent)
+	if len(recent) != 2 || recent[0].Input != "đã ghi ký" || recent[1].Input != "sau khi khởi động lại" {
+		t.Fatalf("JSON chưa ghi ký không có dấu xuống dòng không được chấp nhận, got: %+v", recent)
 	}
 }

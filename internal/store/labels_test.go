@@ -1,10 +1,13 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
 // Nhãn khuôn mẫu phải theo ngôn ngữ tác phẩm: các file .md này được đọc ngược
@@ -54,5 +57,48 @@ func TestSetLanguageReachesEveryStore(t *testing.T) {
 	}
 	if len(s.ios) < 15 {
 		t.Fatalf("chỉ gom được %d IO, nghi sót store", len(s.ios))
+	}
+}
+
+// Ngôn ngữ tác phẩm phải chi phối nhãn của Markdown dẫn xuất: đặt "zh" thì tệp
+// .md sinh ra mang nhãn tiếng Trung, đặt "vi" thì mang nhãn tiếng Việt.
+//
+// SetLanguage cũng gọi i18n.SetActive (biến toàn cục ở cấp tiến trình), nên test
+// này phải khôi phục ngôn ngữ bằng t.Cleanup và không được chạy song song.
+func TestStoreLanguageDrivesMarkdownLabels(t *testing.T) {
+	prev := i18n.Active()
+	s := NewStore(t.TempDir())
+	t.Cleanup(func() { s.SetLanguage(string(prev)) })
+
+	entries := []domain.OutlineEntry{
+		{Chapter: 1, Title: "Vô Căn Dược Giả", CoreEvent: "Mở sạp bán thuốc", Hook: "Cây mai rung lên"},
+	}
+
+	s.SetLanguage("zh")
+	if err := s.Outline.SaveOutline(entries); err != nil {
+		t.Fatalf("SaveOutline (zh): %v", err)
+	}
+	zh, err := os.ReadFile(filepath.Join(s.Dir(), "outline.md"))
+	if err != nil {
+		t.Fatalf("đọc outline.md (zh): %v", err)
+	}
+	for _, want := range []string{"# 大纲", "## 第 1 章：", "**核心事件**："} {
+		if !strings.Contains(string(zh), want) {
+			t.Errorf("outline.md tiếng Trung thiếu %q: %q", want, zh)
+		}
+	}
+
+	s.SetLanguage("vi")
+	if err := s.Outline.SaveOutline(entries); err != nil {
+		t.Fatalf("SaveOutline (vi): %v", err)
+	}
+	vi, err := os.ReadFile(filepath.Join(s.Dir(), "outline.md"))
+	if err != nil {
+		t.Fatalf("đọc outline.md (vi): %v", err)
+	}
+	for _, want := range []string{"# Đề cương", "## Chương 1:", "**Sự kiện chính**: "} {
+		if !strings.Contains(string(vi), want) {
+			t.Errorf("outline.md tiếng Việt thiếu %q: %q", want, vi)
+		}
 	}
 }

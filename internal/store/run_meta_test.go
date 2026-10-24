@@ -53,16 +53,16 @@ func TestInitRunMeta_PreservesHistory(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 先建立带运行意图的 RunMeta
+	// Trước hết tạo RunMeta có ý định lần chạy
 	_ = store.RunMeta.Save(domain.RunMeta{
 		StartedAt:    "old",
 		Provider:     "openai",
 		Style:        "fantasy",
 		Model:        "old-model",
-		PendingSteer: "待处理",
+		PendingSteer: "đang chờ xử lý",
 	})
 
-	// Init 应保留 PendingSteer 等运行意图事实
+	// Init phải giữ lại các sự thật ý định lần chạy như PendingSteer
 	_ = store.RunMeta.Init("suspense", "openrouter", "new-model")
 
 	meta, _ := store.RunMeta.Load()
@@ -75,7 +75,7 @@ func TestInitRunMeta_PreservesHistory(t *testing.T) {
 	if meta.Model != "new-model" {
 		t.Errorf("model should be updated, got %s", meta.Model)
 	}
-	if meta.PendingSteer != "待处理" {
+	if meta.PendingSteer != "đang chờ xử lý" {
 		t.Errorf("pending steer should be preserved, got %s", meta.PendingSteer)
 	}
 	if meta.AdvanceMode != domain.ChapterAdvanceAuto {
@@ -87,16 +87,16 @@ func TestSetAndClearPendingSteer(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 设置 PendingSteer
-	if err := store.RunMeta.SetPendingSteer("主角改成女性"); err != nil {
+	// Đặt PendingSteer
+	if err := store.RunMeta.SetPendingSteer("đổi nhân vật chính thành nữ"); err != nil {
 		t.Fatalf("SetPendingSteer: %v", err)
 	}
 	meta, _ := store.RunMeta.Load()
-	if meta.PendingSteer != "主角改成女性" {
+	if meta.PendingSteer != "đổi nhân vật chính thành nữ" {
 		t.Errorf("expected pending steer, got %s", meta.PendingSteer)
 	}
 
-	// 清除
+	// Xóa
 	if err := store.RunMeta.ClearPendingSteer(); err != nil {
 		t.Fatalf("ClearPendingSteer: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestClearPendingSteer_Noop(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 空 meta 上调用不报错
+	// Gọi trên meta rỗng không được báo lỗi
 	if err := store.RunMeta.ClearPendingSteer(); err != nil {
 		t.Fatalf("ClearPendingSteer on empty: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestAdvanceControlRoundTrip(t *testing.T) {
 	if err := store.RunMeta.GrantAdvancePermit(3); err != nil {
 		t.Fatalf("GrantAdvancePermit: %v", err)
 	}
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "重写第3章"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "viết lại chương 3"}
 	if err := store.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatalf("SetAdvanceHold: %v", err)
 	}
@@ -182,9 +182,10 @@ func TestInitRunMeta_PreservesAdvanceIntent(t *testing.T) {
 	}
 	_ = store.RunMeta.SetAdvanceMode(domain.ChapterAdvanceReview)
 	_ = store.RunMeta.GrantAdvancePermit(7)
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "验收"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "duyệt"}
 	_ = store.RunMeta.SetAdvanceHold(hold)
-	// 进程重启路径：Host.New 每次都会调 Init，用户运行意图必须存活。
+	// Đường khởi động lại tiến trình: Host.New gọi Init mỗi lần, ý định lần chạy của người
+	// dùng phải còn sống.
 	_ = store.RunMeta.Init("fantasy", "openrouter", "m")
 
 	meta, _ := store.RunMeta.Load()
@@ -213,20 +214,20 @@ func TestAdvanceControlRejectsConflictingIntent(t *testing.T) {
 	if err := store.RunMeta.GrantAdvancePermit(3); err == nil {
 		t.Fatal("conflicting permit must fail")
 	}
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "停"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "dừng"}
 	if err := store.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RunMeta.SetAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "另一条"}); err == nil {
+	if err := store.RunMeta.SetAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "một ý định khác"}); err == nil {
 		t.Fatal("conflicting hold must fail")
 	}
-	if err := (domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, Reason: "缺目标"}).Validate(); err == nil {
+	if err := (domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, Reason: "thiếu mục tiêu"}).Validate(); err == nil {
 		t.Fatal("chapter hold without target must fail")
 	}
-	if err := (domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, TargetChapter: 3, Reason: "错误目标"}).Validate(); err == nil {
+	if err := (domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, TargetChapter: 3, Reason: "mục tiêu sai"}).Validate(); err == nil {
 		t.Fatal("non-chapter hold with target must fail")
 	}
-	if err := store.RunMeta.ClearAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "旧值"}); err == nil {
+	if err := store.RunMeta.ClearAdvanceHold(domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "giá trị cũ"}); err == nil {
 		t.Fatal("compare-and-clear must reject changed hold")
 	}
 	if err := store.RunMeta.SetAdvanceMode(domain.ChapterAdvanceAuto); err != nil {
@@ -258,19 +259,20 @@ func TestInitRunMeta_UnknownAdvanceModeDoesNotWrite(t *testing.T) {
 	}
 }
 
-// TestRunMetaInit_PreservesPlanStart 规划期(裁定已落盘、首个 foundation 未落盘)
-// 崩溃重启时,Host.New 的 RunMeta.Init 不得清掉 PlanStart——它是恢复规划师身份的
-// 唯一依据(engine.planStartFallback)。
+// TestRunMetaInit_PreservesPlanStart giai đoạn quy hoạch (phán quyết đã ghi xuống, artifact
+// foundation đầu tiên chưa ghi xuống)
+// khi khởi động lại sau sập, RunMeta.Init của Host.New không được xóa PlanStart — đó là
+// căn cứ duy nhất để khôi phục danh tính người lập kế hoạch (engine.planStartFallback).
 func TestRunMetaInit_PreservesPlanStart(t *testing.T) {
 	store := NewStore(t.TempDir())
-	if err := store.RunMeta.SetStartPrompt("写个悬疑短篇"); err != nil {
+	if err := store.RunMeta.SetStartPrompt("viết một truyện ngắn hồi trí"); err != nil {
 		t.Fatalf("set start prompt: %v", err)
 	}
-	rec := domain.PlanStartRecord{RawPrompt: "写个悬疑短篇", Planner: "architect_short", PlannerTask: "任务全文", DecisionID: "dec-x"}
+	rec := domain.PlanStartRecord{RawPrompt: "viết một truyện ngắn hồi trí", Planner: "architect_short", PlannerTask: "toàn văn nhiệm vụ", DecisionID: "dec-x"}
 	if err := store.RunMeta.SetPlanStart(rec); err != nil {
 		t.Fatalf("set plan start: %v", err)
 	}
-	// 模拟进程重启:Host.New 会再次 Init
+	// Mô phỏng khởi động lại tiến trình: Host.New sẽ gọi Init lần nữa
 	if err := store.RunMeta.Init("default", "openrouter", "m"); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -279,10 +281,11 @@ func TestRunMetaInit_PreservesPlanStart(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	if meta.PlanStart == nil || meta.PlanStart.Planner != "architect_short" {
-		t.Fatalf("Init 必须保留 PlanStart, got %+v", meta.PlanStart)
+		t.Fatalf("Init phải giữ PlanStart, got %+v", meta.PlanStart)
 	}
-	// StartPrompt 同样是跨重启事实:裁定失败后它是引擎补裁的唯一依据。
-	if meta.StartPrompt != "写个悬疑短篇" {
-		t.Fatalf("Init 必须保留 StartPrompt, got %q", meta.StartPrompt)
+	// StartPrompt cũng là sự thật xuyên lần khởi động: khi phán quyết thất bại, nó là căn cứ
+	// duy nhất để engine phán quyết bù.
+	if meta.StartPrompt != "viết một truyện ngắn hồi trí" {
+		t.Fatalf("Init phải giữ StartPrompt, got %q", meta.StartPrompt)
 	}
 }
