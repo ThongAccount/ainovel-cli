@@ -2,8 +2,8 @@
   "id": "architect_long",
   "category": "smoke",
   "role": "architect",
-  "description": "长篇规划能产出分层大纲（卷弧骨架）并展开首弧，推进到写作。",
-  "prompt": "写一部两百章以上的玄幻长篇，主角背负灭门血仇，从废柴觉醒一步步搅动九大宗门的权力格局。",
+  "description": "Quy hoạch truyện dài sinh được dàn ý phân tầng (khung tập-cung) và mở rộng cung đầu tiên, tiến tới giai đoạn sáng tác.",
+  "prompt": "Viết một tiểu thuyết tiên hiệp dài hơn hai trăm chương, nhân vật chính mang hận thù diệt môn, từ một kẻ vô dụng thức tỉnh dần làm lay chuyển bố cục quyền lực của chín cung môn.",
   "max_chapters": 1,
   "target_prompts": ["architect-long.md"],
   "expect": {
