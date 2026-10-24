@@ -7,10 +7,11 @@ var (
 	dominantStrands = []string{"quest", "fire", "constellation"}
 )
 
-// HookTypes 返回章节钩子分类。返回副本，调用方不能修改领域词表。
+// HookTypes trả về phân loại điểm móc chương. Hàm trả về bản sao để bên gọi không
+// thể sửa bảng từ vựng của domain.
 func HookTypes() []string { return slices.Clone(hookTypes) }
 
-// DominantStrands 返回章节主导叙事线分类。
+// DominantStrands trả về phân loại tuyến tình tiết chi phối của chương.
 func DominantStrands() []string { return slices.Clone(dominantStrands) }
 
 func ValidHookType(value string) bool       { return slices.Contains(hookTypes, value) }

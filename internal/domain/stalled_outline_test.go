@@ -3,8 +3,8 @@ package domain
 import "strings"
 import "testing"
 
-// Tái hiện đại cương thật đã sinh ra truyện "viết lại rồi thêm một tí":
-// 11/12 chương dùng chung một móc câu.
+// Tái hiện đề cương thật đã sinh ra truyện "viết lại rồi thêm một tí":
+// 11/12 chương dùng chung một điểm móc.
 func TestStalledOutlineCatchesRepeatedHook(t *testing.T) {
 	same := "Một tu sĩ trẻ xuất hiện với lời mời gia nhập tông phái"
 	var entries []OutlineEntry
@@ -28,7 +28,7 @@ func TestStalledOutlineAcceptsHealthyOutline(t *testing.T) {
 		{Chapter: 3, CoreEvent: "Bị đuổi khỏi thôn", Hook: "Hắn mang theo một hạt giống không rõ nguồn"},
 	}
 	if got := StalledOutline(entries); got != "" {
-		t.Fatalf("đại cương lành mạnh không được báo lỗi, nhận %q", got)
+		t.Fatalf("đề cương lành mạnh không được báo lỗi, nhận %q", got)
 	}
 }
 
@@ -69,8 +69,8 @@ func TestOversizedArcCatchesTwentyChapterArc(t *testing.T) {
 	if got == "" {
 		t.Fatal("cung 20 chương phải bị bác")
 	}
-	for _, want := range []string{"20", "8", "tách"} {
-		if !strings.Contains(got, want) && !strings.Contains(got, "拆") {
+	for _, want := range []string{"20", "8", "chia"} {
+		if !strings.Contains(got, want) {
 			t.Errorf("chẩn đoán thiếu thông tin %q: %s", want, got)
 		}
 	}

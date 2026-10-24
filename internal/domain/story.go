@@ -3,23 +3,26 @@ package domain
 import (
 	"fmt"
 	"strings"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
 )
 
-// BookMetadata 是面向读者和出版物的作品信息。
-// 创作设定属于 Foundation，运行进度属于 Progress，二者都不承载这份数据。
+// BookMetadata là thông tin tác phẩm dành cho người đọc và ấn phẩm.
+// Thiết lập sáng tác thuộc Foundation, tiến độ chạy thuộc Progress; cả hai đều
+// không mang dữ liệu này.
 type BookMetadata struct {
 	Title    string `json:"title"`
 	Synopsis string `json:"synopsis"`
 }
 
-// Normalized 返回可持久化、可比较的规范值。
+// Normalized trả về giá trị chuẩn có thể lưu bền và so sánh.
 func (b BookMetadata) Normalized() BookMetadata {
 	b.Title = strings.TrimSpace(b.Title)
 	b.Synopsis = strings.TrimSpace(b.Synopsis)
 	return b
 }
 
-// Validate 检查作品信息的必填字段。
+// Validate kiểm tra các trường bắt buộc của thông tin tác phẩm.
 func (b BookMetadata) Validate() error {
 	b = b.Normalized()
 	if b.Title == "" {
@@ -31,7 +34,7 @@ func (b BookMetadata) Validate() error {
 	return nil
 }
 
-// OutlineEntry 大纲条目，对应一章。
+// OutlineEntry là một mục đề cương, tương ứng với một chương.
 type OutlineEntry struct {
 	Chapter   int      `json:"chapter"`
 	Title     string   `json:"title"`
@@ -40,33 +43,35 @@ type OutlineEntry struct {
 	Scenes    []string `json:"scenes"`
 }
 
-// Character 角色档案。
+// Character là hồ sơ nhân vật.
 type Character struct {
 	Name        string   `json:"name"`
-	Aliases     []string `json:"aliases,omitempty"` // 别名/称号/绰号（如"废物少年"、"炎哥"）
+	Aliases     []string `json:"aliases,omitempty"` // bí danh/biệt danh/biệt hiệu (ví dụ "Thiếu niên phế", "Anh Việt")
 	Role        string   `json:"role"`
 	Description string   `json:"description"`
 	Arc         string   `json:"arc"`
 	Traits      []string `json:"traits"`
-	Tier        string   `json:"tier,omitempty"` // core / important / secondary / decorative（默认 important）
+	Tier        string   `json:"tier,omitempty"` // core / important / secondary / decorative (mặc định important)
 }
 
-// VolumeOutline 卷级大纲（长篇分层模式）。
+// VolumeOutline là đề cương cấp tập (chế độ truyện dài phân tầng).
 type VolumeOutline struct {
 	Index int          `json:"index"`
 	Title string       `json:"title"`
-	Theme string       `json:"theme"`           // 本卷核心冲突/主题
-	Final bool         `json:"final,omitempty"` // 收官卷：全书在本卷收束（架构师 append_volume 时宣告）
+	Theme string       `json:"theme"`           // xung đột/chủ đề cốt lõi của tập
+	Final bool         `json:"final,omitempty"` // tập kết: toàn bộ tác phẩm khép lại ở tập này (Kiến trúc sư tuyên bố khi append_volume)
 	Arcs  []ArcOutline `json:"arcs"`
 }
 
-// IsExpanded 判断卷是否已展开（有弧级结构）。
+// IsExpanded kiểm tra tập đã được triển khai (có cấu trúc cấp cung) hay chưa.
 func (v *VolumeOutline) IsExpanded() bool { return len(v.Arcs) > 0 }
 
-// FinaleVolume 返回已宣告的收官卷序号，未宣告返回 0。
-// 收官事实 = "最后一卷带 Final 标记"：宣告后全书进入收束态（规划收线、终卷结构
-// 写完即完结）；若此后又追加了未标记的新卷，新卷成为最后一卷，收束态自然解除——
-// 因此无需撤销工具，状态永远可从大纲数据推导。
+// FinaleVolume trả về số tập kết đã được tuyên bố, hoặc 0 nếu chưa tuyên bố.
+// Sự thật tập kết = "tập cuối có cờ Final": sau khi tuyên bố, toàn bộ tác phẩm
+// bước vào trạng thái khép lại (quy hoạch chốt, viết xong tập cuối là hoàn thành);
+// nếu sau đó thêm một tập mới không có cờ, tập mới trở thành tập cuối và trạng thái
+// khép lại tự nhiên được gỡ bỏ — vì vậy không cần công cụ thu hồi, trạng thái luôn
+// có thể suy ra từ dữ liệu đề cương.
 func FinaleVolume(volumes []VolumeOutline) int {
 	if n := len(volumes); n > 0 && volumes[n-1].Final {
 		return volumes[n-1].Index
@@ -74,38 +79,43 @@ func FinaleVolume(volumes []VolumeOutline) int {
 	return 0
 }
 
-// StoryCompass 终局方向指南针，替代固定的骨架卷列表。
-// Architect 在每次卷边界时可更新，允许故事方向随创作演化。
+// StoryCompass là la bàn hướng kết cục, thay thế danh sách khung tập cố định.
+// Architect có thể cập nhật ở mỗi ranh giới tập, cho phép hướng truyện tiến hóa
+// cùng quá trình sáng tác.
 type StoryCompass struct {
-	EndingDirection string   `json:"ending_direction"`          // 终局方向（主题性描述）
-	OpenThreads     []string `json:"open_threads,omitempty"`    // 活跃长线（需收束才能结局）
-	EstimatedScale  string   `json:"estimated_scale,omitempty"` // 模糊规模（如"预计 4-6 卷"）
-	LastUpdated     int      `json:"last_updated,omitempty"`    // 更新时的已完成章节数
+	EndingDirection string   `json:"ending_direction"`          // hướng kết cục (mô tả mang tính chủ đề)
+	OpenThreads     []string `json:"open_threads,omitempty"`    // tuyến dài còn mở (phải khép lại mới kết thúc)
+	EstimatedScale  string   `json:"estimated_scale,omitempty"` // quy mô mơ hồ (ví dụ "dự kiến 4-6 tập")
+	LastUpdated     int      `json:"last_updated,omitempty"`    // số chương đã hoàn thành tại lúc cập nhật
 }
 
-// ArcOutline 弧级大纲。
+// ArcOutline là đề cương cấp cung.
 type ArcOutline struct {
-	Index             int            `json:"index"` // 卷内弧序号
+	Index             int            `json:"index"` // số thứ tự cung trong tập
 	Title             string         `json:"title"`
-	Goal              string         `json:"goal"`                         // 弧目标（起承转合）
-	EstimatedChapters int            `json:"estimated_chapters,omitempty"` // 骨架弧的预估章数（展开后清零）
+	Goal              string         `json:"goal"`                         // mục tiêu cung (mở đầu – phát triển – cao trào – kết)
+	EstimatedChapters int            `json:"estimated_chapters,omitempty"` // số chương ước tính của cung khung (bị xóa sau khi triển khai)
 	Chapters          []OutlineEntry `json:"chapters"`
 }
 
-// IsExpanded 判断弧是否已展开（有详细章节）。
+// IsExpanded kiểm tra cung đã được triển khai (có các chương chi tiết) hay chưa.
 func (a *ArcOutline) IsExpanded() bool { return len(a.Chapters) > 0 }
 
-// ArcExpansion 是 Architect 在结构边界对一个未写弧作出的完整规划。
-// Title/Goal 不是骨架的机械副本：模型可依据已完成正文修订尚未发生的计划。
+// ArcExpansion là kế hoạch đầy đủ cho một cung chưa viết, do Architect lập tại ranh
+// giới cấu trúc.
+// Title/Goal không phải bản sao máy móc của khung: model có thể sửa kế hoạch về
+// những gì chưa xảy ra dựa trên nội dung đã hoàn thành.
 type ArcExpansion struct {
 	Title    string         `json:"title"`
 	Goal     string         `json:"goal"`
 	Chapters []OutlineEntry `json:"chapters"`
 }
 
-// EstimatedChapterCapacity 计算分层大纲的内部容量估算：已展开弧按真实章节数，
-// 骨架弧按 EstimatedChapters。它只用于上下文策略，不是全书总章数；真正已细化、
-// 可写的章节始终来自 FlattenOutline，禁止把本值暴露给用户或模型。
+// EstimatedChapterCapacity tính ước lượng sức chứa nội bộ của đề cương phân tầng:
+// cung đã triển khai dùng số chương thật, cung khung dùng EstimatedChapters. Giá
+// trị này chỉ dùng cho chiến lược ngữ cảnh, không phải tổng số chương của tác
+// phẩm; các chương đã chi tiết hóa và có thể viết luôn đến từ FlattenOutline,
+// tuyệt đối không lộ giá trị này cho người dùng hoặc model.
 func EstimatedChapterCapacity(volumes []VolumeOutline) int {
 	n := 0
 	for _, v := range volumes {
@@ -120,7 +130,8 @@ func EstimatedChapterCapacity(volumes []VolumeOutline) int {
 	return n
 }
 
-// FlattenOutline 将分层大纲展开为扁平章节列表，保持全局章节号连续。
+// FlattenOutline mở rộng đề cương phân tầng thành danh sách chương phẳng, giữ số
+// chương toàn cục liên tục.
 func FlattenOutline(volumes []VolumeOutline) []OutlineEntry {
 	var result []OutlineEntry
 	ch := 1
@@ -136,20 +147,23 @@ func FlattenOutline(volumes []VolumeOutline) []OutlineEntry {
 	return result
 }
 
-// WorldRule 世界观规则条目。
+// WorldRule là một mục luật thế giới.
 type WorldRule struct {
 	Category string `json:"category"` // magic / technology / geography / society / other
-	Rule     string `json:"rule"`     // 规则描述
-	Boundary string `json:"boundary"` // 不可违反的边界
+	Rule     string `json:"rule"`     // mô tả luật
+	Boundary string `json:"boundary"` // ranh giới không được vi phạm
 }
 
-// RenumberVolumes 按位置重排卷与弧的序号，从 1 开始。
+// RenumberVolumes đánh số lại tập và cung theo vị trí, bắt đầu từ 1.
 //
-// 规划模型写 index 时并不可靠：常见从 0 起算，甚至给同一卷内每个弧都写 0。
-// 而 ExpandArc / ArcScope 是按 index 值查找的，重复或 0 值会让弧永远无法寻址——
-// 症状要到几步之后 expand_arc 报「参数无效」才浮现，且报错完全指错方向。
+// Model quy hoạch không viết index đáng tin cậy: thường đếm từ 0, thậm chí ghi 0
+// cho mọi cung trong cùng một tập. Mà ExpandArc / ArcScope tìm theo giá trị index,
+// nên giá trị lặp hoặc 0 khiến cung không bao giờ truy cập được — triệu chứng chỉ
+// xuất hiện vài bước sau ở expand_arc báo "tham số không hợp lệ", hoàn toàn chỉ sai
+// hướng.
 //
-// 数组顺序才是事实，index 只是它的名字，因此在落盘前统一以位置改写。
+// Thứ tự mảng mới là sự thật, index chỉ là tên của nó, nên trước khi ghi xuống
+// luôn đánh số lại theo vị trí.
 func RenumberVolumes(volumes []VolumeOutline) {
 	for vi := range volumes {
 		volumes[vi].Index = vi + 1
@@ -159,20 +173,26 @@ func RenumberVolumes(volumes []VolumeOutline) {
 	}
 }
 
-// 同一钩子/核心事件重复到此次数即判为大纲空转。2 次可能是有意的两段式，
-// 3 次起没有正当写法：读者被同一个悬念挂三章而无人兑现。
+// Cùng một điểm móc/sự kiện chính lặp tới số lần này bị coi là đề cương đi lòng
+// vòng. Hai lần có thể là chủ ý theo hai phần; từ ba lần trở đi không có cách viết
+// chính đáng: người đọc bị treo bởi cùng một câu hỏi suốt ba chương mà không ai giải
+// đáp.
 const (
 	maxHookRepeat      = 3
 	maxCoreEventRepeat = 2
 )
 
-// StalledOutline 检出「原地打转」的大纲：章节标题各异，但钩子或核心事件是同一句
-// 复制多份。此时 Writer 会忠实执行——每章重述上章、再添一点，读起来像改写而非续写。
+// StalledOutline phát hiện đề cương "đi lòng vòng": tiêu đề chương khác nhau nhưng
+// điểm móc hoặc sự kiện chính là cùng một câu sao chép nhiều lần. Khi đó Writer
+// sẽ trung thành thực hiện — mỗi chương lặp lại chương trước rồi thêm chút, đọc
+// giống viết lại hơn là viết tiếp.
 //
-// 这类缺陷 Writer 与 Editor 都察觉不到：两者都只看单章，而单章本身自洽。
-// 必须在大纲落盘处按整本比对才拦得住。
+// Cả Writer lẫn Editor đều không nhận ra loại khiếm khuyết này: cả hai chỉ
+// nhìn một chương và chương đó tự nhất quán. Phải so sánh toàn bộ tác phẩm tại nơi
+// ghi đề cương mới chặn được.
 //
-// 返回空串表示通过；否则为可直接回给规划师的中文诊断。
+// Trả về chuỗi rỗng nếu đạt; nếu không, trả về chẩn đoán song ngữ có thể gửi thẳng
+// cho người lập kế hoạch.
 func StalledOutline(entries []OutlineEntry) string {
 	hooks := map[string]int{}
 	events := map[string]int{}
@@ -185,12 +205,20 @@ func StalledOutline(entries []OutlineEntry) string {
 		}
 	}
 	if worst, n := mostRepeated(hooks); n >= maxHookRepeat {
-		return fmt.Sprintf("大纲空转：同一 hook 在 %d/%d 章重复——%q。"+
-			"每章 hook 必须是本章新产生的后果，且由下一章兑现；请逐章改写", n, len(entries), truncateRunes(worst, 40))
+		return i18n.Text{
+			VI: fmt.Sprintf("Đề cương đi lòng vòng: cùng hook lặp trong %d/%d chương — %q. "+
+				"Hook của mỗi chương phải là hệ quả mới sinh ra trong chính chương đó và được chương sau giải đáp; vui lòng viết lại từng chương", n, len(entries), truncateRunes(worst, 40)),
+			ZH: fmt.Sprintf("大纲空转：同一 hook 在 %d/%d 章重复——%q。"+
+				"每章 hook 必须是本章新产生的后果，且由下一章兑现；请逐章改写", n, len(entries), truncateRunes(worst, 40)),
+		}.Resolve(i18n.Active())
 	}
 	if worst, n := mostRepeated(events); n >= maxCoreEventRepeat {
-		return fmt.Sprintf("大纲空转：同一 core_event 在 %d 章重复——%q。"+
-			"每章须发生不同的事并改变处境；请逐章改写", n, truncateRunes(worst, 40))
+		return i18n.Text{
+			VI: fmt.Sprintf("Đề cương đi lòng vòng: cùng core_event lặp trong %d chương — %q. "+
+				"Mỗi chương phải xảy ra việc khác nhau và làm thay đổi tình thế; vui lòng viết lại từng chương", n, truncateRunes(worst, 40)),
+			ZH: fmt.Sprintf("大纲空转：同一 core_event 在 %d 章重复——%q。"+
+				"每章须发生不同的事并改变处境；请逐章改写", n, truncateRunes(worst, 40)),
+		}.Resolve(i18n.Active())
 	}
 	return ""
 }
@@ -214,47 +242,68 @@ func truncateRunes(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// SkeletonArcs 统计尚未展开的骨架弧，用于完本前置校验。
+// SkeletonArcs đếm các cung khung chưa triển khai, dùng cho kiểm tra trước khi
+// hoàn thành tác phẩm.
 //
-// 完本校验只比对扁平大纲，而扁平大纲由 FlattenOutline 从「已展开的弧」派生——
-// 骨架弧贡献 0 章，对该校验完全隐形。实测事故：第 1 卷两个骨架弧共 38 章从未展开，
-// 架构师直接跳到第 2 卷写完 15 章后宣告完本，校验因 next(16) > len(flat)(15) 而放行。
+// Kiểm tra hoàn thành chỉ so sánh đề cương phẳng, còn đề cương phẳng do
+// FlattenOutline suy ra từ "cung đã triển khai" — cung khung đóng góp 0 chương và
+// hoàn toàn vô hình với kiểm tra này. Sự cố thực nghiệm: hai cung khung ở tập 1
+// cộng lại 38 chương chưa từng triển khai, Kiến trúc sư nhảy thẳng sang tập 2, viết
+// xong 15 chương rồi tuyên bố hoàn thành; kiểm tra cho qua vì next(16) > len(flat)(15).
 //
-// 想提前收束仍有正当出口：append_volume 带 "final": true 宣告收官卷。
+// Muốn khép lại sớm vẫn có lối thoát chính đáng: append_volume với "final": true để
+// tuyên bố tập kết.
 func SkeletonArcs(volumes []VolumeOutline) []string {
 	var out []string
 	for vi := range volumes {
 		for ai := range volumes[vi].Arcs {
 			if a := &volumes[vi].Arcs[ai]; !a.IsExpanded() {
-				out = append(out, fmt.Sprintf("第 %d 卷第 %d 弧「%s」", volumes[vi].Index, a.Index, a.Title))
+				out = append(out, i18n.Text{
+					VI: fmt.Sprintf("Tập %d, cung %d「%s」", volumes[vi].Index, a.Index, a.Title),
+					ZH: fmt.Sprintf("第 %d 卷第 %d 弧「%s」", volumes[vi].Index, a.Index, a.Title),
+				}.Resolve(i18n.Active()))
 			}
 		}
 	}
 	return out
 }
 
-// maxArcChapters 是单弧详细章节数的上限。
+// maxArcChapters là giới hạn số chương chi tiết trong một cung.
 //
-// 约束来自弧末评审，不是叙事口味：Editor 在弧边界必须读完整弧才能出审阅意见。
-// 实测一弧 20 章 = 113792 字 ≈ 37k token 的正文，叠加大纲/快照/提示后没有任何
-// 可用模型吃得下——本地 32k 窗口装不进，云端免费档在 8 tok/s 下反复断流 14 次，
-// 最终整条流水线卡死在弧边界。8 章 ≈ 45k 字 ≈ 15k token，两侧都留有余量。
+// Ràng buộc đến từ thẩm duyệt cuối cung, không phải khẩu vị văn bản: Editor tại
+// ranh giới cung phải đọc toàn bộ cung mới có thể đưa ra nhận xét. Thực nghiệm một
+// cung 20 chương = 113792 chữ ≈ 37k token nội dung, cộng đề cương/ảnh chụp/prompt
+// thì không model dùng được nào chịu nổi — cửa sổ 32k cục bộ không chứa nổi, gói
+// miễn phí trên đám mây ở 8 tok/s liên tục đứt luồng 14 lần và cuối cùng toàn bộ
+// pipeline kẹt tại ranh giới cung. Tám chương ≈ 45k chữ ≈ 15k token, hai bên đều
+// còn dư địa.
 //
-// 这也是结构上的好事：把 20 章塞进一弧，本身就说明弧目标没有收敛。
+// Về mặt cấu trúc, đây cũng là điều tốt: nhồi 20 chương vào một cung vốn đã chỉ ra
+// mục tiêu cung chưa hội tụ.
 const maxArcChapters = 8
 
-// OversizedArc 检查一个弧的规模是否超限，超限返回可直接回给规划师的中文诊断。
-// 返回空串表示通过。
+// OversizedArc kiểm tra quy mô của một cung có vượt giới hạn hay không; nếu vượt,
+// trả về chẩn đoán song ngữ có thể gửi thẳng cho người lập kế hoạch.
+// Trả về chuỗi rỗng nếu đạt.
 //
-// chapters 取"详细章节数"与"骨架预估章数"的较大者：骨架阶段就写下 estimated=20 的弧，
-// 到 expand_arc 时必然撞上同一道墙，而那已是二十章之后——结构问题要在结构落盘时就报。
+// chapters lấy giá trị lớn hơn giữa "số chương chi tiết" và "số chương ước tính
+// của khung": một cung đã ghi estimated=20 ngay ở giai đoạn khung sẽ chắc chắn
+// đụng cùng giới hạn khi expand_arc, nhưng lúc đó đã qua hai mươi chương — vấn đề
+// cấu trúc phải được báo ngay khi cấu trúc được ghi xuống.
 func OversizedArc(label string, chapters int) string {
 	if chapters <= maxArcChapters {
 		return ""
 	}
-	return fmt.Sprintf("%s 详细章节 %d 章，超过单弧上限 %d 章。"+
-		"弧末评审需一次读完整弧，过长的弧任何模型都无法审阅（实测 20 章即卡死流水线）。"+
-		"请把它拆成多个各自有独立目标的弧：先用本次调用只展开前 %d 章内的第一个弧，"+
-		"其余留作骨架弧，写到边界时再展开",
-		label, chapters, maxArcChapters, maxArcChapters)
+	return i18n.Text{
+		VI: fmt.Sprintf("%s có %d chương chi tiết, vượt giới hạn %d chương cho một cung. "+
+			"Thẩm duyệt cuối cung phải đọc toàn bộ cung một lần, nên không model nào có thể thẩm duyệt cung quá dài (thực nghiệm 20 chương đã làm tắc pipeline). "+
+			"Vui lòng chia thành nhiều cung, mỗi cung có mục tiêu độc lập: lần gọi này chỉ triển khai cung đầu tiên trong %d chương đầu; "+
+			"phần còn lại để thành cung khung, triển khai tiếp khi viết tới ranh giới",
+			label, chapters, maxArcChapters, maxArcChapters),
+		ZH: fmt.Sprintf("%s 详细章节 %d 章，超过单弧上限 %d 章。"+
+			"弧末评审需一次读完整弧，过长的弧任何模型都无法审阅（实测 20 章即卡死流水线）。"+
+			"请把它拆成多个各自有独立目标的弧：先用本次调用只展开前 %d 章内的第一个弧，"+
+			"其余留作骨架弧，写到边界时再展开",
+			label, chapters, maxArcChapters, maxArcChapters),
+	}.Resolve(i18n.Active())
 }
