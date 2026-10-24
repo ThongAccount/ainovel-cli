@@ -44,17 +44,17 @@ func newAdvanceGateTest(t *testing.T, mode domain.ChapterAdvanceMode) (*storepkg
 
 func TestChapterAdvanceGateReviewRequiresExactPermit(t *testing.T) {
 	st, gate, recorder := newAdvanceGateTest(t, domain.ChapterAdvanceReview)
-	forward := &flow.Instruction{Agent: "writer", Chapter: 1, Task: "写第 1 章"}
+	forward := &flow.Instruction{Agent: "writer", Chapter: 1, Task: "viết chương 1"}
 
 	allowed, err := gate.Allow(forward)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if allowed || recorder.paused != 1 {
-		t.Fatalf("未授权新章必须暂停: allowed=%v paused=%d", allowed, recorder.paused)
+		t.Fatalf("chương mới chưa được cấp phép phải tạm dừng: allowed=%v paused=%d", allowed, recorder.paused)
 	}
 	if len(recorder.reasons) == 0 || !strings.Contains(recorder.reasons[len(recorder.reasons)-1], "/next") {
-		t.Fatalf("暂停文案必须给出明确放行方式: %v", recorder.reasons)
+		t.Fatalf("văn bản tạm dừng phải nêu rõ cách cấp phép: %v", recorder.reasons)
 	}
 
 	if err := st.RunMeta.GrantAdvancePermit(1); err != nil {
@@ -62,7 +62,7 @@ func TestChapterAdvanceGateReviewRequiresExactPermit(t *testing.T) {
 	}
 	allowed, err = gate.Allow(forward)
 	if err != nil || !allowed {
-		t.Fatalf("匹配许可应放行: allowed=%v err=%v", allowed, err)
+		t.Fatalf("giấy phép khớp phải được cấp: allowed=%v err=%v", allowed, err)
 	}
 	if err := st.RunMeta.ClearAdvancePermit(1); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestChapterAdvanceGateReviewRequiresExactPermit(t *testing.T) {
 	}
 	allowed, err = gate.Allow(forward)
 	if err == nil || allowed {
-		t.Fatalf("不匹配许可必须显式失败: allowed=%v err=%v", allowed, err)
+		t.Fatalf("giấy phép không khớp phải lỗi tường minh: allowed=%v err=%v", allowed, err)
 	}
 }
 
@@ -81,31 +81,31 @@ func TestChapterAdvanceGateDoesNotGateRewriteOrRecovery(t *testing.T) {
 	if err := st.Progress.MarkChapterComplete(1, 1000, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Progress.SetPendingRewrites([]int{1}, "返工"); err != nil {
+	if err := st.Progress.SetPendingRewrites([]int{1}, "làm lại"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.RunMeta.GrantAdvancePermit(2); err != nil {
 		t.Fatal(err)
 	}
 
-	allowed, err := gate.Allow(&flow.Instruction{Agent: "writer", Chapter: 1, Task: "重写第 1 章"})
+	allowed, err := gate.Allow(&flow.Instruction{Agent: "writer", Chapter: 1, Task: "viết lại chương 1"})
 	if err != nil || !allowed {
-		t.Fatalf("返工不消耗正向章节许可: allowed=%v err=%v", allowed, err)
+		t.Fatalf("làm lại không tiêu thụ giấy phép chương tiến triển: allowed=%v err=%v", allowed, err)
 	}
 	if gate.HandleBoundary() {
-		t.Fatal("返工队列存在时 permit 与 NextChapter 的正常交错不应误报损坏")
+		t.Fatal("khi hàng đợi làm lại còn tồn tại, việc xen kẽ permit với NextChapter bình thường không được báo hỏng")
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvancePermitChapter != 2 {
-		t.Fatalf("返工期间许可必须保持: %+v", meta)
+		t.Fatalf("trong lúc làm lại, giấy phép phải được giữ: %+v", meta)
 	}
 
 	if err := st.Signals.SavePendingCommit(domain.PendingCommit{Chapter: 2, Stage: domain.CommitStageStarted}); err != nil {
 		t.Fatal(err)
 	}
-	allowed, err = gate.Allow(&flow.Instruction{Agent: "writer", Chapter: 2, Task: "恢复第 2 章提交"})
+	allowed, err = gate.Allow(&flow.Instruction{Agent: "writer", Chapter: 2, Task: "khôi phục bản ghi chương 2"})
 	if err != nil || !allowed {
-		t.Fatalf("提交恢复不得被当成新章: allowed=%v err=%v", allowed, err)
+		t.Fatalf("khôi phục bản ghi không được coi là chương mới: allowed=%v err=%v", allowed, err)
 	}
 }
 
@@ -121,11 +121,11 @@ func TestChapterAdvanceGateConsumesPermitOnlyAfterStableCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gate.HandleBoundary() {
-		t.Fatal("提交 saga 未完成时不能消费许可或停机")
+		t.Fatal("khi saga bản ghi chưa xong không được tiêu thụ giấy phép hay dừng máy")
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvancePermitChapter != 1 {
-		t.Fatalf("pending commit 期间许可必须保留: %+v", meta)
+		t.Fatalf("trong lúc có pending commit, giấy phép phải được giữ: %+v", meta)
 	}
 
 	if err := st.Signals.ClearPendingCommit(); err != nil {
@@ -135,15 +135,15 @@ func TestChapterAdvanceGateConsumesPermitOnlyAfterStableCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gate.HandleBoundary() {
-		t.Fatal("稳定提交只消费许可，下一轮派发前才进入等待")
+		t.Fatal("bản ghi ổn định chỉ tiêu thụ giấy phép, phải đợi ở lần phát lệnh kế tiếp")
 	}
 	meta, _ = st.RunMeta.Load()
 	if meta.AdvancePermitChapter != 0 {
-		t.Fatalf("稳定提交后许可必须消费: %+v", meta)
+		t.Fatalf("sau bản ghi ổn định, giấy phép phải được tiêu thụ: %+v", meta)
 	}
 	allowed, err := gate.Allow(&flow.Instruction{Agent: "writer", Chapter: 2})
 	if err != nil || allowed || recorder.paused != 1 {
-		t.Fatalf("消费后下一章必须重新等待授权: allowed=%v paused=%d err=%v", allowed, recorder.paused, err)
+		t.Fatalf("sau khi tiêu thụ, chương kế tiếp phải chờ cấp phép lại: allowed=%v paused=%d err=%v", allowed, recorder.paused, err)
 	}
 }
 
@@ -156,44 +156,44 @@ func TestChapterAdvanceGateRejectsCorruptPermitState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !gate.HandleBoundary() || recorder.paused != 1 {
-		t.Fatal("已完成但缺少 commit checkpoint 必须显式报错并暂停")
+		t.Fatal("chương đã hoàn thành nhưng thiếu commit checkpoint phải báo lỗi tường minh và tạm dừng")
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvancePermitChapter != 1 {
-		t.Fatal("损坏状态下不得猜测消费许可")
+		t.Fatal("trong trạng thái hỏng không được đoán mà tiêu thụ giấy phép")
 	}
 }
 
 func TestChapterAdvanceGateHoldLifecycle(t *testing.T) {
 	st, gate, recorder := newAdvanceGateTest(t, domain.ChapterAdvanceAuto)
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "改完让我验收"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "sửa xong để tôi nghiệm thu"}
 	if err := st.Progress.MarkChapterComplete(1, 1000, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Progress.SetPendingRewrites([]int{1}, "返工"); err != nil {
+	if err := st.Progress.SetPendingRewrites([]int{1}, "làm lại"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatal(err)
 	}
 	if gate.HandleBoundary() {
-		t.Fatal("返工未排空时不能提前暂停")
+		t.Fatal("khi hàng đợi làm lại chưa cạn không được tạm dừng sớm")
 	}
 	if err := st.Progress.CompleteRewrite(1); err != nil {
 		t.Fatal(err)
 	}
 	if !gate.HandleBoundary() || recorder.paused != 1 {
-		t.Fatal("返工排空后必须消费 hold 并暂停")
+		t.Fatal("sau khi hàng đợi làm lại cạn phải tiêu thụ hold và tạm dừng")
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvanceHold != nil {
-		t.Fatalf("暂停前 hold 必须原子消费: %+v", meta.AdvanceHold)
+		t.Fatalf("trước khi tạm dừng, hold phải được tiêu thụ nguyên tử: %+v", meta.AdvanceHold)
 	}
 }
 
 func TestChapterAdvanceGateStopsAfterTargetChapterCommit(t *testing.T) {
 	st, gate, recorder := newAdvanceGateTest(t, domain.ChapterAdvanceAuto)
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "写到第2章"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "viết tới chương 2"}
 	if err := st.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestChapterAdvanceGateStopsAfterTargetChapterCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gate.HandleBoundary() {
-		t.Fatal("目标章节未完成时不能暂停")
+		t.Fatal("khi chương đích chưa hoàn thành không được tạm dừng")
 	}
 	if err := st.Progress.MarkChapterComplete(2, 1000, "", ""); err != nil {
 		t.Fatal(err)
@@ -213,20 +213,20 @@ func TestChapterAdvanceGateStopsAfterTargetChapterCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !gate.HandleBoundary() || recorder.paused != 1 {
-		t.Fatal("目标章节稳定提交后必须暂停")
+		t.Fatal("sau khi chương đích có bản ghi ổn định phải tạm dừng")
 	}
-	if len(recorder.reasons) == 0 || !strings.Contains(recorder.reasons[len(recorder.reasons)-1], "第 2 章") {
-		t.Fatalf("暂停事件缺少目标章节: %v", recorder.reasons)
+	if len(recorder.reasons) == 0 || !strings.Contains(recorder.reasons[len(recorder.reasons)-1], "Chương 2") {
+		t.Fatalf("sự kiện tạm dừng thiếu chương đích: %v", recorder.reasons)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvanceHold != nil {
-		t.Fatalf("目标章节暂停前必须消费 hold: %+v", meta.AdvanceHold)
+		t.Fatalf("trước khi tạm dừng ở chương đích phải tiêu thụ hold: %+v", meta.AdvanceHold)
 	}
 }
 
 func TestChapterAdvanceGateTargetHoldWaitsForCommitRecovery(t *testing.T) {
 	st, gate, recorder := newAdvanceGateTest(t, domain.ChapterAdvanceAuto)
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 1, Reason: "写到第1章"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 1, Reason: "viết tới chương 1"}
 	if err := st.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatal(err)
 	}
@@ -240,34 +240,34 @@ func TestChapterAdvanceGateTargetHoldWaitsForCommitRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gate.HandleBoundary() || recorder.paused != 0 {
-		t.Fatal("提交恢复未完成时不能消费目标章节 hold")
+		t.Fatal("khi khôi phục bản ghi chưa xong không được tiêu thụ hold chương đích")
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvanceHold == nil {
-		t.Fatal("提交恢复期间必须保留目标章节 hold")
+		t.Fatal("trong lúc khôi phục bản ghi phải giữ hold chương đích")
 	}
 	if err := st.Signals.ClearPendingCommit(); err != nil {
 		t.Fatal(err)
 	}
 	if !gate.HandleBoundary() || recorder.paused != 1 {
-		t.Fatal("提交恢复记录消失但 checkpoint 缺失时必须显式暂停")
+		t.Fatal("khi bản ghi khôi phục biến mất mà thiếu checkpoint phải tạm dừng tường minh")
 	}
 	meta, _ = st.RunMeta.Load()
 	if meta.AdvanceHold == nil {
-		t.Fatal("损坏状态下不得消费目标章节 hold")
+		t.Fatal("trong trạng thái hỏng không được tiêu thụ hold chương đích")
 	}
 }
 
 func TestChapterAdvanceGateTargetHoldTemporarilyAuthorizesReviewMode(t *testing.T) {
 	st, gate, recorder := newAdvanceGateTest(t, domain.ChapterAdvanceReview)
-	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "写到第2章"}
+	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "viết tới chương 2"}
 	if err := st.RunMeta.SetAdvanceHold(hold); err != nil {
 		t.Fatal(err)
 	}
 	for chapter := 1; chapter <= 2; chapter++ {
 		allowed, err := gate.Allow(&flow.Instruction{Agent: "writer", Chapter: chapter})
 		if err != nil || !allowed {
-			t.Fatalf("目标章节 hold 应临时放行第 %d 章: allowed=%v err=%v", chapter, allowed, err)
+			t.Fatalf("hold chương đích phải tạm cho phép chương %d: allowed=%v err=%v", chapter, allowed, err)
 		}
 		if err := st.Progress.MarkChapterComplete(chapter, 1000, "", ""); err != nil {
 			t.Fatal(err)
@@ -277,14 +277,14 @@ func TestChapterAdvanceGateTargetHoldTemporarilyAuthorizesReviewMode(t *testing.
 		}
 		stopped := gate.HandleBoundary()
 		if chapter < 2 && stopped {
-			t.Fatal("到达目标章节前不能暂停")
+			t.Fatal("không được tạm dừng trước khi tới chương đích")
 		}
 		if chapter == 2 && !stopped {
-			t.Fatal("到达目标章节后必须暂停")
+			t.Fatal("phải tạm dừng sau khi tới chương đích")
 		}
 	}
 	meta, _ := st.RunMeta.Load()
 	if recorder.paused != 1 || meta.AdvanceMode != domain.ChapterAdvanceReview || meta.AdvanceHold != nil {
-		t.Fatalf("暂停后应恢复原有 review 政策: paused=%d meta=%+v", recorder.paused, meta)
+		t.Fatalf("sau khi tạm dừng phải khôi phục chính sách review cũ: paused=%d meta=%+v", recorder.paused, meta)
 	}
 }
