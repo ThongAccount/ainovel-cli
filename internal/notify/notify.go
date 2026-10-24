@@ -1,8 +1,9 @@
-// Package notify 提供无人值守告警通道。
+// Package notify cung cấp kênh cảnh báo không giám sát.
 //
-// 合宪定位（architecture.md §2.3）：纯观察层动作——告警永不介入控制流
-// （不重试、不改派、不停机），只是把 TUI 内已有的事件"喊"到屏幕之外。
-// Send 异步执行、永不阻塞 Host、失败只记 slog。
+// Định vị hợp lệ (architecture.md §2.3): hành động thuần quan sát — cảnh báo không bao giờ
+// can thiệp vào luồng điều khiển (không thử lại, không đổi phân công, không dừng máy),
+// chỉ "cất tiếng" những sự kiện đã có sẵn trong TUI ra ngoài màn hình.
+// Send chạy bất đồng bộ, không bao giờ chặn Host, thất bại thì chỉ ghi slog.
 package notify
 
 import (
@@ -17,9 +18,9 @@ import (
 	"time"
 )
 
-// Notification 一条告警的全部事实。
+// Notification là toàn bộ sự thật của một cảnh báo.
 type Notification struct {
-	Kind  string `json:"kind"`  // Kinds 返回的稳定事件名
+	Kind  string `json:"kind"`  // tên sự kiện ổn định do Kinds trả về
 	Level string `json:"level"` // info / warn / error
 	Title string `json:"title"`
 	Body  string `json:"body"`
@@ -35,8 +36,8 @@ const (
 	KindWorkerFailure = "worker_failure"
 )
 
-// Kinds 返回当前版本可用于 notify.events 的全部事件名。
-// 这里是通知事件契约的唯一事实源。
+// Kinds trả về toàn bộ tên sự kiện mà phiên bản hiện tại cho phép dùng trong notify.events.
+// Đây là nguồn sự thật duy nhất của hợp đồng sự kiện thông báo.
 func Kinds() []string {
 	return []string{
 		KindRunEnd,
@@ -58,15 +59,16 @@ func IsKnownKind(kind string) bool {
 	return false
 }
 
-// Notifier 按配置分发通知。零值不可用，必须经 New 创建；nil 安全（Send noop）。
+// Notifier phân phối thông báo theo cấu hình. Giá trị không dùng được, phải tạo qua New;
+// an toàn với nil (Send là noop).
 type Notifier struct {
-	command string          // 非空时替代 system 通道（手机推送走这里）
-	events  map[string]bool // nil = 全部 kind 放行
+	command string          // khi khác rỗng thì thay thế kênh system (đẩy điện thoại đi qua đây)
+	events  map[string]bool // nil = cho phép toàn bộ kind
 	timeout time.Duration
 }
 
-// New 创建 Notifier。command 为空走内置 system 通道（Windows 通知气泡 /
-// macOS osascript / Linux notify-send）；events 非空时只放行列出的 kind。
+// New tạo Notifier. Khi command rỗng sẽ dùng kênh system dựng sẵn (bong bóng thông báo Windows /
+// osascript trên macOS / notify-send trên Linux); khi events khác rỗng thì chỉ cho phép các kind đã liệt kê.
 func New(command string, events []string) *Notifier {
 	n := &Notifier{command: strings.TrimSpace(command), timeout: 10 * time.Second}
 	if len(events) > 0 {
@@ -78,7 +80,7 @@ func New(command string, events []string) *Notifier {
 	return n
 }
 
-// Send 异步发送一条通知。过滤、执行、失败处理全部不影响调用方。
+// Send gửi bất đồng bộ một thông báo. Lọc, thực thi và xử lý thất bại đều không ảnh hưởng lời gọi.
 func (n *Notifier) Send(nt Notification) {
 	if !n.allows(nt.Kind) {
 		return
@@ -86,7 +88,7 @@ func (n *Notifier) Send(nt Notification) {
 	go n.deliver(nt)
 }
 
-// allows 返回该 kind 是否放行（nil Notifier / 未列入 events 时拦截）。
+// allows cho biết kind đó có được phép hay không (chặn khi Notifier là nil hoặc kind không có trong events).
 func (n *Notifier) allows(kind string) bool {
 	if n == nil {
 		return false
@@ -94,15 +96,15 @@ func (n *Notifier) allows(kind string) bool {
 	return n.events == nil || n.events[kind]
 }
 
-// deliver 同步执行一次发送并记录失败，由 Send 在 goroutine 中调用。
+// deliver thực hiện đồng bộ một lần gửi và ghi lại lỗi, được Send gọi trong goroutine.
 func (n *Notifier) deliver(nt Notification) {
 	if err := n.deliverError(nt); err != nil {
-		slog.Warn("通知发送失败", "module", "notify", "kind", nt.Kind, "err", err)
+		slog.Warn("Gửi thông báo thất bại", "module", "notify", "kind", nt.Kind, "err", err)
 	}
 }
 
-// deliverError 同步执行一次发送并返回原始错误。Send 在 goroutine
-// 中调用 deliver 记录失败；测试直接调用本方法，避免错误被二次症状掩盖。
+// deliverError thực hiện đồng bộ một lần gửi và trả về lỗi gốc. Send gọi deliver trong
+// goroutine để ghi lỗi; test gọi thẳng hàm này để lỗi không bị triệu chứng thứ cấp che mất.
 func (n *Notifier) deliverError(nt Notification) error {
 	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
 	defer cancel()
@@ -113,8 +115,9 @@ func (n *Notifier) deliverError(nt Notification) error {
 	return runSystem(ctx, nt)
 }
 
-// runCommand 执行用户配置的命令：字段经环境变量传入（一行 curl 零依赖、无注入
-// 风险），完整 JSON 同时写 stdin（复杂分发场景自行解析）。超时由 ctx 强杀。
+// runCommand chạy lệnh do người dùng cấu hình: các trường được truyền qua biến môi trường
+// (một dòng curl, không phụ thuộc gì, không có rủi ro chèn lệnh), đồng thời ghi JSON đầy đủ
+// vào stdin (kịch bản phân phối phức tạp tự phân tích). Hết giờ bị ctx cưỡng chế.
 func runCommand(ctx context.Context, command string, nt Notification) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -131,7 +134,7 @@ func runCommand(ctx context.Context, command string, nt Notification) error {
 	cmd.Stdin = strings.NewReader(string(payload))
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return fmt.Errorf("通知命令超时: %w", ctxErr)
+			return fmt.Errorf("lệnh thông báo hết giờ: %w", ctxErr)
 		}
 		return err
 	}
@@ -147,7 +150,8 @@ func notificationEnv(nt Notification) []string {
 	)
 }
 
-// runSystem 内置桌面通知：只覆盖"人在电脑旁"的场景，找不到命令静默降级。
+// runSystem gửi thông báo desktop dựng sẵn: chỉ phủ kịch bản "người dùng ngồi cạnh máy",
+// không tìm thấy lệnh thì hạ xuống im lặng.
 func runSystem(ctx context.Context, nt Notification) error {
 	switch runtime.GOOS {
 	case "windows":
@@ -157,19 +161,21 @@ func runSystem(ctx context.Context, nt Notification) error {
 		return exec.CommandContext(ctx, "osascript", "-e", script).Run()
 	case "linux":
 		if _, err := exec.LookPath("notify-send"); err != nil {
-			slog.Info("通知降级为日志（无 notify-send）", "module", "notify", "title", nt.Title, "body", nt.Body)
+			slog.Info("Thông báo hạ xuống thành nhật ký (không có notify-send)", "module", "notify", "title", nt.Title, "body", nt.Body)
 			return nil
 		}
 		return exec.CommandContext(ctx, "notify-send", nt.Title, nt.Body).Run()
 	default:
-		slog.Info("通知降级为日志（平台无 system 通道）", "module", "notify", "title", nt.Title, "body", nt.Body)
+		slog.Info("Thông báo hạ xuống thành nhật ký (nền tảng không có kênh system)", "module", "notify", "title", nt.Title, "body", nt.Body)
 		return nil
 	}
 }
 
-// runWindowsNotification 使用系统自带 PowerShell + WinForms NotifyIcon。
-// Windows 10/11 会把气泡显示在右上角并纳入系统通知体验；无需安装模块、注册应用
-// 或携带额外二进制。调用方本就异步执行，短暂保活只用于让系统接收气泡消息。
+// runWindowsNotification dùng PowerShell sẵn có của hệ thống cùng WinForms NotifyIcon.
+// Windows 10/11 hiển thị bong bóng ở góc trên bên phải và đưa nó vào trải nghiệm thông báo
+// của hệ thống; không cần cài module, đăng ký ứng dụng hay mang theo binary phụ.
+// Lời gọi vốn đã chạy bất đồng bộ, thời gian giữ tiến trình sống ngắn chỉ để hệ thống
+// kịp nhận bong bóng.
 func runWindowsNotification(ctx context.Context, nt Notification) error {
 	powershell, err := findPowerShell()
 	if err != nil {
@@ -182,14 +188,15 @@ func runWindowsNotification(ctx context.Context, nt Notification) error {
 }
 
 func findPowerShell() (string, error) {
-	// 优先 PowerShell 7：GitHub Windows runner 和现代 Windows 环境中 pwsh
-	// 对重定向 stdin 的行为更稳定；Windows PowerShell 5.1 仅作兼容后备。
+	// Ưu tiên PowerShell 7: trên GitHub Windows runner và các môi trường Windows hiện đại,
+	// pwsh xử lý việc chuyển hướng stdin ổn định hơn; Windows PowerShell 5.1 chỉ làm
+	// phương án dự phòng để tương thích.
 	for _, name := range []string{"pwsh.exe", "pwsh", "powershell.exe", "powershell"} {
 		if path, err := exec.LookPath(name); err == nil {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("Windows 通知需要 PowerShell，但系统未找到 powershell.exe 或 pwsh.exe")
+	return "", fmt.Errorf("Thông báo Windows cần PowerShell, nhưng không tìm thấy powershell.exe hay pwsh.exe trên hệ thống")
 }
 
 const windowsNotificationScript = `$ErrorActionPreference = 'Stop'
@@ -209,7 +216,7 @@ $notify.ShowBalloonTip(4000)
 Start-Sleep -Milliseconds 4500
 $notify.Dispose()`
 
-// appleScriptString 把任意文本包装为 AppleScript 字符串字面量。
+// appleScriptString bọc mọi văn bản thành một literal chuỗi của AppleScript.
 func appleScriptString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
