@@ -16,7 +16,7 @@ Quản lý context của dự án này không dành cho kịch bản trò chuy�
 
 1. Hội thoại dài sẽ vượt ra ngoài context window của model.
 2. Sáng tác truyện cần giữ không phải "lịch sử trò chuyện" mà là trí nhớ tự sự có cấu trúc.
-3. Sau khi nén, Writer không được đánh mất trạng thái nhân vật, manh mối, kế hoạch chương, ràng buộc văn phong, các mục thẩm duyệt còn cần sửa.
+3. Sau khi nén, Writer không được đánh mất trạng thái nhân vật, phục bút, kế hoạch chương, ràng buộc văn phong, các mục thẩm duyệt còn cần sửa.
 4. Khi khôi phục việc viết, không được giả định model vẫn "nhớ mình đã nói gì trước đó", phải ưu tiên dựa vào các tệp bền vững.
 
 Vì vậy chúng ta dùng một phương án "bộ nhớ phân tầng":
@@ -112,7 +112,7 @@ Vai trò:
 
 - Định nghĩa `ContextProfile` / `MemoryPolicy`
 - Quyết định tải bao nhiêu tóm tắt chương, bao nhiêu dòng thời gian, có bật tóm tắt phân tầng hay không
-- Lắp ráp chương, nhân vật, manh mối, dòng thời gian, kinh nghiệm thẩm duyệt, v.v. trong store
+- Lắp ráp chương, nhân vật, phục bút, dòng thời gian, kinh nghiệm thẩm duyệt, v.v. trong store
 
 ### 3.5 Bàn giao và khôi phục
 
@@ -307,7 +307,7 @@ Những điểm Writer khác với trợ lý code mặc định:
 - Nội dung tóm tắt yêu cầu rõ ràng phải giữ:
   - Tiến độ hiện tại
   - Trạng thái tức thời của nhân vật
-  - Manh mối và tuyến manh mối đang hoạt động
+  - Phục bút và tuyến phục bút đang hoạt động
   - Phản hồi thẩm duyệt và các mục còn cần sửa
   - Văn phong và nhịp điệu
   - Các quyết định then chốt
@@ -605,7 +605,7 @@ Tệp trọng yếu:
 - `internal/orchestrator/store_summary_builder.go`
 - `internal/orchestrator/session.go`
 
-#### Kịch bản 2: Nén xong mất trạng thái nhân vật / manh mối
+#### Kịch bản 2: Nén xong mất trạng thái nhân vật / phục bút
 
 Xem trước:
 

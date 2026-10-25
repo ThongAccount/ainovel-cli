@@ -60,5 +60,5 @@ spec Route 60k sẵn có, hợp đồng agentcore và kiểm thử luồng edito
 
 ## Tổng kết giai đoạn hoàn thành (quyết định thiết kế)
 
-Tổng kết hoàn thành tác phẩm đổi thành **sinh tất định**: store đã có toàn bộ sự thật (tóm tắt chương / nhân vật / sổ cái manh mối / số từ), Engine trực tiếp kết xuất báo cáo,
+Tổng kết hoàn thành tác phẩm đổi thành **sinh tất định**: store đã có toàn bộ sự thật (tóm tắt chương / nhân vật / sổ cái phục bút / số từ), Engine trực tiếp kết xuất báo cáo,
 không tốn thêm một lượt gọi LLM để tạo ra văn bản nghi lễ. Tổng kết LLM của coordinator cũ bị huỷ (engine-arbiter.md §3: tổng kết không phải phán quyết).

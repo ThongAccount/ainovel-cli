@@ -32,7 +32,7 @@ Sắp theo "đường điều tra thường gặp nhất khi có sự cố":
 | Tiến độ | `meta/progress.json` | `phase` / `flow` / `completed_chapters` | phase tiến triển đơn điệu, flow nằm trong tập hợp hợp lệ | phase lùi / flow kẹt ở một trạng thái |
 | La bàn | `meta/compass.json` | khoảng cách giữa `last_updated` và chương mới nhất | gap < 15 chương | gap > 15 chương (bị CompassDrift bắt) |
 | Danh bạ nhân vật phụ | `meta/cast_ledger.json` | số mục / tỉ lệ điền brief_role / tính nhất quán tên | xem §4 | xem §4 |
-| Sổ cái manh mối | `meta/foreshadow.json` | số chương đình trệ dài nhất của `status="planted"` | < số chương/3 | > số chương/3 (bị StaleForeshadow bắt) |
+| Sổ cái phục bút | `meta/foreshadow.json` | số chương đình trệ dài nhất của `status="planted"` | < số chương/3 | > số chương/3 (bị StaleForeshadow bắt) |
 | Dàn ý | `meta/layered_outline.json` | số chương còn lại chưa viết trong tập hiện tại | đã mở rộng trước 1-2 chương | đã viết tới chương hiện tại nhưng chương kế tiếp chưa có outline (OutlineExhausted) |
 | Hồ sơ nhân vật | `meta/characters.json` | có tìm được nhân vật core/important trong tóm tắt N chương gần nhất không | đều tìm thấy | vắng mặt (bị GhostCharacter bắt) |
 | Điểm kiểm tra | `meta/checkpoints.jsonl` | `step` của dòng cuối có khớp progress không | khớp | không khớp (khôi phục sau sập chưa tự lành) |
