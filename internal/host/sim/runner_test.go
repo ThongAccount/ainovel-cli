@@ -239,7 +239,7 @@ func validSynthesisJSON(note string) string {
   "plot_design": {
     "opening_patterns": ["bắt đầu trong áp lực chưa được giải quyết"],
     "escalation_patterns": ["làm rõ cái giá sau mỗi câu trả lời"],
-    "turning_point_patterns": ["đặt lại khung của manh mối"],
+    "turning_point_patterns": ["đặt lại khung của phục bút"],
     "payoff_patterns": ["thu hồi vật đã đặt trước khi thêm câu hỏi tiếp theo"]
   },
   "hook_design": {
@@ -257,7 +257,7 @@ func validSynthesisJSON(note string) string {
   "reader_engagement": {
     "methods": ["khoảng trống tò mò", "rủi ro rõ ràng"],
     "emotional_drivers": ["sợ mất mát"],
-    "progression_rewards": ["thu được manh mối rõ ràng"],
+    "progression_rewards": ["thu được phục bút rõ ràng"],
     "anti_patterns": ["phần giải thích phẳng"]
   },
   "role_guidance": {
