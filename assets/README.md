@@ -1,25 +1,25 @@
-# assets 内容地图
+# assets: Bản đồ nội dung của thư mục assets
 
-给系统加"一段话 / 一篇资料 / 一条规则"之前，先查下表确定归属，再看接线方式。
+Trước khi thêm "một đoạn văn / một tài liệu / một quy tắc" vào hệ thống, hãy tra bảng dưới đây để xác định vị trí, sau đó xem cách kết nối.
 
-| 目录 | 装什么 | 谁消费 | 接线方式 |
+| Thư mục | Lưu gì | Ai tiêu dùng | Cách kết nối |
 |---|---|---|---|
-| `prompts/` | Worker system prompt（writer / editor / architect×2）、Arbiter 裁定 prompt 与一次性任务 prompt（import / simulation / revision） | `agents/build.go`、`internal/arbiter`、imp / sim / revision runner | `load.go` Prompts 字段。注意：simulation_guidance 由 `load.go` 加载时注入，md 文件里看不到 |
-| `references/` | 题材无关的写作知识材料。不进 system prompt，由 novel_context 按角色 / 章节裁剪后注入 `reference_pack` | writer / editor / architect | **三处接线**：`tools.References` 加字段 + `load.go` loadReferences 读取 + `novel_context.go` writerReferences / architectReferences 注入。放进目录不会自动加载 |
-| `references/genres/<style>/` | 题材专属知识（style-references / arc-templates） | 同上，`style != default` 时加载 | `load.go` loadReferences |
-| `rules/` | 已废弃的旧内置规则目录；机械基线已迁到代码，用户规则来自 `~/.ainovel/rules/*.md` / `./.ainovel/rules/*.md` 的自然语言快照 | `userrules.Service` 归一化为 `meta/user_rules.json`；`novel_context` 注入；`commit_chapter` 检查 | 内置基线见 `internal/rules/snapshot.go` 的 `SystemDefaults()`；用户 `.md` 零格式、零 YAML，按自然语言归一化 |
-| `styles/<style>.md` | 题材写作风格指令 | 拼进 **writer** 的 system prompt（`agents/build.go`） | 文件名即 `config.style` 取值。与 `references/genres/<style>/` 是同一题材概念的两种载体：前者是风格指令，后者是知识材料 |
+| `prompts/` | Worker system prompt (writer / editor / architect×2), prompt phán quyết của Tài phán và prompt tác vụ một lần (import / simulation / revision) | `agents/build.go`, `internal/arbiter`, imp / sim / revision runner | `load.go` trường Prompts. Lưu ý: simulation_guidance được `load.go` chèn khi nạp, file md không thấy |
+| `references/` | Tài liệu kiến thức sáng tác không liên quan thể loại. Không vào system prompt, do `novel_context` cắt giảm theo vai trò / chương trước khi chèn vào `reference_pack` | writer / editor / architect | **Ba nơi kết nối**: `tools.References` thêm trường + `load.go` loadReferences đọc + `novel_context.go` writerReferences / architectReferences chèn. Đưa vào thư mục sẽ không được tự động nạp |
+| `references/genres/<style>/` | Kiến thức chuyên thuộc thể loại (style-references / arc-templates) | Tương tự, nạp khi `style != default` | `load.go` loadReferences |
+| `rules/` | Thư mục quy tắc nội bộ cũ đã lỗi thời; cơ sở chuẩn đã được chuyển sang mã, quy tắc người dùng đến từ ảnh chụp ngôn ngữ tự nhiên của `~/.ainovel/rules/*.md` / `./.ainovel/rules/*.md` | `userrules.Service` chuẩn hoá thành `meta/user_rules.json`; `novel_context` chèn; `commit_chapter` kiểm tra | Xem cơ sở chuẩn nội bộ tại `internal/rules/snapshot.go` của `SystemDefaults()`; file `.md` của người dùng không định dạng, không YAML, chuẩn hoá theo ngôn ngữ tự nhiên |
+| `styles/<style>.md` | Chỉ thị phong cách sáng tác theo thể loại | Nối vào system prompt của **writer** (`agents/build.go`) | Tên file là giá trị của `config.style`. Cùng `references/genres/<style>/` là hai bộ chứa của cùng một khái niệm thể loại: cái trước là chỉ thị phong cách, cái sau là tài liệu kiến thức |
 
-## 新内容归属判断（五问）
+## Xác định vị trí cho nội dung mới (5 câu hỏi)
 
-1. 这个流程必须被**保证**？→ 不写 prompt，写代码约束（StopAfterTools / 工具守卫 / Flow Router）
-2. 这是裁定判据？→ 查表型流程写 `internal/flow/router.go`；语义判断写 `prompts/arbiter-*.md`
-3. 这是某个角色的审美 / 执行标准？→ `prompts/<role>.md`
-4. 这是可机械枚举的默认规则（禁词 / 阈值）？→ `internal/rules/snapshot.go` 的 `SystemDefaults()`；用户自定义规则写进 `.ainovel/rules/*.md`，由归一化快照消费（字数/篇幅是语义软约束，走 preferences，不做机械规则）
-5. 这是写作知识材料？→ `references/`（记得三处接线）
+1. Quy trình này phải được**bảo đảm**? → Không viết prompt, viết ràng buộc code (StopAfterTools / guard công cụ / Flow Router)
+2. Đây là tiêu chí phán quyết? → Quy trình loại tra bảng viết `internal/flow/router.go`; phán đoán ngữ nghĩa viết `prompts/arbiter-*.md`
+3. Đây là tiêu chuẩn thẩm mỹ / thực thi của một vai trò? → `prompts/<role>.md`
+4. Đây là quy tắc mặc định có thể liệt kê cơ học (từ cấm / ngưỡng)? → `internal/rules/snapshot.go` của `SystemDefaults()`; quy tắc do người dùng tự định nghĩa ghi vào `.ainovel/rules/*.md`, được ảnh chụp chuẩn hoá sử dụng (số lượng ký tự / độ dài là ràng buộc mềm ngữ nghĩa, xử lý qua preferences, không làm quy tắc cơ học)
+5. Đây là tài liệu kiến thức sáng tác? → `references/` (nhớ ba nơi kết nối)
 
-## 一致性保障
+## Bảo đảm tính nhất quán
 
-prompt 引用的信封路径（`working_memory.*` 等）必须与 `novel_context` 保持一致。工具参数形状只在工具 Schema 中定义；prompt 只补充 Schema 无法表达的业务语义，不再复制 JSON 参数清单和形状示例。
+Các đường dẫn envelope mà prompt tham chiếu (`working_memory.*` v.v.) phải nhất quán với `novel_context`. Hình dạng tham số công cụ chỉ được định nghĩa trong Schema của công cụ; prompt chỉ bổ sung ngữ nghĩa nghiệp vụ Schema không thể biểu thị, không sao chép danh sách tham số JSON và ví dụ hình dạng.
 
-prompt 可以描述单个 Worker 的执行方法，但全局路由、状态迁移和恢复逻辑只以代码为准。能够从 Store 事实确定的步骤放进 Router/Tool；需要理解小说内容或用户意图的判断才留给模型。
+prompt có thể mô tả phương thức thực thi của một Worker đơn, nhưng routing toàn cục, chuyển đổi trạng thái và logic khôi phục chỉ lấy code làm chuẩn. Các bước xác định được từ sự thật trong Store đưa vào Router/Tool; các phán đoán cần hiểu nội dung tiểu thuyết hoặc ý định người dùng thì để lại cho mô hình.
