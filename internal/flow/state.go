@@ -4,22 +4,28 @@ import (
 	"fmt"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// LoadState 从 Store 读取 Route 所需的全部事实。
-// 这是路由的"IO 边界"：所有读取集中在这里，Route 保持纯。
-// 任何读取失败都返回错误；损坏的工件与“尚未生成”是两种不同事实，Router 不得
-// 在不完整快照上继续派单。
+// LoadState đọc từ Store toàn bộ sự thật mà Route cần.
+// Đây là "biên IO" của định tuyến: mọi lượt đọc tập trung ở đây để Route giữ
+// nguyên tính thuần.
+// Mọi lỗi đọc đều được trả về; công cụ hỏng và "chưa sinh ra" là hai sự thật
+// khác nhau, Router không được tiếp tục phái nhiệm vụ trên ảnh chụp không đầy đủ.
 func LoadState(store *storepkg.Store) (State, error) {
 	var s State
+	// Ngôn ngữ tác phẩm quyết định giọng văn của nhiệm vụ gửi cho Worker.
+	s.Lang = i18n.Normalize(store.Language())
 	missing, err := store.FoundationMissing()
 	if err != nil {
 		return s, fmt.Errorf("load foundation state: %w", err)
 	}
 	s.FoundationMissing = missing
-	// 规划级别:save_foundation 落 scale 时写入 RunMeta,补齐分支据此推导规划师。
-	// 读失败按未知处理(tier 空 → 补齐交 LLM 裁定),与其余事实的保守默认一致。
+	// Quy mô quy hoạch: save_foundation ghi scale vào RunMeta, nhánh bổ sung dựa
+	// vào đó để suy ra kiến trúc sư.
+	// Lỗi đọc được coi như chưa biết (tier rỗng → giao phần bổ sung cho LLM phán
+	// quyết), nhất quán với lựa chọn mặc định thận trọng của các sự thật khác.
 	meta, err := store.RunMeta.Load()
 	if err != nil {
 		return s, fmt.Errorf("load run meta: %w", err)
@@ -47,8 +53,10 @@ func LoadState(store *storepkg.Store) (State, error) {
 
 	s.LastCompleted = progress.LatestCompleted()
 
-	// 返工队首若还没有 chapter_contract，先让规划师补一份再派 writer。
-	// 读失败按"已有指令"处理：这是引导性分支，不能让一次读盘失败卡住返工。
+	// Nếu chương đầu hàng đợi làm lại chưa có chapter_contract thì để kiến trúc sư
+	// bổ sung một bản trước khi phái writer.
+	// Lỗi đọc được coi như "đã có chỉ dẫn": đây là nhánh định hướng, không được
+	// để một lần đọc đĩa hỏng chặn cả hàng đợi làm lại.
 	if len(progress.PendingRewrites) > 0 {
 		head := progress.PendingRewrites[0]
 		plan, err := store.Drafts.LoadChapterPlan(head)
@@ -57,7 +65,7 @@ func LoadState(store *storepkg.Store) (State, error) {
 		}
 	}
 
-	// 弧边界仅在分层模式且有已完成章节时才计算
+	// Ranh giới cung chỉ được tính ở chế độ phân lớp và khi đã có chương hoàn thành
 	if progress.Layered && s.LastCompleted > 0 {
 		boundaries, err := store.Outline.CompletedArcBoundaries(s.LastCompleted)
 		if err != nil {
@@ -118,7 +126,8 @@ func LoadState(store *storepkg.Store) (State, error) {
 		}
 	}
 
-	// 非分层全局审阅事实:仅在触发点读盘(其余组合 Route 不消费该字段)。
+	// Sự thật thẩm duyệt toàn cục của sách không phân lớp: chỉ đọc đĩa tại điểm
+	// kích hoạt (các tổ hợp khác Route không dùng trường này).
 	if !progress.Layered && s.LastCompleted > 0 {
 		for completed := domain.ReviewInterval; completed <= len(progress.CompletedChapters); completed += domain.ReviewInterval {
 			chapter := progress.CompletedChapters[completed-1]

@@ -1,21 +1,26 @@
 package flow
 
-// Route 状态空间穷举测试。
+// Kiểm thử liệt kê toàn bộ không gian trạng thái của Route.
 //
-// expectedInstruction 是决策表的独立镜像（可执行规格，对应 architecture.md 铁律二
-// 的 11 分支优先级），故意不复用实现的任何代码：实现重构后行为若有偏移，这里立刻
-// 红灯；要改变行为必须同时改动规格并留下 diff。router_test.go 的单分支用例负责
-// 可读的意图文档，本文件负责全组合空间下的优先级与守恒性质。
+// expectedInstruction là bản sao độc lập của bảng quyết định (đặc tả có thể
+// chạy, tương ứng luật số hai trong architecture.md với 11 nhánh ưu tiên), cố
+// tình không dùng lại bất kỳ mã nào của phần hiện thực: nếu hành vi lệch sau khi
+// refactor, tệp này đỏ ngay lập tức; muốn đổi hành vi thì phải sửa đặc tả và
+// để lại diff. Các ca nhánh đơn trong router_test.go giữ vai trò tài liệu ý
+// định dễ đọc, còn tệp này giữ tính ưu tiên và tính bất biến trên toàn bộ tổ
+// hợp.
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// expectKind 是规格层面的裁定结果：路由到谁、做什么类别的事。
+// expectKind là kết quả phán quyết ở tầng đặc tả: định tuyến tới ai, làm việc
+// thuộc nhóm nào.
 type expectKind int
 
 const (
@@ -32,17 +37,43 @@ const (
 	expectOutlineFeedback
 )
 
-// expectedInstruction 按架构规格计算某 State 应得的裁定。
-// 优先级（自上而下第一个命中）：
-//  1. Progress 缺失 / Phase 终态 → LLM 裁定（nil）
-//  2. 规划期（非写作期）：设定缺项且规划师可判定（save_foundation 已落过 scale）
-//     → 照缺项续派同一规划师；否则 → LLM 裁定（nil，含首次规划师选型）
-//  3. 重写/打磨队列非空 → writer 按队列头（绝对优先，压过一切弧末事务）
-//  4. Flow=Reviewing / Steering → LLM 裁定（nil）
-//  5. 缺失的聚合工件 → Editor 补建
-//  6. 外部修订对后续规划有影响 → Architect 消费
-//  7. 分层模式弧末 → 评审 → 弧摘要 → (卷末)卷摘要 → 展开下一弧 → 追加新卷
-//  8. 其余 → writer 续写下一章
+// Marker nhận diện nhánh trong nhiệm vụ, viết cho cả hai ngôn ngữ tác phẩm:
+// nhiệm vụ gửi cho Worker phải theo ngôn ngữ, nên đặc tả phải phân biệt được
+// cả bản tiếng Việt lẫn bản tiếng Trung.
+var (
+	rewriteMarkers      = []string{"重写", "打磨", "Viết lại", "Hoàn thiện"}
+	nextChapterMarkers  = []string{"写第", "Viết chương"}
+	arcReviewMarkers    = []string{"弧级评审", "Thẩm duyệt mức cung"}
+	globalReviewMarkers = []string{"全局审阅", "Thẩm duyệt toàn cục"}
+	foundationMarkers   = []string{"补齐基础设定", "thiết lập nền tảng"}
+)
+
+// containsAny trả về true nếu chuỗi chứa ít nhất một trong các marker.
+func containsAny(s string, markers ...string) bool {
+	for _, marker := range markers {
+		if contains(s, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// expectedInstruction tính phán quyết mà một State phải nhận theo đặc tả kiến
+// trúc.
+// Ưu tiên (nhánh đầu tiên khớp từ trên xuống):
+//  1. Thiếu Progress / Phase cuối → phán quyết của LLM (nil)
+//  2. Giai đoạn quy hoạch (không phải giai đoạn sáng tác): thiếu thiết lập và
+//     xác định được kiến trúc sư (save_foundation đã ghi scale) → phái tiếp cùng
+//     kiến trúc sư đó; nếu không → phán quyết của LLM (nil, gồm cả lần chọn
+//     kiến trúc sư đầu tiên)
+//  3. Hàng đợi viết lại/hoàn thiện khác rỗng → writer theo đầu hàng đợi (ưu tiên
+//     tuyệt đối, đè lên mọi việc cuối cung)
+//  4. Flow=Reviewing / Steering → phán quyết của LLM (nil)
+//  5. Thiếu công cụ tổng hợp → Biên tập viên dựng lại
+//  6. Sửa đổi bên ngoài ảnh hưởng quy hoạch về sau → Kiến trúc sư tiêu thụ
+//  7. Cuối cung ở chế độ phân lớp → thẩm duyệt → tóm tắt cung → (cuối tập) tóm
+//     tắt tập → mở rộng cung kế tiếp → thêm tập mới
+//  8. Còn lại → writer viết tiếp chương kế tiếp
 func expectedInstruction(s State) expectKind {
 	p := s.Progress
 	if p == nil || p.Phase == domain.PhaseComplete {
@@ -81,7 +112,8 @@ func expectedInstruction(s State) expectKind {
 			return expectNewVolume
 		}
 	}
-	// 非分层:每 ReviewInterval 章一次全局审阅(未做则先审阅再续写)。
+	// Không phân lớp: mỗi ReviewInterval chương một lần thẩm duyệt toàn cục
+	// (chưa làm thì thẩm duyệt trước rồi mới viết tiếp).
 	if !p.Layered && s.LastCompleted > 0 {
 		if due, _ := domain.ShouldReview(len(p.CompletedChapters)); due && !s.HasGlobalReview {
 			return expectGlobalReview
@@ -90,7 +122,8 @@ func expectedInstruction(s State) expectKind {
 	return expectNextChapter
 }
 
-// classify 把实现返回的 Instruction 归到规格类别；不认识的组合直接失败。
+// classify gom Instruction mà phần hiện thực trả về vào nhóm đặc tả; tổ hợp
+// không nhận ra được thì báo lỗi ngay.
 func classify(t *testing.T, inst *Instruction) expectKind {
 	t.Helper()
 	if inst == nil {
@@ -99,16 +132,16 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 	switch inst.Agent {
 	case "writer":
 		switch {
-		case contains(inst.Task, "重写") || contains(inst.Task, "打磨"):
+		case containsAny(inst.Task, rewriteMarkers...):
 			return expectRewrite
-		case contains(inst.Task, "写第"):
+		case containsAny(inst.Task, nextChapterMarkers...):
 			return expectNextChapter
 		}
 	case "editor":
 		switch {
-		case contains(inst.Task, "弧级评审"):
+		case containsAny(inst.Task, arcReviewMarkers...):
 			return expectArcReview
-		case contains(inst.Task, "全局审阅"):
+		case containsAny(inst.Task, globalReviewMarkers...):
 			return expectGlobalReview
 		case contains(inst.Task, "save_arc_summary"):
 			return expectArcSummary
@@ -117,7 +150,7 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 		}
 	case "architect_long":
 		switch {
-		case contains(inst.Task, "补齐基础设定"):
+		case containsAny(inst.Task, foundationMarkers...):
 			return expectFoundationFill
 		case contains(inst.Task, "writer_feedback"):
 			return expectOutlineFeedback
@@ -127,18 +160,19 @@ func classify(t *testing.T, inst *Instruction) expectKind {
 			return expectNewVolume
 		}
 	case "architect_short":
-		if contains(inst.Task, "补齐基础设定") {
+		if containsAny(inst.Task, foundationMarkers...) {
 			return expectFoundationFill
 		}
 		if contains(inst.Task, "writer_feedback") {
 			return expectOutlineFeedback
 		}
 	}
-	t.Fatalf("无法归类的指令：agent=%q task=%q", inst.Agent, inst.Task)
+	t.Fatalf("không phân loại được chỉ dẫn: agent=%q task=%q", inst.Agent, inst.Task)
 	return expectNil
 }
 
-// boundaryCase 是弧边界维度的一个枚举点：边界形态 + 三个摘要事实。
+// boundaryCase là một điểm liệt kê của chiều ranh giới cung: hình dạng ranh giới
+// + ba sự thật về tóm tắt.
 type boundaryCase struct {
 	name             string
 	boundary         *storepkg.ArcBoundary
@@ -171,7 +205,7 @@ func enumerateBoundaryCases() []boundaryCase {
 	followCases := []followCase{
 		{name: "settled"},
 		{name: "expand", expansion: true, nextArc: 4},
-		{name: "expand-no-nextarc", expansion: true, nextArc: 0}, // 展开位缺失 → 不可展开
+		{name: "expand-no-nextarc", expansion: true, nextArc: 0}, // thiếu vị trí mở rộng → không mở rộng được
 		{name: "new-volume", newVolume: true},
 	}
 	for _, review := range []bool{false, true} {
@@ -212,66 +246,71 @@ func TestRoute_ExhaustiveAgainstSpec(t *testing.T) {
 	phases := []domain.Phase{domain.PhaseInit, domain.PhasePremise, domain.PhaseOutline, domain.PhaseWriting, domain.PhaseComplete}
 	flows := []domain.FlowState{domain.FlowWriting, domain.FlowReviewing, domain.FlowRewriting, domain.FlowPolishing, domain.FlowSteering}
 	queues := [][]int{nil, {7, 9}}
-	// {1..5} 命中 ReviewInterval(=5)的全局审阅触发点
+	// {1..5} trúng điểm kích hoạt thẩm duyệt toàn cục ReviewInterval(=5)
 	completedSets := [][]int{nil, {1, 2, 3}, {1, 2, 3, 4, 5}}
 	missingSets := [][]string{nil, {"characters", "world_rules"}}
 	tiers := []domain.PlanningTier{"", domain.PlanningTierShort, domain.PlanningTierLong}
 	globalReviews := []bool{false, true}
 	feedbackCounts := []int{0, 1}
 	aggregates := []*AggregateRefresh{nil, {Kind: AggregateArcSummary, Volume: 1, Arc: 1, EndChapter: 5}}
+	// Nhiệm vụ gửi cho Worker theo ngôn ngữ tác phẩm, nên phải kiểm cả hai.
+	langs := []i18n.Lang{i18n.LangVI, i18n.LangZH}
 
 	total := 0
-	for _, phase := range phases {
-		for _, fl := range flows {
-			for _, queue := range queues {
-				for _, layered := range []bool{false, true} {
-					for _, completed := range completedSets {
-						for _, missing := range missingSets {
-							for _, tier := range tiers {
-								for _, hasGlobal := range globalReviews {
-									for _, feedbackCount := range feedbackCounts {
-										for _, aggregate := range aggregates {
-											for _, bc := range enumerateBoundaryCases() {
-												total++
-												p := &domain.Progress{
-													Phase:             phase,
-													Flow:              fl,
-													Layered:           layered,
-													CompletedChapters: append([]int(nil), completed...),
-													PendingRewrites:   append([]int(nil), queue...),
-												}
-												last := 0
-												if n := len(completed); n > 0 {
-													last = completed[n-1]
-												}
-												s := State{
-													Progress:               p,
-													LastCompleted:          last,
-													ArcBoundary:            bc.boundary,
-													HasArcReview:           bc.hasArcReview,
-													HasArcSummary:          bc.hasArcSummary,
-													HasVolumeSummary:       bc.hasVolumeSummary,
-													FoundationMissing:      append([]string(nil), missing...),
-													PlanningTier:           tier,
-													HasGlobalReview:        hasGlobal,
-													ImmediateFeedbackCount: feedbackCount,
-													AggregateRefresh:       aggregate,
-												}
+	for _, lang := range langs {
+		for _, phase := range phases {
+			for _, fl := range flows {
+				for _, queue := range queues {
+					for _, layered := range []bool{false, true} {
+						for _, completed := range completedSets {
+							for _, missing := range missingSets {
+								for _, tier := range tiers {
+									for _, hasGlobal := range globalReviews {
+										for _, feedbackCount := range feedbackCounts {
+											for _, aggregate := range aggregates {
+												for _, bc := range enumerateBoundaryCases() {
+													total++
+													p := &domain.Progress{
+														Phase:             phase,
+														Flow:              fl,
+														Layered:           layered,
+														CompletedChapters: append([]int(nil), completed...),
+														PendingRewrites:   append([]int(nil), queue...),
+													}
+													last := 0
+													if n := len(completed); n > 0 {
+														last = completed[n-1]
+													}
+													s := State{
+														Lang:                   lang,
+														Progress:               p,
+														LastCompleted:          last,
+														ArcBoundary:            bc.boundary,
+														HasArcReview:           bc.hasArcReview,
+														HasArcSummary:          bc.hasArcSummary,
+														HasVolumeSummary:       bc.hasVolumeSummary,
+														FoundationMissing:      append([]string(nil), missing...),
+														PlanningTier:           tier,
+														HasGlobalReview:        hasGlobal,
+														ImmediateFeedbackCount: feedbackCount,
+														AggregateRefresh:       aggregate,
+													}
 
-												before := snapshotState(s)
-												inst := Route(s)
-												want := expectedInstruction(s)
-												got := classify(t, inst)
-												if got != want {
-													t.Fatalf("phase=%s flow=%s queue=%v layered=%v completed=%v missing=%v tier=%q global=%v boundary=%s:\n规格期望 %d，实现返回 %d（inst=%+v）",
-														phase, fl, queue, layered, completed, missing, tier, hasGlobal, bc.name, want, got, inst)
-												}
-												assertConservation(t, s, inst)
-												if !reflect.DeepEqual(before, snapshotState(s)) {
-													t.Fatalf("Route 必须是纯函数，不得改写输入 State（boundary=%s）", bc.name)
-												}
-												if again := Route(s); !reflect.DeepEqual(inst, again) {
-													t.Fatalf("Route 必须确定：两次调用结果不同（boundary=%s）", bc.name)
+													before := snapshotState(s)
+													inst := Route(s)
+													want := expectedInstruction(s)
+													got := classify(t, inst)
+													if got != want {
+														t.Fatalf("phase=%s flow=%s queue=%v layered=%v completed=%v missing=%v tier=%q global=%v boundary=%s lang=%s:\nđặc tả cần %d, hiện thực trả %d (inst=%+v)",
+															phase, fl, queue, layered, completed, missing, tier, hasGlobal, bc.name, lang, want, got, inst)
+													}
+													assertConservation(t, s, inst)
+													if !reflect.DeepEqual(before, snapshotState(s)) {
+														t.Fatalf("Route phải là hàm thuần, không được sửa State đầu vào (boundary=%s)", bc.name)
+													}
+													if again := Route(s); !reflect.DeepEqual(inst, again) {
+														t.Fatalf("Route phải tất định: hai lần gọi cho kết quả khác nhau (boundary=%s)", bc.name)
+													}
 												}
 											}
 										}
@@ -284,12 +323,12 @@ func TestRoute_ExhaustiveAgainstSpec(t *testing.T) {
 			}
 		}
 	}
-	if total < 5000 {
-		t.Fatalf("枚举空间意外缩水（%d 组合），检查维度枚举", total)
+	if total < 10000 {
+		t.Fatalf("không gian liệt kê tự nhiên co lại (%d tổ hợp), kiểm tra các chiều liệt kê", total)
 	}
 }
 
-// assertConservation 与具体分支无关的守恒性质。
+// assertConservation kiểm tra các bất biến không phụ thuộc nhánh cụ thể.
 func assertConservation(t *testing.T, s State, inst *Instruction) {
 	t.Helper()
 	if inst == nil {
@@ -297,51 +336,58 @@ func assertConservation(t *testing.T, s State, inst *Instruction) {
 	}
 	p := s.Progress
 	if p == nil || p.Phase == domain.PhaseComplete {
-		t.Fatalf("终态或无进度时不得产生指令：%+v", inst)
+		t.Fatalf("trạng thái cuối hoặc không có tiến độ thì không được sinh chỉ dẫn: %+v", inst)
 	}
 	if p.Phase != domain.PhaseWriting {
-		// 规划期唯一合法指令:补齐派单,且规划师与已落盘 tier 一致
+		// Chỉ dẫn hợp lệ duy nhất ở giai đoạn quy hoạch: phái bổ sung, và kiến
+		// trúc sư phải khớp tier đã ghi xuống đĩa.
 		wantPlanner := "architect_long"
 		if s.PlanningTier == domain.PlanningTierShort {
 			wantPlanner = "architect_short"
 		}
-		if inst.Agent != wantPlanner || !contains(inst.Task, "补齐基础设定") || inst.Chapter != 0 {
-			t.Fatalf("规划期指令必须是补齐派单且规划师匹配 tier=%q：%+v", s.PlanningTier, inst)
+		if inst.Agent != wantPlanner || !containsAny(inst.Task, foundationMarkers...) || inst.Chapter != 0 {
+			t.Fatalf("chỉ dẫn giai đoạn quy hoạch phải là phái bổ sung và kiến trúc sư khớp tier=%q: %+v", s.PlanningTier, inst)
 		}
 		return
 	}
 	switch inst.Agent {
 	case "writer":
 		if inst.Chapter <= 0 {
-			t.Fatalf("writer 指令必须带章节号：%+v", inst)
+			t.Fatalf("chỉ dẫn writer phải mang số chương: %+v", inst)
 		}
 		if len(p.PendingRewrites) > 0 {
 			if inst.Chapter != p.PendingRewrites[0] {
-				t.Fatalf("重写队列非空时必须派队列头 %d，got %d", p.PendingRewrites[0], inst.Chapter)
+				t.Fatalf("hàng đợi viết lại khác rỗng thì phải phái đầu hàng đợi %d, nhận %d", p.PendingRewrites[0], inst.Chapter)
 			}
-			wantVerb := "重写"
+			wantVerbs := []string{"重写"}
 			if p.Flow == domain.FlowPolishing {
-				wantVerb = "打磨"
+				wantVerbs = []string{"打磨"}
 			}
-			if !contains(inst.Task, wantVerb) {
-				t.Fatalf("队列任务动词应为 %q：%q", wantVerb, inst.Task)
+			if s.Lang == i18n.LangVI {
+				wantVerbs = []string{"Viết lại"}
+				if p.Flow == domain.FlowPolishing {
+					wantVerbs = []string{"Hoàn thiện"}
+				}
+			}
+			if !containsAny(inst.Task, wantVerbs...) {
+				t.Fatalf("động từ của nhiệm vụ hàng đợi phải là %q: %q", wantVerbs, inst.Task)
 			}
 		} else if inst.Chapter != p.NextChapter() {
-			t.Fatalf("续写指令章节号应为 NextChapter=%d，got %d", p.NextChapter(), inst.Chapter)
+			t.Fatalf("chỉ dẫn viết tiếp phải có số chương NextChapter=%d, nhận %d", p.NextChapter(), inst.Chapter)
 		}
 	case "editor", "architect_long", "architect_short":
 		if inst.Chapter != 0 {
-			t.Fatalf("%s 指令不应带章节号：%+v", inst.Agent, inst)
+			t.Fatalf("chỉ dẫn %s không được mang số chương: %+v", inst.Agent, inst)
 		}
 	default:
-		t.Fatalf("未知路由目标 %q", inst.Agent)
+		t.Fatalf("đích định tuyến không xác định %q", inst.Agent)
 	}
 	if inst.Task == "" || inst.Reason == "" {
-		t.Fatalf("指令的 Task 与 Reason 都不得为空：%+v", inst)
+		t.Fatalf("cả Task lẫn Reason của chỉ dẫn đều không được rỗng: %+v", inst)
 	}
 }
 
-// snapshotState 深拷贝 State 用于纯函数断言。
+// snapshotState sao chép sâu State để khẳng định tính thuần.
 func snapshotState(s State) State {
 	cp := s
 	if s.Progress != nil {

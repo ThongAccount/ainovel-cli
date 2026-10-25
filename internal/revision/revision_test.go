@@ -12,60 +12,63 @@ import (
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/llm"
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
 func TestAnalysisContractIsStrictReady(t *testing.T) {
-	if err := llmcontract.ValidateStrictReady(analysisContract.Schema); err != nil {
-		t.Fatal(err)
+	for _, lang := range []i18n.Lang{i18n.LangVI, i18n.LangZH} {
+		if err := llmcontract.ValidateStrictReady(analysisContractFor(lang).Schema); err != nil {
+			t.Fatalf("hợp đồng ngôn ngữ %s không hợp lệ: %v", lang, err)
+		}
 	}
 }
 
 func TestScanUsesAcceptedContentInsteadOfFileMetadata(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	acceptTestChapter(t, st, 1, "第一段\n第二段", domain.ChapterFacts{Title: "第一章", Summary: "摘要", KeyEvents: []string{"事件"}})
+	acceptTestChapter(t, st, 1, "Đoạn một\nĐoạn hai", domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt", KeyEvents: []string{"Sự kiện"}})
 
 	path := filepath.Join(st.Dir(), "chapters", "01.md")
-	if err := os.WriteFile(path, []byte("第一段\r\n第二段"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("Đoạn một\r\nĐoạn hai"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	changes, err := Scan(st)
 	if err != nil || len(changes) != 0 {
-		t.Fatalf("仅行尾变化不应产生修订: changes=%v err=%v", changes, err)
+		t.Fatalf("Chỉ đổi ký tự cuối dòng không được tạo bản sửa đổi: changes=%v err=%v", changes, err)
 	}
-	if err := os.WriteFile(path, []byte("第一段\r\n用户改写"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("Đoạn một\r\nNgười dùng viết lại"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	changes, err = Scan(st)
 	if err != nil || len(changes) != 1 || changes[0].Before == changes[0].After {
-		t.Fatalf("正文变化未被识别: changes=%+v err=%v", changes, err)
+		t.Fatalf("Thay đổi nội dung không được nhận diện: changes=%+v err=%v", changes, err)
 	}
 }
 
 func TestScanRejectsEmptyCompletedChapter(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	facts := domain.ChapterFacts{Title: "第一章", Summary: "摘要", KeyEvents: []string{"事件"}}
-	acceptTestChapter(t, st, 1, "系统正文", facts)
+	facts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt", KeyEvents: []string{"Sự kiện"}}
+	acceptTestChapter(t, st, 1, "Nội dung hệ thống", facts)
 	if err := os.WriteFile(filepath.Join(st.Dir(), "chapters", "01.md"), []byte(" \n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Scan(st); err == nil {
-		t.Fatal("空终稿必须显式拒绝")
+		t.Fatal("Bản chính rỗng phải bị từ chối tường minh")
 	}
 }
 
 func TestMigrateLegacyBaselineKeepsExternalChangeDirty(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
 	facts := domain.ChapterFacts{
-		Title: "第一章", Summary: "林墨离开村庄", Characters: []string{"林墨"}, KeyEvents: []string{"离村"},
-		TimelineEvents: []domain.TimelineEvent{{Time: "清晨", Event: "林墨离村", Characters: []string{"林墨"}}},
+		Title: "Chương 1", Summary: "Lâm Mặc rời làng", Characters: []string{"Lâm Mặc"}, KeyEvents: []string{"Rời làng"},
+		TimelineEvents: []domain.TimelineEvent{{Time: "Buổi sớm", Event: "Lâm Mặc rời làng", Characters: []string{"Lâm Mặc"}}},
 		HookType:       "mystery", DominantStrand: "quest",
 	}
-	if err := st.Drafts.SaveDraft(1, "系统提交的正文"); err != nil {
+	if err := st.Drafts.SaveDraft(1, "Nội dung hệ thống đã commit"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Drafts.SaveFinalChapter(1, "用户后来修改的正文"); err != nil {
+	if err := st.Drafts.SaveFinalChapter(1, "Nội dung người dùng sửa sau đó"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Summaries.SaveSummary(domain.ChapterSummary{
@@ -86,30 +89,30 @@ func TestMigrateLegacyBaselineKeepsExternalChangeDirty(t *testing.T) {
 	}
 	record, err := st.ChapterRecords.Load(1)
 	if err != nil || record == nil {
-		t.Fatalf("迁移后接纳记录缺失: record=%+v err=%v", record, err)
+		t.Fatalf("Thiếu bản ghi tiếp nhận sau khi di chuyển: record=%+v err=%v", record, err)
 	}
-	if record.Content != "系统提交的正文" {
-		t.Fatalf("迁移错误接纳了当前工作区正文: %q", record.Content)
+	if record.Content != "Nội dung hệ thống đã commit" {
+		t.Fatalf("Di chuyển tiếp nhận nhầm nội dung vùng làm việc hiện tại: %q", record.Content)
 	}
 	changes, err := Scan(st)
 	if err != nil || len(changes) != 1 || changes[0].Chapter != 1 {
-		t.Fatalf("迁移前的外部修改应保持待同步: changes=%+v err=%v", changes, err)
+		t.Fatalf("Sửa đổi bên ngoài trước khi di chuyển phải được giữ ở trạng thái chờ đồng bộ: changes=%+v err=%v", changes, err)
 	}
 	if err := MigrateLegacyBaseline(st); err != nil {
-		t.Fatalf("重复迁移应幂等: %v", err)
+		t.Fatalf("Di chuyển lặp lại phải là idempotent: %v", err)
 	}
 }
 
 func TestMigrateLegacyBaselineFromImportArtifact(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
 	facts := domain.ChapterFacts{
-		Title: "第一章", Summary: "旧书导入", Characters: []string{"林墨"}, KeyEvents: []string{"进入旧城"},
+		Title: "Chương 1", Summary: "Nhập sách cũ", Characters: []string{"Lâm Mặc"}, KeyEvents: []string{"Vào thành cũ"},
 		HookType: "mystery", DominantStrand: "quest",
 	}
-	if err := st.Drafts.SaveDraft(1, "导入正文"); err != nil {
+	if err := st.Drafts.SaveDraft(1, "Nội dung nhập"); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Drafts.SaveFinalChapter(1, "导入正文"); err != nil {
+	if err := st.Drafts.SaveFinalChapter(1, "Nội dung nhập"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Summaries.SaveSummary(domain.ChapterSummary{
@@ -132,116 +135,116 @@ func TestMigrateLegacyBaselineFromImportArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	record, err := st.ChapterRecords.Load(1)
-	if err != nil || record == nil || record.Facts.Summary != facts.Summary || record.Content != "导入正文" {
-		t.Fatalf("导入书迁移结果错误: record=%+v err=%v", record, err)
+	if err != nil || record == nil || record.Facts.Summary != facts.Summary || record.Content != "Nội dung nhập" {
+		t.Fatalf("Kết quả di chuyển sách nhập sai: record=%+v err=%v", record, err)
 	}
 }
 
 func TestChangedExcerptOmitsUnchangedPrefixAndSuffix(t *testing.T) {
-	got := changedExcerpt("相同开头\n旧内容\n相同结尾", "相同开头\n新内容\n相同结尾")
-	if got.Before != "旧内容" || got.After != "新内容" || got.BeforeStart != 2 || got.AfterStart != 2 {
+	got := changedExcerpt("Mở đầu giống nhau\nNội dung cũ\nKết giống nhau", "Mở đầu giống nhau\nNội dung mới\nKết giống nhau")
+	if got.Before != "Nội dung cũ" || got.After != "Nội dung mới" || got.BeforeStart != 2 || got.AfterStart != 2 {
 		t.Fatalf("changed excerpt = %+v", got)
 	}
 }
 
 func TestProjectorRebuildsWorldStateFromChapterRecords(t *testing.T) {
 	st := newRevisionTestStore(t, 2)
-	if err := st.World.SaveTimeline([]domain.TimelineEvent{{Chapter: 1, Time: "旧", Event: "应被删除"}}); err != nil {
+	if err := st.World.SaveTimeline([]domain.TimelineEvent{{Chapter: 1, Time: "Cũ", Event: "Cần bị xoá"}}); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
 	records := []domain.ChapterRecord{
-		testRecord(1, "正文一", domain.ChapterFacts{
-			Title: "第一章", Summary: "新摘要", Characters: []string{"林墨", "店主"}, KeyEvents: []string{"离城"},
-			TimelineEvents:      []domain.TimelineEvent{{Time: "当夜", Event: "林墨离城", Characters: []string{"林墨"}}},
-			ForeshadowUpdates:   []domain.ForeshadowUpdate{{ID: "信件", Action: "plant", Description: "未拆的信"}},
-			RelationshipChanges: []domain.RelationshipEntry{{CharacterA: "林墨", CharacterB: "店主", Relation: "互相信任"}},
-			StateChanges:        []domain.StateChange{{Entity: "林墨", Field: "location", NewValue: "城外"}},
-			CastIntros:          []domain.CastIntro{{Name: "店主", BriefRole: "客栈店主"}}, HookType: "mystery", DominantStrand: "quest",
-		}, domain.StyleDelta{Prose: []string{"减少解释性心理描写"}}, now),
-		testRecord(2, "正文二", domain.ChapterFacts{
-			Title: "第二章", Summary: "后续", Characters: []string{"林墨", "店主"}, KeyEvents: []string{"拆信"},
-			ForeshadowUpdates:   []domain.ForeshadowUpdate{{ID: "信件", Action: "resolve"}},
-			RelationshipChanges: []domain.RelationshipEntry{{CharacterA: "店主", CharacterB: "林墨", Relation: "决裂"}},
+		testRecord(1, "Nội dung một", domain.ChapterFacts{
+			Title: "Chương 1", Summary: "Tóm tắt mới", Characters: []string{"Lâm Mặc", "Chủ quán"}, KeyEvents: []string{"Rời thành"},
+			TimelineEvents:      []domain.TimelineEvent{{Time: "Trong đêm", Event: "Lâm Mặc rời thành", Characters: []string{"Lâm Mặc"}}},
+			ForeshadowUpdates:   []domain.ForeshadowUpdate{{ID: "Lá thư", Action: "plant", Description: "Lá thư chưa mở"}},
+			RelationshipChanges: []domain.RelationshipEntry{{CharacterA: "Lâm Mặc", CharacterB: "Chủ quán", Relation: "Hai bên tin tưởng nhau"}},
+			StateChanges:        []domain.StateChange{{Entity: "Lâm Mặc", Field: "location", NewValue: "Ngoài thành"}},
+			CastIntros:          []domain.CastIntro{{Name: "Chủ quán", BriefRole: "Chủ quán nhà trọ"}}, HookType: "mystery", DominantStrand: "quest",
+		}, domain.StyleDelta{Prose: []string{"Giảm miêu tả tâm lý mang tính giải thích"}}, now),
+		testRecord(2, "Nội dung hai", domain.ChapterFacts{
+			Title: "Chương 2", Summary: "Tiếp theo", Characters: []string{"Lâm Mặc", "Chủ quán"}, KeyEvents: []string{"Mở lá thư"},
+			ForeshadowUpdates:   []domain.ForeshadowUpdate{{ID: "Lá thư", Action: "resolve"}},
+			RelationshipChanges: []domain.RelationshipEntry{{CharacterA: "Chủ quán", CharacterB: "Lâm Mặc", Relation: "Đoạn tuyệt"}},
 		}, domain.StyleDelta{}, now.Add(time.Minute)),
 	}
 	if err := NewProjector(st).Apply(records); err != nil {
 		t.Fatal(err)
 	}
 	timeline, _ := st.World.LoadTimeline()
-	if len(timeline) != 1 || timeline[0].Event != "林墨离城" || timeline[0].Chapter != 1 {
-		t.Fatalf("时间线未按记录重建: %+v", timeline)
+	if len(timeline) != 1 || timeline[0].Event != "Lâm Mặc rời thành" || timeline[0].Chapter != 1 {
+		t.Fatalf("Dòng thời gian không được dựng lại theo bản ghi: %+v", timeline)
 	}
 	ledger, _ := st.World.LoadForeshadowLedger()
 	if len(ledger) != 1 || ledger[0].Status != "resolved" || ledger[0].ResolvedAt != 2 {
-		t.Fatalf("伏笔投影错误: %+v", ledger)
+		t.Fatalf("Phóng chiếu manh mối sai: %+v", ledger)
 	}
 	relationships, _ := st.World.LoadRelationships()
-	if len(relationships) != 1 || relationships[0].Relation != "决裂" || relationships[0].Chapter != 2 {
-		t.Fatalf("关系投影错误: %+v", relationships)
+	if len(relationships) != 1 || relationships[0].Relation != "Đoạn tuyệt" || relationships[0].Chapter != 2 {
+		t.Fatalf("Phóng chiếu quan hệ sai: %+v", relationships)
 	}
 	style, _ := st.World.LoadAuthorRevisionStyle()
-	if style == nil || len(style.Prose) != 1 || style.Prose[0] != "减少解释性心理描写" {
-		t.Fatalf("用户修订风格未投影: %+v", style)
+	if style == nil || len(style.Prose) != 1 || style.Prose[0] != "Giảm miêu tả tâm lý mang tính giải thích" {
+		t.Fatalf("Phong cách sửa đổi của người dùng không được phóng chiếu: %+v", style)
 	}
 }
 
 func TestServiceAcceptsRevisionAndRefreshesFacts(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	acceptTestChapter(t, st, 1, "林墨留在城中。", domain.ChapterFacts{
-		Title: "第一章", Summary: "林墨留在城中", Characters: []string{"林墨"}, KeyEvents: []string{"留城"},
+	acceptTestChapter(t, st, 1, "Lâm Mặc ở lại trong thành.", domain.ChapterFacts{
+		Title: "Chương 1", Summary: "Lâm Mặc ở lại trong thành", Characters: []string{"Lâm Mặc"}, KeyEvents: []string{"Ở lại thành"},
 	})
-	if err := os.WriteFile(filepath.Join(st.Dir(), "chapters", "01.md"), []byte("林墨连夜离开城市。"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st.Dir(), "chapters", "01.md"), []byte("Lâm Mặc rời thành trong đêm."), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	model := &revisionModel{response: `{
-  "change_summary":"林墨由留城改为连夜离城",
+  "change_summary":"Lâm Mặc đổi từ ở lại thành sang rời thành trong đêm",
   "story_changed":true,
   "facts":{
-    "title":"第一章","summary":"林墨连夜离城","characters":["林墨"],"key_events":["林墨离城"],
-    "timeline_events":[{"time":"当夜","event":"林墨离开城市","characters":["林墨"]}],
+    "title":"Chương 1","summary":"Lâm Mặc rời thành trong đêm","characters":["Lâm Mặc"],"key_events":["Lâm Mặc rời thành"],
+    "timeline_events":[{"time":"Trong đêm","event":"Lâm Mặc rời thành","characters":["Lâm Mặc"]}],
     "foreshadow_updates":[],"relationship_changes":[],
-    "state_changes":[{"entity":"林墨","field":"location","old_value":"城中","new_value":"城外","reason":"主动离开"}],
+    "state_changes":[{"entity":"Lâm Mặc","field":"location","old_value":"Trong thành","new_value":"Ngoài thành","reason":"Tự nguyện rời đi"}],
     "cast_intros":[],"hook_type":null,"dominant_strand":null
   },
-  "style_delta":{"prose":["动作表达直接，不补充解释"],"dialogue":[],"taboos":[]},
-  "outline_impact":{"deviation":"主角已提前离城","suggestion":"后续从城外承接"},
+  "style_delta":{"prose":["Diễn đạt hành động trực tiếp, không bổ sung phần giải thích"],"dialogue":[],"taboos":[]},
+  "outline_impact":{"deviation":"Nhân vật chính đã rời thành sớm","suggestion":"Phần sau tiếp nối từ ngoài thành"},
   "downstream_issues":[]
 }`}
 	index := &recordingStyleIndex{}
-	result, err := NewService(st, model, "分析用户修订", index).Sync(context.Background())
+	result, err := NewService(st, model, "Phân tích bản sửa đổi của người dùng", index).Sync(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Applied) != 1 || result.Applied[0] != 1 {
-		t.Fatalf("同步结果错误: %+v", result)
+		t.Fatalf("Kết quả đồng bộ sai: %+v", result)
 	}
 	record, err := st.ChapterRecords.Load(1)
 	if err != nil || record == nil || record.Origin != domain.ChapterOriginUser || record.Revision != 2 {
-		t.Fatalf("接纳记录错误: record=%+v err=%v", record, err)
+		t.Fatalf("Bản ghi tiếp nhận sai: record=%+v err=%v", record, err)
 	}
 	summary, _ := st.Summaries.LoadSummary(1)
-	if summary == nil || summary.Summary != "林墨连夜离城" {
-		t.Fatalf("摘要未刷新: %+v", summary)
+	if summary == nil || summary.Summary != "Lâm Mặc rời thành trong đêm" {
+		t.Fatalf("Tóm tắt chưa được làm mới: %+v", summary)
 	}
 	changes, err := Scan(st)
 	if err != nil || len(changes) != 0 {
-		t.Fatalf("接纳后工作区仍为 dirty: changes=%v err=%v", changes, err)
+		t.Fatalf("Sau khi tiếp nhận, vùng làm việc vẫn còn dirty: changes=%v err=%v", changes, err)
 	}
-	if index.chapter != 1 || index.text != "林墨连夜离开城市。" {
-		t.Fatalf("风格统计索引未刷新: %+v", index)
+	if index.chapter != 1 || index.text != "Lâm Mặc rời thành trong đêm." {
+		t.Fatalf("Chỉ mục thống kê phong cách chưa được làm mới: %+v", index)
 	}
 	if cp := st.Checkpoints.LatestByStep(domain.ChapterScope(1), "revision_sync"); cp == nil {
-		t.Fatal("缺少 revision_sync checkpoint")
+		t.Fatal("Thiếu checkpoint revision_sync")
 	}
 }
 
 func TestServiceResumesProjectionWithoutCallingModel(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	oldFacts := domain.ChapterFacts{Title: "第一章", Summary: "旧摘要", KeyEvents: []string{"旧事件"}}
-	acceptTestChapter(t, st, 1, "旧正文", oldFacts)
-	newFacts := domain.ChapterFacts{Title: "第一章", Summary: "新摘要", KeyEvents: []string{"新事件"}}
-	record := testRecord(1, "用户正文", newFacts, domain.StyleDelta{}, time.Now())
+	oldFacts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt cũ", KeyEvents: []string{"Sự kiện cũ"}}
+	acceptTestChapter(t, st, 1, "Nội dung cũ", oldFacts)
+	newFacts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt mới", KeyEvents: []string{"Sự kiện mới"}}
+	record := testRecord(1, "Nội dung người dùng", newFacts, domain.StyleDelta{}, time.Now())
 	record.Revision = 2
 	if err := st.Drafts.SaveFinalChapter(1, record.Content); err != nil {
 		t.Fatal(err)
@@ -261,24 +264,24 @@ func TestServiceResumesProjectionWithoutCallingModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, _ := st.Summaries.LoadSummary(1)
-	if summary == nil || summary.Summary != "新摘要" {
-		t.Fatalf("恢复后摘要未投影: %+v", summary)
+	if summary == nil || summary.Summary != "Tóm tắt mới" {
+		t.Fatalf("Sau khi khôi phục, tóm tắt chưa được phóng chiếu: %+v", summary)
 	}
 	if pending, _ := st.Revisions.LoadPending(); pending != nil {
-		t.Fatalf("恢复记录未清理: %+v", pending)
+		t.Fatalf("Bản ghi khôi phục chưa được dọn: %+v", pending)
 	}
 }
 
 func TestServiceResumesPreparedAfterRecordWasAlreadyWritten(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	oldFacts := domain.ChapterFacts{Title: "第一章", Summary: "旧摘要", KeyEvents: []string{"旧事件"}}
-	acceptTestChapter(t, st, 1, "旧正文", oldFacts)
+	oldFacts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt cũ", KeyEvents: []string{"Sự kiện cũ"}}
+	acceptTestChapter(t, st, 1, "Nội dung cũ", oldFacts)
 	base, err := st.ChapterRecords.Load(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newFacts := domain.ChapterFacts{Title: "第一章", Summary: "新摘要", KeyEvents: []string{"新事件"}}
-	record := testRecord(1, "用户正文", newFacts, domain.StyleDelta{}, time.Now())
+	newFacts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt mới", KeyEvents: []string{"Sự kiện mới"}}
+	record := testRecord(1, "Nội dung người dùng", newFacts, domain.StyleDelta{}, time.Now())
 	record.Revision = base.Revision + 1
 	if err := st.Drafts.SaveFinalChapter(1, record.Content); err != nil {
 		t.Fatal(err)
@@ -301,29 +304,29 @@ func TestServiceResumesPreparedAfterRecordWasAlreadyWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, _ := st.Summaries.LoadSummary(1)
-	if summary == nil || summary.Summary != "新摘要" {
-		t.Fatalf("prepared 恢复未重建投影: %+v", summary)
+	if summary == nil || summary.Summary != "Tóm tắt mới" {
+		t.Fatalf("Khôi phục prepared không dựng lại phóng chiếu: %+v", summary)
 	}
 	if pending, _ := st.Revisions.LoadPending(); pending != nil {
-		t.Fatalf("prepared 恢复记录未清理: %+v", pending)
+		t.Fatalf("Bản ghi khôi phục prepared chưa được dọn: %+v", pending)
 	}
 }
 
 func TestServiceResumesPartiallyWrittenPreparedBatch(t *testing.T) {
 	st := newRevisionTestStore(t, 2)
 	oldFacts := func(chapter int) domain.ChapterFacts {
-		return domain.ChapterFacts{Title: "旧标题", Summary: "旧摘要", KeyEvents: []string{"旧事件"}}
+		return domain.ChapterFacts{Title: "Tiêu đề cũ", Summary: "Tóm tắt cũ", KeyEvents: []string{"Sự kiện cũ"}}
 	}
-	acceptTestChapter(t, st, 1, "旧正文一", oldFacts(1))
-	acceptTestChapter(t, st, 2, "旧正文二", oldFacts(2))
+	acceptTestChapter(t, st, 1, "Nội dung cũ một", oldFacts(1))
+	acceptTestChapter(t, st, 2, "Nội dung cũ hai", oldFacts(2))
 	items := make([]domain.PendingRevisionItem, 0, 2)
 	for chapter := 1; chapter <= 2; chapter++ {
 		base, err := st.ChapterRecords.Load(chapter)
 		if err != nil {
 			t.Fatal(err)
 		}
-		facts := domain.ChapterFacts{Title: "新标题", Summary: fmt.Sprintf("新摘要%d", chapter), KeyEvents: []string{"新事件"}}
-		content := fmt.Sprintf("用户正文%d", chapter)
+		facts := domain.ChapterFacts{Title: "Tiêu đề mới", Summary: fmt.Sprintf("Tóm tắt mới %d", chapter), KeyEvents: []string{"Sự kiện mới"}}
+		content := fmt.Sprintf("Nội dung người dùng %d", chapter)
 		record := testRecord(chapter, content, facts, domain.StyleDelta{}, time.Now())
 		record.Revision = base.Revision + 1
 		if err := st.Drafts.SaveFinalChapter(chapter, content); err != nil {
@@ -347,7 +350,7 @@ func TestServiceResumesPartiallyWrittenPreparedBatch(t *testing.T) {
 	for chapter := 1; chapter <= 2; chapter++ {
 		record, _ := st.ChapterRecords.Load(chapter)
 		summary, _ := st.Summaries.LoadSummary(chapter)
-		if record == nil || record.Revision != 2 || summary == nil || summary.Summary != fmt.Sprintf("新摘要%d", chapter) {
+		if record == nil || record.Revision != 2 || summary == nil || summary.Summary != fmt.Sprintf("Tóm tắt mới %d", chapter) {
 			t.Fatalf("chapter %d not recovered: record=%+v summary=%+v", chapter, record, summary)
 		}
 	}
@@ -357,53 +360,53 @@ func TestProjectorFillsCastRoleFromLaterChapter(t *testing.T) {
 	st := newRevisionTestStore(t, 2)
 	now := time.Now()
 	records := []domain.ChapterRecord{
-		testRecord(1, "正文一", domain.ChapterFacts{
-			Title: "第一章", Summary: "初见店主", Characters: []string{"店主"}, KeyEvents: []string{"初见"},
+		testRecord(1, "Nội dung một", domain.ChapterFacts{
+			Title: "Chương 1", Summary: "Lần đầu gặp chủ quán", Characters: []string{"Chủ quán"}, KeyEvents: []string{"Gặp lần đầu"},
 		}, domain.StyleDelta{}, now),
-		testRecord(2, "正文二", domain.ChapterFacts{
-			Title: "第二章", Summary: "确认身份", Characters: []string{"店主"}, KeyEvents: []string{"确认身份"},
-			CastIntros: []domain.CastIntro{{Name: "店主", BriefRole: "客栈店主"}},
+		testRecord(2, "Nội dung hai", domain.ChapterFacts{
+			Title: "Chương 2", Summary: "Xác nhận thân phận", Characters: []string{"Chủ quán"}, KeyEvents: []string{"Xác nhận thân phận"},
+			CastIntros: []domain.CastIntro{{Name: "Chủ quán", BriefRole: "Chủ quán nhà trọ"}},
 		}, domain.StyleDelta{}, now.Add(time.Minute)),
 	}
 	if err := NewProjector(st).Apply(records); err != nil {
 		t.Fatal(err)
 	}
 	cast, err := st.Cast.Load()
-	if err != nil || len(cast) != 1 || cast[0].BriefRole != "客栈店主" {
-		t.Fatalf("后续角色简介未补全: cast=%+v err=%v", cast, err)
+	if err != nil || len(cast) != 1 || cast[0].BriefRole != "Chủ quán nhà trọ" {
+		t.Fatalf("Mô tả nhân vật phụ về sau chưa được bổ sung: cast=%+v err=%v", cast, err)
 	}
 }
 
 func TestServiceRejectsAndClearsStalePreparedAnalysis(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	facts := domain.ChapterFacts{Title: "第一章", Summary: "摘要", KeyEvents: []string{"事件"}}
-	acceptTestChapter(t, st, 1, "系统正文", facts)
+	facts := domain.ChapterFacts{Title: "Chương 1", Summary: "Tóm tắt", KeyEvents: []string{"Sự kiện"}}
+	acceptTestChapter(t, st, 1, "Nội dung hệ thống", facts)
 	path := filepath.Join(st.Dir(), "chapters", "01.md")
-	if err := os.WriteFile(path, []byte("第一次修改"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("Sửa lần một"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	base, _ := st.ChapterRecords.Load(1)
-	record := testRecord(1, "第一次修改", facts, domain.StyleDelta{}, time.Now())
+	record := testRecord(1, "Sửa lần một", facts, domain.StyleDelta{}, time.Now())
 	record.Revision = 2
 	pending := domain.PendingRevision{
 		Stage: domain.RevisionStagePrepared,
 		Items: []domain.PendingRevisionItem{{
 			Chapter: 1, BaseSHA256: base.ContentSHA256,
-			CurrentSHA256: domain.ChapterContentSHA256("第一次修改"), Record: record,
+			CurrentSHA256: domain.ChapterContentSHA256("Sửa lần một"), Record: record,
 		}},
 		StartedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	if err := st.Revisions.SavePending(pending); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("第二次修改"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("Sửa lần hai"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewService(st, nil, "", nil).Sync(context.Background()); err == nil {
-		t.Fatal("分析后再次修改正文应拒绝应用")
+		t.Fatal("Sửa nội dung lần nữa sau khi phân tích phải bị từ chối áp dụng")
 	}
 	if pending, _ := st.Revisions.LoadPending(); pending != nil {
-		t.Fatalf("过期 prepared 记录应被清理: %+v", pending)
+		t.Fatalf("Bản ghi prepared hết hạn phải được dọn: %+v", pending)
 	}
 }
 
