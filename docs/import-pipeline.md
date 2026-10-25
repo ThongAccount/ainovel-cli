@@ -97,7 +97,7 @@ Không điều nào trong số đó là sự thật có thể chứng minh một
 | Vị trí nguồn nào là tiêu đề chương, tiêu đề tập hoặc văn bản phụ | LLM | Ngữ nghĩa mở, không thể liệt kê đầy đủ |
 | Tiêu đề tương ứng với vị trí nguồn ổn định nào | Go | SourceUnit, điểm neo văn bản gốc và phạm vi byte có thể kiểm tra bằng máy |
 | Chuyện gì xảy ra trong một chương | LLM | Hiểu ngữ nghĩa văn học |
-| Cách tổng hợp nhân vật, quy tắc thế giới, manh mối và quan hệ | LLM | Tổng hợp ngữ nghĩa xuyên chương |
+| Cách tổng hợp nhân vật, quy tắc thế giới, phục bút và quan hệ | LLM | Tổng hợp ngữ nghĩa xuyên chương |
 | Ranh giới cung tập, câu chuyện đã khép lại hay chưa, cấp độ quy hoạch | LLM | Phụ thuộc vào hình dạng tự sự, không phụ thuộc vào ngưỡng cố định |
 | Phạm vi các chương có tăng dần, không chồng lấn, phủ toàn bộ hay không | Go | Bất biến có thể chứng minh |
 | Kiểu JSON, enum tập đóng, số chương được tham chiếu có hợp lệ hay không | Go | Hợp đồng có kiểu dữ liệu |
@@ -360,7 +360,7 @@ Người dùng có thể:
 
 ## 9. Trích xuất sự thật theo chương cho các lô liên tiếp
 
-Sau khi xác nhận, bắt đầu từ bản phân tích thiếu đầu tiên, gom các chương liên tiếp thành lô theo **ngân sách kép cho đầu vào và đầu ra** của mô hình hiện tại. Phiên bản đầu tiên xử lý lô theo thứ tự, không thực hiện đồng thời giữa các cửa sổ: ID manh mối, bí danh nhân vật và thay đổi trạng thái đều có trình tự thời gian, ledger cô đọng do lô trước tạo ra chính là đầu vào của lô sau.
+Sau khi xác nhận, bắt đầu từ bản phân tích thiếu đầu tiên, gom các chương liên tiếp thành lô theo **ngân sách kép cho đầu vào và đầu ra** của mô hình hiện tại. Phiên bản đầu tiên xử lý lô theo thứ tự, không thực hiện đồng thời giữa các cửa sổ: ID phục bút, bí danh nhân vật và thay đổi trạng thái đều có trình tự thời gian, ledger cô đọng do lô trước tạo ra chính là đầu vào của lô sau.
 
 Việc xử lý tuần tự chỉ ràng buộc chiến lược thực thi của phiên bản đầu tiên, không phải giới hạn kiến trúc vĩnh viễn; artifact phân tích vẫn được ghi xuống đĩa độc lập theo từng chương, và khi có bằng chứng cho thấy việc gộp song song vẫn giữ được chất lượng ngữ nghĩa thì chỉ cần thay thế bộ lập lịch lô.
 
@@ -426,17 +426,17 @@ Một lần gọi lô chỉ chứa:
 
 - nguyên văn và tiêu đề của dải chương liên tiếp hiện tại;
 - bảng bí danh nhân vật cô đọng được suy ra từ các chương trước;
-- ID manh mối đang hoạt động cùng trạng thái một câu;
+- ID phục bút đang hoạt động cùng trạng thái một câu;
 - tóm tắt trạng thái gần đây cần thiết.
 
-Mô hình xử lý các chương trong lô theo thứ tự mảng, có thể duy trì bí danh, manh mối và trạng thái xuyên suốt bên trong lô; sau khi lô kết thúc, Go cập nhật ledger cô đọng theo thứ tự các sự thật đã được xác minh. Nó không phụ thuộc vào Premise toàn sách chưa được sinh ra, cũng không phải đọc lại toàn bộ phần trước. Sự thật theo chương là đầu vào của Foundation, chứ không phải ngược lại tạo ra phụ thuộc vòng.
+Mô hình xử lý các chương trong lô theo thứ tự mảng, có thể duy trì bí danh, phục bút và trạng thái xuyên suốt bên trong lô; sau khi lô kết thúc, Go cập nhật ledger cô đọng theo thứ tự các sự thật đã được xác minh. Nó không phụ thuộc vào Premise toàn sách chưa được sinh ra, cũng không phải đọc lại toàn bộ phần trước. Sự thật theo chương là đầu vào của Foundation, chứ không phải ngược lại tạo ra phụ thuộc vòng.
 
 ### 9.4 Kiểm tra hợp lệ toàn bộ phản hồi
 
 Code kiểm tra hợp lệ theo hai lớp về cấu trúc, miền giá trị và tham chiếu, không hard-code chất lượng văn học:
 
 - Cấp lô: mảng `chapters` liên tục theo số chương dự kiến, không trùng lặp, không thiếu; phạm vi lô, `InputDigest` và schema version khớp;
-- Cấp chương: chapter/title khớp với phân đoạn nguồn, summary/core_event không rỗng, các trường closed-set chính thức của domain như hook type, strand hợp lệ, các trường dòng thời gian, manh mối và thay đổi trạng thái có kiểu hợp lệ.
+- Cấp chương: chapter/title khớp với phân đoạn nguồn, summary/core_event không rỗng, các trường closed-set chính thức của domain như hook type, strand hợp lệ, các trường dòng thời gian, phục bút và thay đổi trạng thái có kiểu hợp lệ.
 
 Code không yêu cầu “phải có 3～6 sự kiện”“phải có nhân vật xuất hiện”“phải có ba cảnh”. Chương yên tĩnh, chương thư từ, chương miêu tả bối cảnh hay chương có nhân vật không tên đều là những hình dạng văn học hợp lệ.
 
@@ -488,7 +488,7 @@ BookSynthesis
 
 Với sách ngắn, nếu một lần có thể chứa toàn bộ sự thật theo chương thì sinh thẳng `BookSynthesis`; chỉ sách dài mới sinh ra `RangeDigest`. Có phân tầng hay không do ngân sách token quyết định một cách máy móc, không phải do ngưỡng số chương quyết định.
 
-`RangeDigest` chứa diễn biến tình tiết, biến đổi nhân vật, sự thật thế giới, các manh mối đã mở/đã thu và các ranh giới cấu trúc ứng viên của dải liên tục đó. Kích thước đầu ra của nó bị ràng buộc bởi một khoảng duy nhất; tổng hợp cuối cùng không còn xuất lại N bản đối tượng chi tiết theo chương, mà chỉ xuất sự thật toàn cục và phạm vi tập/cung.
+`RangeDigest` chứa diễn biến tình tiết, biến đổi nhân vật, sự thật thế giới, các phục bút đã mở/đã thu và các ranh giới cấu trúc ứng viên của dải liên tục đó. Kích thước đầu ra của nó bị ràng buộc bởi một khoảng duy nhất; tổng hợp cuối cùng không còn xuất lại N bản đối tượng chi tiết theo chương, mà chỉ xuất sự thật toàn cục và phạm vi tập/cung.
 
 ### 10.3 Kết quả tổng hợp cuối cùng
 
