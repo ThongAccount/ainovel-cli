@@ -25,11 +25,12 @@ func NewSaveArcSummaryTool(store *store.Store) *SaveArcSummaryTool {
 	return &SaveArcSummaryTool{store: store}
 }
 
-func (t *SaveArcSummaryTool) Name() string { return "save_arc_summary" }
+func (t *SaveArcSummaryTool) Name() string      { return "save_arc_summary" }
+func (t *SaveArcSummaryTool) texts() *toolTexts { return toolTextsFor(t.store.Language()) }
 func (t *SaveArcSummaryTool) Description() string {
-	return "保存弧级摘要、角色状态快照和写作规则（长篇模式，弧结束时调用）"
+	return t.texts().saveArcSummaryDesc
 }
-func (t *SaveArcSummaryTool) Label() string { return "保存弧摘要" }
+func (t *SaveArcSummaryTool) Label() string { return t.texts().saveArcSummaryLabel }
 
 // 写工具，禁止并发。
 func (t *SaveArcSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
@@ -37,28 +38,28 @@ func (t *SaveArcSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return fa
 
 func (t *SaveArcSummaryTool) Schema() map[string]any {
 	snapshotSchema := schema.Object(
-		schema.Property("name", schema.String("角色名")).Required(),
-		schema.Property("status", schema.String("当前状态（存活/受伤/失踪等）")).Required(),
-		schema.Property("power", schema.String("能力变化")),
-		schema.Property("motivation", schema.String("当前动机")).Required(),
-		schema.Property("relations", schema.String("关键关系变化")),
+		schema.Property("name", schema.String(t.texts().saveArcSnapshotName)).Required(),
+		schema.Property("status", schema.String(t.texts().saveArcSnapshotStatus)).Required(),
+		schema.Property("power", schema.String(t.texts().saveArcSnapshotPower)),
+		schema.Property("motivation", schema.String(t.texts().saveArcSnapshotMotiv)).Required(),
+		schema.Property("relations", schema.String(t.texts().saveArcSnapshotRelations)),
 	)
 	voiceSchema := schema.Object(
-		schema.Property("name", schema.String("角色名")).Required(),
-		schema.Property("rules", schema.Array("2-3 条语言特征规则（每条 ≤30 字）", schema.String(""))).Required(),
+		schema.Property("name", schema.String(t.texts().saveArcVoiceName)).Required(),
+		schema.Property("rules", schema.Array(t.texts().saveArcVoiceRules, schema.String(""))).Required(),
 	)
 	styleRulesSchema := schema.Object(
-		schema.Property("prose", schema.Array("3-5 条叙述风格规则（每条 ≤50 字，要具体可执行）", schema.String(""))).Required(),
-		schema.Property("dialogue", schema.Array("核心角色的对话特征规则", voiceSchema)).Required(),
-		schema.Property("taboos", schema.Array("本小说需避免的写法", schema.String(""))),
+		schema.Property("prose", schema.Array(t.texts().saveArcProse, schema.String(""))).Required(),
+		schema.Property("dialogue", schema.Array(t.texts().saveArcDialogue, voiceSchema)).Required(),
+		schema.Property("taboos", schema.Array(t.texts().saveArcTaboos, schema.String(""))),
 	)
 	return schema.Object(
-		schema.Property("volume", schema.Int("卷号")).Required(),
-		schema.Property("arc", schema.Int("弧号")).Required(),
-		schema.Property("title", schema.String("弧标题")).Required(),
-		schema.Property("summary", schema.String("弧摘要（500字以内）")).Required(),
-		schema.Property("key_events", schema.Array("弧内关键事件", schema.String(""))).Required(),
-		schema.Property("character_snapshots", schema.Array("角色状态快照", snapshotSchema)).Required(),
+		schema.Property("volume", schema.Int(t.texts().saveArcVolume)).Required(),
+		schema.Property("arc", schema.Int(t.texts().saveArcArc)).Required(),
+		schema.Property("title", schema.String(t.texts().saveArcTitle)).Required(),
+		schema.Property("summary", schema.String(t.texts().saveArcSummaryField)).Required(),
+		schema.Property("key_events", schema.Array(t.texts().saveArcKeyEvents, schema.String(""))).Required(),
+		schema.Property("character_snapshots", schema.Array(t.texts().saveArcCharacterSnaps, snapshotSchema)).Required(),
 		schema.Property("style_rules", styleRulesSchema).Required(),
 	)
 }
@@ -175,7 +176,7 @@ func (t *SaveArcSummaryTool) arcSummaryReplay(
 	if !reflect.DeepEqual(*existing, summary) ||
 		!slices.Equal(storedSnapshots, snapshots) ||
 		storedRules == nil || !reflect.DeepEqual(*storedRules, rules) {
-		return false, fmt.Errorf("第 %d 卷第 %d 弧摘要已存在但关联工件不同，拒绝覆盖: %w", summary.Volume, summary.Arc, errs.ErrToolConflict)
+		return false, fmt.Errorf("Tập %d cung %d đã có tóm tắt tồn tại nhưng công cụ liên kết khác, từ chối ghi đè: %w", summary.Volume, summary.Arc, errs.ErrToolConflict)
 	}
 	return true, nil
 }

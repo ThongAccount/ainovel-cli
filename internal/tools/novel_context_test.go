@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/rules"
 	"github.com/voocel/ainovel-cli/internal/store"
 )
@@ -159,6 +160,7 @@ func TestContextToolRejectsCorruptCoreState(t *testing.T) {
 }
 
 func TestContextToolChapterModeIncludesWorkingAndReferenceFields(t *testing.T) {
+	setLang(t, string(i18n.LangZH))
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -314,6 +316,7 @@ func TestContextToolChapterModeIncludesWorkingAndReferenceFields(t *testing.T) {
 }
 
 func TestContextToolArchitectModeIncludesPlanningAndFoundation(t *testing.T) {
+	setLang(t, string(i18n.LangZH))
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -577,7 +580,7 @@ func TestFinalizeContextPayloadReportsAppliedTrimming(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary, _ := payload["_loading_summary"].(string)
-	if !strings.Contains(summary, "裁剪:references") {
+	if !strings.Contains(summary, "Cắt giảm:references") {
 		t.Fatalf("loading summary must reflect final trimming, got %q", summary)
 	}
 }
@@ -784,10 +787,10 @@ func TestContextToolSelectedMemoryRecallsStoryThreadsAndReviewLessons(t *testing
 	if containsRecallSummary(payload.Selected.StoryThreads, "建议回看第") {
 		t.Fatalf("expected related_chapters not to be duplicated into story_threads, got %+v", payload.Selected.StoryThreads)
 	}
-	if !containsRecallSummary(payload.Selected.ReviewLessons, "contract 漏项") {
+	if !containsRecallSummary(payload.Selected.ReviewLessons, "contract bị bỏ sót") {
 		t.Fatalf("expected review lesson recall to mention contract miss, got %+v", payload.Selected.ReviewLessons)
 	}
-	if !strings.Contains(payload.Summary, "线索召回:") || !strings.Contains(payload.Summary, "评审召回:") {
+	if !strings.Contains(payload.Summary, "Gọi lại manh mối:") || !strings.Contains(payload.Summary, "Gọi lại đánh giá:") {
 		t.Fatalf("expected loading summary to report selected memory, got %q", payload.Summary)
 	}
 }
@@ -848,7 +851,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	if !containsRecallSummary(payload.Selected.StoryThreads, "失落的血脉") {
 		t.Fatalf("expected second aging foreshadow to surface, got %+v", payload.Selected.StoryThreads)
 	}
-	if !containsRecallSummary(payload.Selected.StoryThreads, "未回收") {
+	if !containsRecallSummary(payload.Selected.StoryThreads, "chưa thu hồi") {
 		t.Fatalf("expected aging item to carry overdue annotation, got %+v", payload.Selected.StoryThreads)
 	}
 	// 近期伏笔（账龄 <30 且不相关）不应被回填。
