@@ -38,9 +38,9 @@ Dùng **định dạng chính xác** sau:
 - [tên nhân vật]: [tâm trạng hiện tại, động cơ, vị trí đang ở, thay đổi quan hệ với nhân vật khác]
 (liệt kê mọi nhân vật đang hoạt động trong các cảnh gần đây)
 
-## Manh mối và tuyến manh mối đang hoạt động
-- [mô tả manh mối]: [chương gieo] → [thời điểm/cách thu hồi dự kiến]
-(chỉ liệt kê manh mối chưa thu hồi)
+## Phục bút và tuyến phục bút đang hoạt động
+- [mô tả phục bút]: [chương gieo] → [thời điểm/cách thu hồi dự kiến]
+(chỉ liệt kê phục bút chưa thu hồi)
 
 ## Phản hồi biên tập và vấn đề chờ sửa
 - [mô tả vấn đề]: [mức độ nghiêm trọng] [đã sửa chưa]
@@ -67,7 +67,7 @@ const WriterUpdateSummaryPrompt = `Các tin nhắn trên là **hội thoại m�
 
 Quy tắc cập nhật:
 - Giữ mọi trạng thái nhân vật còn hiệu lực, cập nhật phần đã thay đổi
-- Bỏ manh mối đã thu hồi, thêm manh mối mới
+- Bỏ phục bút đã thu hồi, thêm phục bút mới
 - Đánh dấu vấn đề biên tập đã sửa là đã sửa hoặc bỏ hẳn, thêm vấn đề mới
 - Cập nhật "Tiến độ hiện tại" tới vị trí mới nhất
 - Cập nhật tông giọng cảm xúc trong "Văn phong và nhịp điệu" (nếu có thay đổi)
@@ -77,7 +77,7 @@ Dùng cùng định dạng với bản tóm tắt trước:
 
 ## Tiến độ hiện tại
 ## Trạng thái tức thời của nhân vật
-## Manh mối và tuyến manh mối đang hoạt động
+## Phục bút và tuyến phục bút đang hoạt động
 ## Phản hồi biên tập và vấn đề chờ sửa
 ## Văn phong và nhịp điệu
 ## Quyết định then chốt
