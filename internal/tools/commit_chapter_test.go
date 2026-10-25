@@ -588,7 +588,7 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 	}
 	completed := []int{1, 2, 3, 4, 5}
 	for _, chapter := range completed {
-		content := fmt.Sprintf("# Chương %d\nNội dung thường.\nCâu chuyện tiếp tục.", chapter)
+		content := fmt.Sprintf("# 第%d章\n普通正文。\n故事继续。", chapter)
 		if err := s.Drafts.SaveFinalChapter(chapter, content); err != nil {
 			t.Fatal(err)
 		}
@@ -607,21 +607,21 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 		t.Fatal("expected initialized style stats")
 	}
 
-	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử thống kê văn phong gia tăng"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "测试增量风格统计"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Drafts.SaveDraft(2, "# Chương hai\nAnh không lùi bước mà đang chờ.\nCâu chuyện sau khi viết lại vẫn tiếp tục."); err != nil {
+	if err := s.Drafts.SaveDraft(2, "# 第二章\n他不是退缩，而是在等待。\n改写后的故事继续。"); err != nil {
 		t.Fatal(err)
 	}
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    2,
-		"title":      "Chương hai",
-		"summary":    "Hoàn tất viết lại cho kiểm thử thống kê gia tăng",
-		"characters": []string{"Nhân vật chính"},
-		"key_events": []string{"Hoàn tất viết lại"},
+		"title":      "第二章",
+		"summary":    "完成增量统计测试重写",
+		"characters": []string{"主角"},
+		"key_events": []string{"完成重写"},
 	})
 	if _, err := NewCommitChapterTool(s, styleStats).Execute(context.Background(), args); err != nil {
 		t.Fatal(err)
@@ -633,7 +633,7 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 	}
 	found := false
 	for _, pattern := range after.Patterns {
-		if strings.HasPrefix(pattern.Name, "Câu đã hiệu chỉnh") && pattern.Total == 1 {
+		if strings.HasPrefix(pattern.Name, "Câu chữ đính chính") && pattern.Total == 1 {
 			found = true
 			break
 		}
