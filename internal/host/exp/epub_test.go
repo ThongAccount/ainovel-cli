@@ -77,12 +77,12 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		}
 	}
 
-	// container.xml 指向 OEBPS/content.opf
+	// container.xml trỏ tới OEBPS/content.opf
 	if !strings.Contains(files["META-INF/container.xml"], `full-path="OEBPS/content.opf"`) {
 		t.Errorf("container.xml does not point to content.opf")
 	}
 
-	// content.opf 必含 metadata + manifest + spine 三大块；spine 顺序 = 章节顺序
+	// content.opf bắt buộc có ba khối metadata + manifest + spine; thứ tự spine = thứ tự chương
 	opf := files["OEBPS/content.opf"]
 	for _, want := range []string{
 		"<metadata", "</metadata>",
@@ -104,7 +104,7 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		t.Errorf("spine order wrong: ch001=%d ch002=%d", idx1, idx2)
 	}
 
-	// 章节 XHTML 含标题 + 段落 + 转义；首行 markdown 标题已剥
+	// XHTML chương chứa tiêu đề + đoạn văn đã escape; tiêu đề Markdown ở dòng đầu đã bị bỏ
 	ch1 := files["OEBPS/chapter001.xhtml"]
 	if !strings.Contains(ch1, "第 1 章 雨夜归人") {
 		t.Errorf("chapter1 missing display title")
@@ -119,7 +119,7 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		t.Errorf("chapter1 should have stripped markdown header: %s", ch1)
 	}
 
-	// nav.xhtml 列出所有章节
+	// nav.xhtml liệt kê mọi chương
 	nav := files["OEBPS/nav.xhtml"]
 	if !strings.Contains(nav, `epub:type="toc"`) {
 		t.Errorf("nav missing epub:type=toc")
@@ -131,7 +131,7 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 
 func TestRenderEPUB_HTMLEscape(t *testing.T) {
 	data, err := renderEPUB(
-		domain.BookMetadata{Title: "A & B", Synopsis: "E < F & G"}, // 特殊字符必须转义
+		domain.BookMetadata{Title: "A & B", Synopsis: "E < F & G"}, // ký tự đặc biệt phải được escape
 		[]int{1},
 		chapterTitleIndex{1: "C \"D\""},
 		nil,
@@ -164,7 +164,8 @@ func TestRenderEPUB_HTMLEscape(t *testing.T) {
 	}
 }
 
-// TestRenderEPUB_LayeredVolume 验证分层大纲只在卷首插卷分隔，弧分隔永不出现。
+// TestRenderEPUB_LayeredVolume kiểm chứng Đề cương phân tầng chỉ chèn dấu phân tách
+// tập ở đầu tập và không bao giờ hiện dấu phân tách cung.
 func TestRenderEPUB_LayeredVolume(t *testing.T) {
 	locs := map[int]chapterLocation{
 		1: {VolumeIdx: 1, VolumeTitle: "起源", IsFirstOfVolume: true},
@@ -221,7 +222,7 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 			t.Errorf("cover.xhtml should not exist when title is empty")
 		}
 	}
-	// content.opf 不应引用 cover
+	// content.opf không được tham chiếu cover
 	for _, f := range zr.File {
 		if f.Name != "OEBPS/content.opf" {
 			continue
@@ -235,8 +236,9 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 	}
 }
 
-// TestRenderEPUB_VietnameseLanguage 钉死语种落进导出物：xml:lang、dc:language、
-// 章标题、封面与目录标题全部跟随作品语种，越南语作品不得再出现 "第 N 章"。
+// TestRenderEPUB_VietnameseLanguage kiểm chứng ngôn ngữ xuất hiện trong sản phẩm:
+// xml:lang, dc:language, tiêu đề chương, nhãn bìa và mục lục đều theo ngôn ngữ
+// tác phẩm; tác phẩm tiếng Việt không được còn "第 N 章".
 func TestRenderEPUB_VietnameseLanguage(t *testing.T) {
 	data, err := renderEPUB(
 		domain.BookMetadata{Title: "Quang vệ", Synopsis: "Một câu chuyện về ánh sáng."},
@@ -292,7 +294,8 @@ func TestRenderEPUB_VietnameseLanguage(t *testing.T) {
 	}
 }
 
-// TestRenderEPUB_ZHLanguage 钉死中文作品仍然导出中文版式。
+// TestRenderEPUB_ZHLanguage kiểm chứng tác phẩm tiếng Trung vẫn xuất theo bố cục
+// tiếng Trung.
 func TestRenderEPUB_ZHLanguage(t *testing.T) {
 	data, err := renderEPUB(
 		domain.BookMetadata{Title: "光斑", Synopsis: "简介"},
@@ -316,6 +319,12 @@ func TestRenderEPUB_ZHLanguage(t *testing.T) {
 	if !strings.Contains(files["OEBPS/content.opf"], "<dc:language>zh-CN</dc:language>") {
 		t.Errorf("OPF should declare zh-CN: %s", files["OEBPS/content.opf"])
 	}
+	if !strings.Contains(files["OEBPS/content.opf"], `xml:lang="zh-CN"`) {
+		t.Errorf("OPF should declare xml:lang zh-CN: %s", files["OEBPS/content.opf"])
+	}
+	if !strings.Contains(files["OEBPS/chapter001.xhtml"], `xml:lang="zh-CN"`) {
+		t.Errorf("chapter should declare xml:lang zh-CN: %s", files["OEBPS/chapter001.xhtml"])
+	}
 	if !strings.Contains(files["OEBPS/chapter001.xhtml"], "第 1 章 雨夜归人") {
 		t.Errorf("chapter should use Chinese heading: %s", files["OEBPS/chapter001.xhtml"])
 	}
@@ -327,10 +336,10 @@ func TestSplitParagraphs(t *testing.T) {
 		want []string
 	}{
 		{"a\n\nb", []string{"a", "b"}},
-		{"a\n\n\n\nb", []string{"a", "b"}}, // 多空行折叠为一个分隔
-		{"a\nb", []string{"a b"}},          // 段内单换行变空格
-		{"  ", nil},                        // 全空白返回 nil
-		{"a\r\n\r\nb", []string{"a", "b"}}, // CRLF 兼容
+		{"a\n\n\n\nb", []string{"a", "b"}}, // nhiều dòng trống gộp thành một lần phân tách
+		{"a\nb", []string{"a b"}},          // một dấu xuống dòng trong đoạn thành khoảng trắng
+		{"  ", nil},                        // toàn khoảng trắng trả về nil
+		{"a\r\n\r\nb", []string{"a", "b"}}, // tương thích CRLF
 	}
 	for _, c := range cases {
 		got := splitParagraphs(c.in)
@@ -341,7 +350,8 @@ func TestSplitParagraphs(t *testing.T) {
 }
 
 func TestBookIdentifier_StableAcrossChapterRanges(t *testing.T) {
-	// 同名作品、不同导出范围必须返回同一 ID — 阅读器才能识别为"更新版本"
+	// Hai lần xuất cùng tên tác phẩm với phạm vi khác nhau phải trả về cùng ID —
+	// nhờ đó trình đọc nhận ra đây là "phiên bản cập nhật"
 	idFull := bookIdentifier("光斑")
 	idAgain := bookIdentifier("光斑")
 	if idFull != idAgain {

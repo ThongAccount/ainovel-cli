@@ -8,7 +8,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain"
 )
 
-// chapterTitleIndex 给定章号查标题，缺失返回空串。
+// chapterTitleIndex tra tiêu đề theo số chương, trả về chuỗi rỗng nếu thiếu.
 type chapterTitleIndex map[int]string
 
 func buildTitleIndex(outline []domain.OutlineEntry) chapterTitleIndex {
@@ -21,18 +21,21 @@ func buildTitleIndex(outline []domain.OutlineEntry) chapterTitleIndex {
 	return idx
 }
 
-// chapterLocation 是某章在分层大纲中的归属。只保留导出版式需要的卷信息——
-// 弧不进导出（读者视角下弧是过细的内部结构）。
+// chapterLocation mô tả vị trí của một chương trong dàn ý phân cấp. Chỉ giữ
+// thông tin tập cần cho bố cục xuất — cung không đưa vào bản xuất (theo góc nhìn
+// của người đọc, cung là cấu trúc nội bộ quá chi tiết).
 type chapterLocation struct {
 	VolumeIdx       int
 	VolumeTitle     string
 	IsFirstOfVolume bool
 }
 
-// buildLocations 按分层大纲的全局章节顺序构造 {chapter -> location}。
-// 章号按 FlattenOutline 同样的规则重建（卷内弧内顺序累加），
-// 以保持与 Progress.CompletedChapters 的章号一致。弧层仍要遍历（算全局章号必经），
-// 但不落入 location——导出只在卷首插分隔。
+// buildLocations dựng ánh xạ {chapter -> location} theo thứ tự chương toàn cục
+// của dàn ý phân cấp. Số chương được dựng lại theo đúng quy tắc của FlattenOutline
+// (cộng dồn theo thứ tự cung trong tập), để giữ khớp với số chương trong
+// Progress.CompletedChapters. Vẫn phải duyệt lớp cung (điều kiện cần để tính số
+// chương toàn cục), nhưng cung không được đưa vào location — bản xuất chỉ chèn
+// dấu phân cách ở đầu tập.
 func buildLocations(volumes []domain.VolumeOutline) map[int]chapterLocation {
 	if len(volumes) == 0 {
 		return nil
@@ -56,19 +59,22 @@ func buildLocations(volumes []domain.VolumeOutline) map[int]chapterLocation {
 	return locs
 }
 
-// chapterHeaderRe 匹配带章号的 Markdown 标题首行（# 第N章 / ## 第 12 章 ...
-// / # Chương 3）。同时接受两种语种：正文写作时可能在两种写法间漂移，
-// 导出器都要剥掉，避免与统一生成的章标题重复。
+// chapterHeaderRe khớp dòng tiêu đề Markdown có số chương ở đầu (# 第N章 /
+// ## 第 12 章 ... / # Chương 3). Chấp nhận cả hai ngôn ngữ: nội dung truyện có
+// thể dao động giữa hai cách viết khi sáng tác, và bộ xuất đều phải bỏ tiêu đề
+// đó để không lặp với tiêu đề chương thống nhất do bộ xuất tạo.
 var chapterHeaderRe = regexp.MustCompile(`(?i)^#+\s+(第.*章|chương\s+\d+)`)
 
-// atxTitleRe 提取 ATX 标题（# 标题）的文字部分。
+// atxTitleRe trích phần chữ của tiêu đề ATX (# tiêu đề).
 var atxTitleRe = regexp.MustCompile(`^#{1,6}\s+(.+?)\s*$`)
 
-// stripChapterTitleHeader 若首行是会与导出器统一标题重复的章节标题则剥掉。
-// 两种情形：① "# 第N章 …"（带章号）；② markdown 标题且其文字恰是本章标题
-// （writer 常把纯章节名当标题写进正文首行，如 "# 边村浮生"，与导出器生成的
-// "第 N 章 边村浮生" 重复）。其它 h1（如 "# 序章"）视为正文一部分，保留。
-// 调用方负责先 TrimSpace，因此前导空行不在考虑范围内。
+// stripChapterTitleHeader bỏ dòng tiêu đề chương ở đầu nếu nó sẽ lặp với tiêu đề
+// thống nhất do bộ xuất tạo. Có hai trường hợp: ① "# 第N章 …" (có số chương);
+// ② tiêu đề Markdown có nội dung đúng bằng tiêu đề chương (Người viết thường
+// đặt tên chương thuần vào dòng đầu nội dung, như "# 边村浮生", lặp với
+// "第 N 章 边村浮生" do bộ xuất tạo). H1 khác (như "# 序章") được coi là một phần
+// của nội dung và được giữ lại. Bên gọi chịu trách nhiệm TrimSpace trước, nên
+// dòng trống đầu tiên không nằm trong phạm vi xét.
 func stripChapterTitleHeader(content, title string) string {
 	first, rest, hasNewline := strings.Cut(content, "\n")
 	if !isChapterTitleLine(first, title) {
@@ -91,10 +97,12 @@ func isChapterTitleLine(line, title string) bool {
 	return len(m) == 2 && strings.TrimSpace(m[1]) == title
 }
 
-// renderTXT 拼接最终文本。
+// renderTXT ghép nối văn bản cuối cùng.
 //
-// 章节顺序由 chapters 决定（调用方已按章号升序去重）。bodies/titleIdx/locations
-// 都按"缺失即降级"处理：标题缺失只输出 "第 N 章"；分层定位缺失就当扁平大纲。
+// Thứ tự chương do chapters quyết định (bên gọi đã sắp xếp tăng dần số chương và
+// loại trùng). bodies/titleIdx/locations đều xử lý theo nguyên tắc "thiếu thì hạ
+// cấp": thiếu tiêu đề chỉ xuất "Chương N"; thiếu vị trí phân cấp thì coi như dàn ý
+// phẳng.
 func renderTXT(
 	novelName string,
 	chapters []int,

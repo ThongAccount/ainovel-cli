@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/voocel/ainovel-cli/internal/i18n"
 	"github.com/voocel/ainovel-cli/internal/llmcontract"
 )
 
@@ -18,10 +19,10 @@ const maxSourceRunes = 60000
 
 func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 	if deps.Store == nil || deps.LLM == nil {
-		return nil, fmt.Errorf("deps incomplete")
+		return nil, fmt.Errorf("thiếu phụ thuộc bắt buộc")
 	}
 	if strings.TrimSpace(opts.SourceDir) == "" {
-		return nil, fmt.Errorf("source dir is required")
+		return nil, fmt.Errorf("thư mục nguồn là bắt buộc")
 	}
 
 	events := make(chan Event, 32)
@@ -35,72 +36,78 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 			}
 		}
 
-		emit(StageScan, 0, 0, "扫描 simulate 语料...", nil)
+		texts := simTextsFor(deps.Store.Language())
+
+		emit(StageScan, 0, 0, "Đang quét ngữ liệu mô phỏng...", nil)
 		sources, err := scanSources(opts.SourceDir)
 		if err != nil {
-			emit(StageError, 0, 0, "扫描 simulate 目录失败", err)
+			emit(StageError, 0, 0, "Quét thư mục mô phỏng thất bại", err)
 			return
 		}
 		if len(sources) == 0 {
-			emit(StageError, 0, 0, "simulate 目录中没有可分析的 .txt/.md/.markdown 文件", fmt.Errorf("no simulation sources"))
+			emit(StageError, 0, 0, "Thư mục mô phỏng không có tệp .txt/.md/.markdown nào để phân tích", fmt.Errorf("không có nguồn mô phỏng"))
 			return
 		}
 
 		existing, err := deps.Store.Simulation.Load()
 		if err != nil {
-			emit(StageError, 0, len(sources), "读取既有画像失败", err)
+			emit(StageError, 0, len(sources), "Đọc hồ sơ mô phỏng hiện có thất bại", err)
 			return
 		}
 		pending := pendingSources(existing, sources)
 		if len(pending) == 0 {
-			emit(StageDone, 0, len(sources), "画像已是最新，未发现新增或变更文章", nil)
+			emit(StageDone, 0, len(sources), "Hồ sơ mô phỏng đã là bản mới nhất, không phát hiện bài viết mới hoặc thay đổi", nil)
 			return
 		}
 
 		reports := make([]domain.SimulationSourceReport, 0, len(pending))
 		for i, source := range pending {
 			if err := ctx.Err(); err != nil {
-				emit(StageError, i, len(pending), "用户取消画像分析", err)
+				emit(StageError, i, len(pending), "Người dùng đã hủy phân tích hồ sơ mô phỏng", err)
 				return
 			}
-			emit(StageAnalyze, i+1, len(pending), fmt.Sprintf("分析仿写语料 %d/%d：%s", i+1, len(pending), source.RelativePath), nil)
-			report, err := AnalyzeSource(ctx, deps.LLM, deps.Prompts.Source, source)
+			emit(StageAnalyze, i+1, len(pending), fmt.Sprintf("Phân tích ngữ liệu mô phỏng %d/%d: %s", i+1, len(pending), source.RelativePath), nil)
+			report, err := analyzeSource(ctx, deps.LLM, deps.Prompts.Source, source, texts)
 			if err != nil {
-				emit(StageError, i+1, len(pending), "语料分析失败", err)
+				emit(StageError, i+1, len(pending), "Phân tích ngữ liệu thất bại", err)
 				return
 			}
 			reports = append(reports, *report)
 		}
 
 		allReports := mergeSourceReports(existing, reports)
-		emit(StageMerge, len(pending), len(pending), "合并仿写画像...", nil)
-		synthesis, err := MergeSynthesis(ctx, deps.LLM, deps.Prompts.Merge, existing, allReports)
+		emit(StageMerge, len(pending), len(pending), "Đang gộp hồ sơ mô phỏng...", nil)
+		synthesis, err := mergeSynthesis(ctx, deps.LLM, deps.Prompts.Merge, existing, allReports, texts)
 		if err != nil {
-			emit(StageError, len(pending), len(pending), "画像合并失败", err)
+			emit(StageError, len(pending), len(pending), "Gộp hồ sơ mô phỏng thất bại", err)
 			return
 		}
 		profile := buildProfile(existing, opts.SourceDir, pending, reports, *synthesis, time.Now())
 		if err := deps.Store.Simulation.Save(profile); err != nil {
-			emit(StageError, len(pending), len(pending), "保存仿写画像失败", err)
+			emit(StageError, len(pending), len(pending), "Lưu hồ sơ mô phỏng thất bại", err)
 			return
 		}
-		emit(StageDone, len(pending), len(pending), fmt.Sprintf("仿写画像已更新：新增/变更 %d 篇，累计 %d 篇", len(pending), len(profile.Corpus.Sources)), nil)
+		emit(StageDone, len(pending), len(pending), fmt.Sprintf("Hồ sơ mô phỏng đã cập nhật: thêm/thay đổi %d bài, tổng cộng %d bài", len(pending), len(profile.Corpus.Sources)), nil)
 	}()
 	return events, nil
 }
 
 func AnalyzeSource(ctx context.Context, llm LLMChat, systemPrompt string, source scannedSource) (*domain.SimulationSourceReport, error) {
+	return analyzeSource(ctx, llm, systemPrompt, source, simTextsFor(string(i18n.Active())))
+}
+
+func analyzeSource(ctx context.Context, llm LLMChat, systemPrompt string, source scannedSource, texts *simTexts) (*domain.SimulationSourceReport, error) {
 	if strings.TrimSpace(systemPrompt) == "" {
-		return nil, fmt.Errorf("source prompt is required")
+		return nil, fmt.Errorf("prompt nguồn là bắt buộc")
 	}
-	report, err := generateStructured(ctx, llm, sourceReportContract, systemPrompt, buildSourceUserPrompt(source), func(report *domain.SimulationSourceReport) error {
+	report, err := generateStructured(ctx, llm, sourceReportContract(texts), systemPrompt, buildSourceUserPrompt(source, texts), func(report *domain.SimulationSourceReport) error {
 		if strings.TrimSpace(report.Summary) == "" {
-			return fmt.Errorf("summary is required")
+			return fmt.Errorf("tóm tắt là bắt buộc")
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("parse source report %s: %w", source.RelativePath, err)
+		return nil, fmt.Errorf("phân tích báo cáo nguồn %s thất bại: %w", source.RelativePath, err)
 	}
 	now := time.Now().Format(time.RFC3339)
 	report.RelativePath = source.RelativePath
@@ -111,12 +118,16 @@ func AnalyzeSource(ctx context.Context, llm LLMChat, systemPrompt string, source
 }
 
 func MergeSynthesis(ctx context.Context, llm LLMChat, systemPrompt string, existing *domain.SimulationProfile, reports []domain.SimulationSourceReport) (*domain.SimulationSynthesis, error) {
+	return mergeSynthesis(ctx, llm, systemPrompt, existing, reports, simTextsFor(string(i18n.Active())))
+}
+
+func mergeSynthesis(ctx context.Context, llm LLMChat, systemPrompt string, existing *domain.SimulationProfile, reports []domain.SimulationSourceReport, texts *simTexts) (*domain.SimulationSynthesis, error) {
 	if strings.TrimSpace(systemPrompt) == "" {
-		return nil, fmt.Errorf("merge prompt is required")
+		return nil, fmt.Errorf("prompt gộp là bắt buộc")
 	}
-	synthesis, err := generateStructured[domain.SimulationSynthesis](ctx, llm, synthesisContract, systemPrompt, buildMergeUserPrompt(existing, reports), nil)
+	synthesis, err := generateStructured[domain.SimulationSynthesis](ctx, llm, synthesisContract(texts), systemPrompt, buildMergeUserPrompt(existing, reports), nil)
 	if err != nil {
-		return nil, fmt.Errorf("parse synthesis: %w", err)
+		return nil, fmt.Errorf("phân tích bản tổng hợp thất bại: %w", err)
 	}
 	return &synthesis, nil
 }
@@ -130,19 +141,19 @@ func generateStructured[T any](ctx context.Context, model LLMChat, contract llmc
 		Agent:        "simulation",
 		Hooks: llmcontract.Hooks{
 			Resolved: func(res llmcontract.Resolution) {
-				slog.Debug("仿写画像结构化协议选择", "contract", contract.Name,
+				slog.Debug("Chọn giao thức có cấu trúc cho hồ sơ mô phỏng", "contract", contract.Name,
 					"structured_mode", res.Mode, "capability_source", res.Source,
 					"provider", res.Provider, "model", res.Model,
 					"schema_fingerprint", contract.Fingerprint())
 			},
 			Correction: func(ev llmcontract.Correction) {
-				slog.Warn("仿写画像输出自愈", "contract", contract.Name, "attempt", ev.Attempt,
+				slog.Warn("Tự sửa kết quả hồ sơ mô phỏng", "contract", contract.Name, "attempt", ev.Attempt,
 					"layer", ev.Layer, "structured_mode", ev.Mode, "err", ev.Err)
 			},
 		},
 	})
 	if err != nil {
-		return out, fmt.Errorf("structured generation: %w", err)
+		return out, fmt.Errorf("sinh kết quả có cấu trúc thất bại: %w", err)
 	}
 	return out, nil
 }
@@ -259,12 +270,12 @@ func sortProfile(profile *domain.SimulationProfile) {
 	})
 }
 
-func buildSourceUserPrompt(source scannedSource) string {
+func buildSourceUserPrompt(source scannedSource, texts *simTexts) string {
 	payload := map[string]any{
 		"relative_path": source.RelativePath,
 		"sha256":        source.SHA256,
 		"size_bytes":    source.SizeBytes,
-		"content":       compactSourceContent(source.content),
+		"content":       compactSourceContent(source.content, texts.truncatedMarker),
 	}
 	data, _ := json.MarshalIndent(payload, "", "  ")
 	return string(data)
@@ -279,12 +290,12 @@ func buildMergeUserPrompt(existing *domain.SimulationProfile, reports []domain.S
 	return string(data)
 }
 
-func compactSourceContent(s string) string {
+func compactSourceContent(s, truncatedMarker string) string {
 	runes := []rune(s)
 	if len(runes) <= maxSourceRunes {
 		return s
 	}
 	head := maxSourceRunes * 3 / 4
 	tail := maxSourceRunes - head
-	return string(runes[:head]) + "\n\n[...truncated...]\n\n" + string(runes[len(runes)-tail:])
+	return string(runes[:head]) + "\n\n" + truncatedMarker + "\n\n" + string(runes[len(runes)-tail:])
 }

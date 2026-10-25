@@ -24,17 +24,17 @@ type scannedSource struct {
 func scanSources(root string) ([]scannedSource, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return nil, fmt.Errorf("source dir is required")
+		return nil, fmt.Errorf("thư mục nguồn là bắt buộc")
 	}
 	info, err := os.Stat(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("simulate directory not found: %s", root)
+			return nil, fmt.Errorf("không tìm thấy thư mục mô phỏng: %s", root)
 		}
 		return nil, err
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("simulate path is not a directory: %s", root)
+		return nil, fmt.Errorf("đường dẫn mô phỏng không phải thư mục: %s", root)
 	}
 
 	var out []scannedSource
@@ -72,8 +72,10 @@ func scanSources(root string) ([]scannedSource, error) {
 				ModTime:      info.ModTime().Format(time.RFC3339),
 			},
 			absPath: path,
-			// 指纹算在原始字节上（文件身份，增量去重稳定）；content 解码后供
-			// LLM 分析——GBK 语料直接当 UTF-8 读是乱码，画像会被静默喂垃圾。
+			// Vân tay được tính trên byte gốc (định danh tệp, ổn định cho việc loại
+			// trùng tăng dần); content được giải mã trước khi LLM phân tích — đọc
+			// GBK trực tiếp như UTF-8 sẽ thành ký tự hỏng và âm thầm đưa dữ liệu rác
+			// vào hồ sơ.
 			content: utils.DecodeText(data),
 		})
 		return nil
