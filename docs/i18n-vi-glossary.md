@@ -41,11 +41,13 @@ một từ vựng. Nếu một khái niệm không có trong bảng, dịch theo
 | 正文 | nội dung truyện (văn bản) |
 | 草稿 | bản nháp |
 | 终稿 | bản chính |
-| 提纲 / 大纲 | dàn ý |
+| 大纲 / 提纲 | Đề cương (dàn ý trong văn mô tả) |
 | 弧摘要 | tóm tắt cung |
 | 卷摘要 | tóm tắt tập |
 | 摘要 | tóm tắt |
-| 伏笔 | manh mối |
+| 伏笔 | phục bút |
+| 线索 | manh mối |
+| 钩子 | điểm móc |
 | 时间线 | dòng thời gian |
 | 人物 / 角色 | nhân vật |
 | 设定 | thiết lập / bối cảnh |
