@@ -42,6 +42,8 @@ một từ vựng. Nếu một khái niệm không có trong bảng, dịch theo
 | 草稿 | bản nháp |
 | 终稿 | bản chính |
 | 大纲 / 提纲 | Đề cương (dàn ý trong văn mô tả) |
+| 题材和基调 | Thể loại và giọng điệu |
+| 题材定位 | Định vị thể loại |
 | 弧摘要 | tóm tắt cung |
 | 卷摘要 | tóm tắt tập |
 | 摘要 | tóm tắt |
