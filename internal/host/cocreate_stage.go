@@ -8,7 +8,7 @@ import (
 )
 
 // buildStoryStateSummary dựng một đoạn tóm tắt gọn về trạng thái truyện, để trợ lý đồng sáng tác theo giai đoạn biết “đã viết được gì”.
-// Dùng lại các điểm truy cập của store, chỉ lấy sự thật cấp cao cần cho hướng quy hoạch (tiến độ / la bàn / tập gần nhất / nhân vật chính / manh mối đang hoạt động);
+// Dùng lại các điểm truy cập của store, chỉ lấy sự thật cấp cao cần cho hướng quy hoạch (tiến độ / la bàn / tập gần nhất / nhân vật chính / phục bút đang hoạt động);
 // không kéo nội dung truyện, không nạp JSON đầy đủ của novel_context — đồng sáng tác là hội thoại, cần bản tóm tắt dễ đọc chứ không phải ngữ cảnh viết.
 // Mục nào thiếu thì bỏ qua (best-effort), trả về chuỗi rỗng nghĩa là chưa có tiến độ dùng được.
 //
