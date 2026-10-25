@@ -17,12 +17,12 @@ func TestStyleStatsIndexAppendRewriteAndRemove(t *testing.T) {
 	}
 
 	chapters := map[int]string{
-		1: "# 风起\n夜里，他不是迟疑，而是恐惧。\n此生未能远行，望你替我看看远方的山海。\n他走了。",
-		2: "# 云涌\n清晨，她沉默了几息。\n此生未能远行，望你替我看看远方的山海。\n天亮了。",
-		3: "# 雷动\n陆九渊眼中闪过寒意。\n此生未能远行，望你替我看看远方的山海。\n无人回答。",
-		4: "# 暗潮\n众人觉得风雨将至。\n长街尽头传来钟声。\n门开了。",
-		5: "# 归途\n仿佛一场旧梦压在山巅。\n一种说不出的寒意蔓延。\n灯灭了。",
-		6: "# 山门\n他心头一紧，却没有回头。\n故事仍要继续向前延伸。",
+		1: "# Gió nổi\nTrong đêm, anh không do dự mà sợ hãi.\nCả đời chưa đi xa, mong người thay tôi ngắm núi biển nơi xa.\nAnh bước đi.",
+		2: "# Mây dâng\nBuổi sớm, cô im lặng mấy nhịp thở.\nCả đời chưa đi xa, mong người thay tôi ngắm núi biển nơi xa.\nTrời sáng.",
+		3: "# Sấm vang\nÁnh lạnh lướt qua mắt Lưu Cửu Uyên.\nCả đời chưa đi xa, mong người thay tôi ngắm núi biển nơi xa.\nKhông ai đáp.",
+		4: "# Thuận triều ngầm\nMọi người cảm thấy mưa gió sắp tới.\nTiếng chuông vọng từ cuối phố dài.\nCánh cửa mở.",
+		5: "# Lối về\nNhư một giấc mơ cũ nằm nặng trên đỉnh núi.\nMột thứ lạnh lẽo không nói thành lời lan ra.\nNgọn đèn tắt.",
+		6: "# Cửa núi\nTrái tim anh thắt lại, nhưng anh không quay đầu.\nCâu chuyện vẫn phải tiếp tục đi về phía trước.",
 	}
 	for chapter, text := range chapters {
 		if err := st.Drafts.SaveFinalChapter(chapter, text); err != nil {
@@ -30,13 +30,13 @@ func TestStyleStatsIndexAppendRewriteAndRemove(t *testing.T) {
 		}
 	}
 
-	titles := []string{"第一章 风起", "云涌", "第3章 雷动", "暗潮", "归途", "山门"}
-	stopwords := []string{"陆九渊"}
+	titles := []string{"第一章 风起", "Mây dâng", "第3章 雷动", "Thuận triều ngầm", "Lối về", "Cửa núi"}
+	stopwords := []string{"Lưu Cửu Uyên"}
 	index := NewStyleStatsIndex(st)
 	completed := []int{1, 2, 3, 4, 5, 6}
 	assertStyleStatsIndexMatchesCompute(t, index, chapters, completed, titles, stopwords)
 
-	chapters[7] = "# 雾散\n宛如旧梦惊醒，他没有说话。\n风停了。"
+	chapters[7] = "# Sương tan\nNhư tỉnh giấc khỏi giấc mơ cũ, anh không nói gì.\nGió ngừng."
 	if err := st.Drafts.SaveFinalChapter(7, chapters[7]); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestStyleStatsIndexAppendRewriteAndRemove(t *testing.T) {
 	completed = append(completed, 7)
 	assertStyleStatsIndexMatchesCompute(t, index, chapters, completed, titles, stopwords)
 
-	chapters[2] = "# 云涌\n黎明时，她心头一沉。\n改写后的长句只在这一章出现，不应成为跨章复读。\n风停了。"
+	chapters[2] = "# Mây dâng\nKhi bình minh, cô thấy nặng ngực.\nCâu dài sau khi viết lại chỉ xuất hiện ở chương này, không được lặp lại qua các chương.\nGió ngừng."
 	if err := st.Drafts.SaveFinalChapter(2, chapters[2]); err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +62,8 @@ func TestStyleStatsIndexSurfacesMissingCompletedChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := NewStyleStatsIndex(st).Snapshot([]int{1}, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "第 1 章已标记完成但终稿不存在") {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "chương 1 đã đánh dấu hoàn thành nhưng không có bản chính") {
+		t.Fatalf("lỗi không mong đợi: %v", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestStyleStatsDependencyIsRequired(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			defer func() {
 				if recover() == nil {
-					t.Fatal("nil StyleStatsIndex must fail immediately")
+					t.Fatal("StyleStatsIndex nil phải thất bại ngay lập tức")
 				}
 			}()
 			tt.new()
@@ -122,6 +122,6 @@ func assertStyleStatsIndexMatchesCompute(
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("index mismatch\n got: %+v\nwant: %+v", got, want)
+		t.Fatalf("chỉ mục không khớp\n có: %+v\n cần: %+v", got, want)
 	}
 }

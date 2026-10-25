@@ -14,14 +14,14 @@ func TestResolveOutlineFeedbackClearsReviewedFeedback(t *testing.T) {
 	if err := st.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Outline.AppendOutlineFeedback(store.ChapterFeedback{Chapter: 1, StoryChanged: true, ChangeSummary: "主角提前离城"}); err != nil {
+	if err := st.Outline.AppendOutlineFeedback(store.ChapterFeedback{Chapter: 1, StoryChanged: true, ChangeSummary: "Nhân vật chính rời thành sớm"}); err != nil {
 		t.Fatal(err)
 	}
 	tool := NewResolveOutlineFeedbackTool(st)
 	if err := llmcontract.ValidateStrictReady(tool.Schema()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tool.Execute(context.Background(), []byte(`{"reason":"后续计划不依赖主角所在城市"}`)); err != nil {
+	if _, err := tool.Execute(context.Background(), []byte(`{"reason":"Kế hoạch sau không phụ thuộc vào thành phố của nhân vật chính"}`)); err != nil {
 		t.Fatal(err)
 	}
 	feedback, err := st.Outline.LoadPendingOutlineFeedback()

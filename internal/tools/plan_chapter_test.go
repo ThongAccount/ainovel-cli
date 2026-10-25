@@ -13,11 +13,11 @@ import (
 func planArgs(chapter int) json.RawMessage {
 	b, _ := json.Marshal(map[string]any{
 		"chapter":     chapter,
-		"title":       "测试章",
-		"goal":        "推进剧情",
-		"conflict":    "外部阻力",
-		"hook":        "留下悬念",
-		"emotion_arc": "紧张到期待",
+		"title":       "Chương thử nghiệm",
+		"goal":        "Đẩy tiến cốt truyện",
+		"conflict":    "Trở lực bên ngoài",
+		"hook":        "Để lại tình tiết hấp dẫn",
+		"emotion_arc": "Từ căng thẳng đến mong đợi",
 	})
 	return b
 }
@@ -32,17 +32,17 @@ func TestPlanChapterRejectsUnexpandedLayeredChapter(t *testing.T) {
 	}
 	if err := st.Outline.SaveLayeredOutline([]domain.VolumeOutline{{
 		Index: 1,
-		Title: "第一卷",
+		Title: "Tập một",
 		Arcs: []domain.ArcOutline{{
 			Index: 1,
-			Title: "第一弧",
+			Title: "Cung một",
 			Chapters: []domain.OutlineEntry{
-				{Chapter: 1, Title: "一"},
-				{Chapter: 2, Title: "二"},
+				{Chapter: 1, Title: "Một"},
+				{Chapter: 2, Title: "Hai"},
 			},
 		}, {
 			Index:             2,
-			Title:             "第二弧",
+			Title:             "Cung hai",
 			EstimatedChapters: 3,
 		}},
 	}}); err != nil {
@@ -60,7 +60,7 @@ func TestPlanChapterRejectsUnexpandedLayeredChapter(t *testing.T) {
 		t.Fatalf("expected unexpanded chapter rejection, got %v", err)
 	}
 	if p, _ := st.Progress.Load(); p != nil && p.InProgressChapter == 3 {
-		t.Fatal("unexpanded chapter should not become in-progress")
+		t.Fatal("chương chưa khai triển không được trở thành chương đang viết")
 	}
 }
 
@@ -74,13 +74,13 @@ func TestPlanChapterAllowsExpandedLayeredChapter(t *testing.T) {
 	}
 	if err := st.Outline.SaveLayeredOutline([]domain.VolumeOutline{{
 		Index: 1,
-		Title: "第一卷",
+		Title: "Tập một",
 		Arcs: []domain.ArcOutline{{
 			Index: 1,
-			Title: "第一弧",
+			Title: "Cung một",
 			Chapters: []domain.OutlineEntry{
-				{Chapter: 1, Title: "一"},
-				{Chapter: 2, Title: "二"},
+				{Chapter: 1, Title: "Một"},
+				{Chapter: 2, Title: "Hai"},
 			},
 		}},
 	}}); err != nil {

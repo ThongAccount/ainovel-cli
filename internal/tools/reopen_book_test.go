@@ -9,7 +9,8 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// completedBook 构造一本已完结的 N 章小说（phase=complete，CompletedChapters=1..n）。
+// completedBook dựng một cuốn tiểu thuyết N chương đã hoàn thành (phase=complete,
+// CompletedChapters=1..n).
 func completedBook(t *testing.T, n int) *store.Store {
 	t.Helper()
 	s := store.NewStore(t.TempDir())
@@ -34,7 +35,7 @@ func TestReopenBookReopensCompletedBook(t *testing.T) {
 	s := completedBook(t, 3)
 	tool := NewReopenBookTool(s)
 
-	args, _ := json.Marshal(map[string]any{"chapters": []int{3, 1}, "reason": "清理特殊字符"})
+	args, _ := json.Marshal(map[string]any{"chapters": []int{3, 1}, "reason": "Dọn ký tự đặc biệt"})
 	raw, err := tool.Execute(context.Background(), args)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -44,27 +45,27 @@ func TestReopenBookReopensCompletedBook(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if payload["reopened"] != true || payload["phase"] != string(domain.PhaseWriting) {
-		t.Fatalf("unexpected payload: %v", payload)
+		t.Fatalf("payload không mong đợi: %v", payload)
 	}
 
 	p, _ := s.Progress.Load()
 	if p.Phase != domain.PhaseWriting {
-		t.Errorf("phase = %s, want writing", p.Phase)
+		t.Errorf("phase = %s, cần writing", p.Phase)
 	}
 	if p.Flow != domain.FlowRewriting {
-		t.Errorf("flow = %s, want rewriting", p.Flow)
+		t.Errorf("flow = %s, cần rewriting", p.Flow)
 	}
 	if len(p.PendingRewrites) != 2 || p.PendingRewrites[0] != 3 || p.PendingRewrites[1] != 1 {
-		t.Errorf("PendingRewrites = %v, want [3 1] (原样入队)", p.PendingRewrites)
+		t.Errorf("PendingRewrites = %v, cần [3 1] (giữ nguyên thứ tự vào hàng chờ)", p.PendingRewrites)
 	}
 
 	if cp := s.Checkpoints.LatestByStep(domain.GlobalScope(), "reopen"); cp == nil {
-		t.Error("expected a 'reopen' checkpoint")
+		t.Error("cần một checkpoint 'reopen'")
 	}
 }
 
 func TestReopenBookRejectsNonCompleteBook(t *testing.T) {
-	// 写作中（未完结）的书不能 reopen
+	// Sách đang viết (chưa hoàn thành) không được reopen
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -78,7 +79,7 @@ func TestReopenBookRejectsNonCompleteBook(t *testing.T) {
 	tool := NewReopenBookTool(s)
 	args, _ := json.Marshal(map[string]any{"chapters": []int{1}})
 	if _, err := tool.Execute(context.Background(), args); err == nil {
-		t.Fatal("expected reopen to be rejected when phase != complete")
+		t.Fatal("cần từ chối reopen khi phase khác complete")
 	}
 }
 
@@ -86,14 +87,14 @@ func TestReopenBookRejectsUnwrittenChapters(t *testing.T) {
 	s := completedBook(t, 3)
 	tool := NewReopenBookTool(s)
 
-	// 第 5 章不存在 → 拒绝（属续写/越界，应走篇幅调整）
+	// Chương 5 không tồn tại → từ chối (thuộc viết tiếp/vượt phạm vi, nên đi theo đường điều chỉnh độ dài)
 	args, _ := json.Marshal(map[string]any{"chapters": []int{2, 5}})
 	if _, err := tool.Execute(context.Background(), args); err == nil {
-		t.Fatal("expected reopen to be rejected for unwritten chapter")
+		t.Fatal("cần từ chối reopen với chương chưa viết")
 	}
-	// 空 chapters → 拒绝
+	// chapters rỗng → từ chối
 	args, _ = json.Marshal(map[string]any{"chapters": []int{}})
 	if _, err := tool.Execute(context.Background(), args); err == nil {
-		t.Fatal("expected reopen to be rejected for empty chapters")
+		t.Fatal("cần từ chối reopen với chapters rỗng")
 	}
 }

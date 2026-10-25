@@ -22,7 +22,7 @@ func newTestCommitChapterTool(st *store.Store) *CommitChapterTool {
 func saveTestChapterRecord(t *testing.T, st *store.Store, chapter int, content string) {
 	t.Helper()
 	if _, err := st.ChapterRecords.Accept(chapter, domain.ChapterOriginGenerated, content, domain.ChapterFacts{
-		Title: fmt.Sprintf("第%d章", chapter), Summary: "既有摘要", KeyEvents: []string{"既有事件"},
+		Title: fmt.Sprintf("Chương %d", chapter), Summary: "Tóm tắt có sẵn", KeyEvents: []string{"Sự kiện có sẵn"},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatalf("SaveChapterRecord %d: %v", chapter, err)
 	}
@@ -46,7 +46,7 @@ func TestCommitChapterSchemaDescribesFeedbackAsObject(t *testing.T) {
 		t.Fatalf("feedback schema missing: %#v", props["feedback"])
 	}
 	desc, _ := feedback["description"].(string)
-	if !strings.Contains(desc, "JSON object") || !strings.Contains(desc, "字符串化 JSON") {
+	if !strings.Contains(desc, "JSON object") || !strings.Contains(desc, "JSON đã chuyển thành chuỗi") {
 		t.Fatalf("feedback description should warn against stringified JSON, got %q", desc)
 	}
 	if got := fmt.Sprint(feedback["type"]); got != "[object null]" {
@@ -64,7 +64,7 @@ func TestCommitChapterRejectsUnknownForeshadowReferenceBeforePending(t *testing.
 		t.Fatal(err)
 	}
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 1, "title": "第一章", "summary": "推进", "characters": []string{"主角"}, "key_events": []string{"发现线索"},
+		"chapter": 1, "title": "Chương một", "summary": "Đẩy tiến", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Phát hiện manh mối"},
 		"foreshadow_updates": []map[string]any{{"id": "missing", "action": "resolve"}},
 	})
 	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "unknown id") {
@@ -87,13 +87,13 @@ func TestCommitChapterRejectsSkippedNormalChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	args, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "跳过第一章", "characters": []string{"主角"}, "key_events": []string{"事件"},
+		"chapter": 2, "title": "Chương hai", "summary": "Bỏ qua chương một", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "只能提交下一章 1") {
+	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "chỉ nộp được chương kế tiếp 1") {
 		t.Fatalf("expected skipped chapter rejection, got %v", err)
 	}
 	if pending, err := s.Signals.LoadPendingCommit(); err != nil || pending != nil {
@@ -110,8 +110,8 @@ func TestCommitChapterRejectsInvalidNestedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 1, "title": "第一章", "summary": "推进", "characters": []string{"主角"}, "key_events": []string{"发现线索"},
-		"relationship_changes": []map[string]any{{"character_a": "主角", "character_b": "", "relation": "敌对"}},
+		"chapter": 1, "title": "Chương một", "summary": "Đẩy tiến", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Phát hiện manh mối"},
+		"relationship_changes": []map[string]any{{"character_a": "Nhân vật chính", "character_b": "", "relation": "Thù địch"}},
 	})
 	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "relationship_changes[0]") {
 		t.Fatalf("expected nested field rejection, got %v", err)
@@ -130,23 +130,23 @@ func TestCommitChapterRejectsNonPendingRewrite(t *testing.T) {
 	if err := store.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	if err := store.Progress.SetPendingRewrites([]int{2}, "测试重写"); err != nil {
+	if err := store.Progress.SetPendingRewrites([]int{2}, "Kiểm thử viết lại"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := store.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatalf("SetFlow: %v", err)
 	}
-	if err := store.Drafts.SaveDraft(3, "这是错误章节的正文。"); err != nil {
+	if err := store.Drafts.SaveDraft(3, "Đây là nội dung truyện của chương sai."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	tool := newTestCommitChapterTool(store)
 	args, err := json.Marshal(map[string]any{
 		"chapter":         3,
-		"title":           "第三章",
-		"summary":         "错误提交",
-		"characters":      []string{"主角"},
-		"key_events":      []string{"误提交"},
+		"title":           "Chương ba",
+		"summary":         "Nộp sai",
+		"characters":      []string{"Nhân vật chính"},
+		"key_events":      []string{"Nộp nhầm"},
 		"timeline_events": []any{},
 	})
 	if err != nil {
@@ -185,23 +185,23 @@ func TestCommitChapterAllowsPendingRewrite(t *testing.T) {
 	if err := store.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	if err := store.Progress.SetPendingRewrites([]int{2}, "测试重写"); err != nil {
+	if err := store.Progress.SetPendingRewrites([]int{2}, "Kiểm thử viết lại"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := store.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatalf("SetFlow: %v", err)
 	}
-	if err := store.Drafts.SaveDraft(2, "这是正确待重写章节的正文。"); err != nil {
+	if err := store.Drafts.SaveDraft(2, "Đây là nội dung truyện của chương đúng cần viết lại."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	tool := newTestCommitChapterTool(store)
 	args, err := json.Marshal(map[string]any{
 		"chapter":         2,
-		"title":           "第二章",
-		"summary":         "正确提交",
-		"characters":      []string{"主角"},
-		"key_events":      []string{"完成重写"},
+		"title":           "Chương hai",
+		"summary":         "Nộp đúng",
+		"characters":      []string{"Nhân vật chính"},
+		"key_events":      []string{"Hoàn tất viết lại"},
 		"timeline_events": []any{},
 	})
 	if err != nil {
@@ -232,9 +232,9 @@ func TestCommitChapterAllowsPendingRewrite(t *testing.T) {
 	}
 }
 
-// TestCommitChapterRewriteKeepsOwnForeshadowPlant 锁死 issue #112：重写伏笔的"种植章"时，
-// Writer 看到账本里该伏笔已存在，自然只写 advance；旧实现整条覆盖章节记录，plant 随之丢失，
-// Projector 全量重放时报"推进未知伏笔"并把返工队列锁死。种植事实必须被保留。
+// TestCommitChapterRewriteKeepsOwnForeshadowPlant khóa issue #112: khi viết lại "chương gieo manh mối" của một manh mối thì
+// Writer thấy sổ phục bút đã có manh mối đó nên tự nhiên chỉ ghi advance; bản cũ ghi đè toàn bộ bản ghi chương nên plant bị mất,
+// Projector phát lại toàn bộ thì báo "đẩy tiếp manh mối chưa biết" và khóa hàng chờ làm lại. Sự thật gieo manh mối phải được giữ lại.
 func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 	const foreshadowID = "f_spillway_photo"
 	s := store.NewStore(t.TempDir())
@@ -244,41 +244,41 @@ func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	// 第 2 章首次提交后的落盘状态：记录里是 plant，账本里已建起条目。
-	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, "旧版正文。", domain.ChapterFacts{
-		Title: "第二章", Summary: "埋下线索", KeyEvents: []string{"发现旧照"},
-		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: foreshadowID, Action: "plant", Description: "泄洪道旧照"}},
+	// trạng thái đã ghi sau lần nộp đầu tiên của chương 2: bản ghi là plant, sổ phục bút đã tạo mục.
+	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, "Nội dung truyện phiên bản cũ.", domain.ChapterFacts{
+		Title: "Chương hai", Summary: "Gieo manh mối", KeyEvents: []string{"Phát hiện ảnh cũ"},
+		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: foreshadowID, Action: "plant", Description: "Ảnh cũ ở đường thoát hiểm"}},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatalf("Accept: %v", err)
 	}
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
-		{ID: foreshadowID, Description: "泄洪道旧照", PlantedAt: 2, Status: "planted"},
+		{ID: foreshadowID, Description: "Ảnh cũ ở đường thoát hiểm", PlantedAt: 2, Status: "planted"},
 	}); err != nil {
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
 	if err := s.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试重写"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử viết lại"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatalf("SetFlow: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(2, "这是重写后的第二章正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "Đây là nội dung truyện chương hai sau khi viết lại."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	args, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "重写后埋线索",
-		"characters": []string{"主角"}, "key_events": []string{"重新发现旧照"},
+		"chapter": 2, "title": "Chương hai", "summary": "Gieo manh mối sau khi viết lại",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"Phát hiện lại ảnh cũ"},
 		"foreshadow_updates": []map[string]any{{"id": foreshadowID, "action": "advance"}},
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err != nil {
-		t.Fatalf("重写种植章不应失败: %v", err)
+		t.Fatalf("viết lại chương gieo manh mốikhông được thất bại: %v", err)
 	}
 
 	record, err := s.ChapterRecords.Load(2)
@@ -292,7 +292,7 @@ func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 		}
 	}
 	if !planted {
-		t.Fatalf("重写后应保留本章 plant，实际 %+v", record.Facts.ForeshadowUpdates)
+		t.Fatalf("sau khi viết lại phải giữ lại plant của chương này，thực tế %+v", record.Facts.ForeshadowUpdates)
 	}
 
 	ledger, err := s.World.LoadForeshadowLedger()
@@ -300,7 +300,7 @@ func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 		t.Fatalf("LoadForeshadowLedger: %v", err)
 	}
 	if len(ledger) != 1 || ledger[0].ID != foreshadowID || ledger[0].PlantedAt != 2 {
-		t.Fatalf("账本应保留第 2 章的种植事实，实际 %+v", ledger)
+		t.Fatalf("sổ phục bút phải giữ sự thật gieo manh mối của chương 2，thực tế %+v", ledger)
 	}
 
 	progress, err := s.Progress.Load()
@@ -308,7 +308,7 @@ func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 		t.Fatalf("LoadProgress: %v", err)
 	}
 	if len(progress.PendingRewrites) != 0 {
-		t.Fatalf("返工队列应已排空，实际 %v", progress.PendingRewrites)
+		t.Fatalf("hàng chờ làm lạiphải đã được rút cạn，thực tế %v", progress.PendingRewrites)
 	}
 }
 
@@ -321,11 +321,11 @@ func TestCommitChapterRewriteRepairsPlantLostByPreviousFailure(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatal(err)
 	}
-	// 模拟旧版本第一次返工失败后的状态：派生账本仍保留正确的种植事实，
-	// 但章节记录已被 advance 覆盖，缺少同章 plant。
-	oldContent := "旧版本失败后留下的终稿。"
+	// mô phỏng trạng thái sau khi lần làm lại đầu tiên của phiên bản cũ thất bại: sổ phục bút dẫn xuất vẫn giữ đúng sự thật gieo manh mối,
+	// nhưng bản ghi chương đã bị advance ghi đè nên thiếu plant cùng chương。
+	oldContent := "Bản chính còn sót lại sau khi phiên bản cũ thất bại."
 	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, oldContent, domain.ChapterFacts{
-		Title: "第二章", Summary: "损坏记录", KeyEvents: []string{"推进线索"},
+		Title: "Chương hai", Summary: "Bản ghi hỏng", KeyEvents: []string{"Đẩy tiếp manh mối"},
 		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: foreshadowID, Action: "advance"}},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatal(err)
@@ -334,33 +334,33 @@ func TestCommitChapterRewriteRepairsPlantLostByPreviousFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{{
-		ID: foreshadowID, Description: "执照暂停线索", PlantedAt: 2, Status: "planted",
+		ID: foreshadowID, Description: "Manh mối giấy phép bị tạm dừng", PlantedAt: 2, Status: "planted",
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "恢复旧版本损坏记录"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Khôi phục bản ghi hỏng của phiên bản cũ"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowPolishing); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Drafts.SaveDraft(2, "修复后的第二章正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "Nội dung truyện chương hai đã sửa."); err != nil {
 		t.Fatal(err)
 	}
 
 	args, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "恢复伏笔链",
-		"characters": []string{"主角"}, "key_events": []string{"推进线索"},
+		"chapter": 2, "title": "Chương hai", "summary": "Khôi phục chuỗi manh mối",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"Đẩy tiếp manh mối"},
 		"foreshadow_updates": []map[string]any{{"id": foreshadowID, "action": "advance"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err != nil {
-		t.Fatalf("旧版本丢失的同章 plant 应可确定性恢复: %v", err)
+		t.Fatalf("plant cùng chương bị phiên bản cũ mất phải khôi phục được một cách tất định: %v", err)
 	}
 
 	record, err := s.ChapterRecords.Load(2)
@@ -387,15 +387,15 @@ func TestCommitChapterRewriteValidatesRecordSetBeforeWriting(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ChapterRecords.Accept(1, domain.ChapterOriginGenerated, "第一章终稿。", domain.ChapterFacts{
-		Title: "第一章", Summary: "损坏基线", KeyEvents: []string{"错误推进"},
+	if _, err := s.ChapterRecords.Accept(1, domain.ChapterOriginGenerated, "Bản chính chương một.", domain.ChapterFacts{
+		Title: "Chương một", Summary: "Đường cơ sở hỏng", KeyEvents: []string{"Đẩy tiếp sai"},
 		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: "missing", Action: "advance"}},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatal(err)
 	}
-	oldContent := "第二章旧终稿。"
+	oldContent := "Bản chính cũ của chương hai."
 	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, oldContent, domain.ChapterFacts{
-		Title: "第二章", Summary: "原摘要", KeyEvents: []string{"原事件"},
+		Title: "Chương hai", Summary: "Tóm tắt gốc", KeyEvents: []string{"Sự kiện gốc"},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatal(err)
 	}
@@ -407,25 +407,25 @@ func TestCommitChapterRewriteValidatesRecordSetBeforeWriting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试写前校验"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử kiểm tra trước khi ghi"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Drafts.SaveDraft(2, "第二章新正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "Nội dung truyện mới của chương hai."); err != nil {
 		t.Fatal(err)
 	}
 
 	args, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "新摘要",
-		"characters": []string{"主角"}, "key_events": []string{"新事件"},
+		"chapter": 2, "title": "Chương hai", "summary": "Tóm tắt mới",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện mới"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = newTestCommitChapterTool(s).Execute(context.Background(), args)
-	if err == nil || !strings.Contains(err.Error(), "已解除冻结且未写入返工结果") {
+	if err == nil || !strings.Contains(err.Error(), "đã gỡ đóng băng và chưa ghi kết quả làm lại") {
 		t.Fatalf("expected preflight projection error, got %v", err)
 	}
 	if strings.Contains(err.Error(), errs.ErrStoreWrite.Error()) {
@@ -444,10 +444,10 @@ func TestCommitChapterRewriteValidatesRecordSetBeforeWriting(t *testing.T) {
 	}
 }
 
-// TestCommitChapterRewriteRejectsForwardForeshadowReference 与上一个用例同源（issue #112）：
-// 账本是全书投影，重写早期章节时里面还躺着后续章节才种下的伏笔。旧实现放行 → Projector
-// 按章序重放时报"推进未知伏笔"，且此时章节记录已被覆盖，返工队列就此锁死。
-// 必须在落盘前挡下，并把"种植于第几章"讲清楚，模型才改得动。
+// TestCommitChapterRewriteRejectsForwardForeshadowReference cùng nguồn vớitrường hợp trên (issue #112):
+// sổ phục bút là hình chiếu của cả cuốn, khi viết lại chương đầu thì bên trong vẫn còn manh mối chỉ gieo ở các chương về sau. Bản cũ cho qua → Projector
+// phát lại theo thứ tự chương thì báo "đẩy tiếp manh mối chưa biết", và lúc đó bản ghi chương đã bị ghi đè, hàng chờ làm lại bị khóa.
+// phải chặn trước khi ghi xuống và nói rõ "manh mối được gieo ở chương nào" thì mô hình mới tự sửa được.
 func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -457,8 +457,8 @@ func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 	for _, ch := range []int{2, 7} {
-		if _, err := s.ChapterRecords.Accept(ch, domain.ChapterOriginGenerated, "旧版正文。", domain.ChapterFacts{
-			Title: fmt.Sprintf("第%d章", ch), Summary: "摘要", KeyEvents: []string{"事件"},
+		if _, err := s.ChapterRecords.Accept(ch, domain.ChapterOriginGenerated, "Nội dung truyện phiên bản cũ.", domain.ChapterFacts{
+			Title: fmt.Sprintf("Chương %d", ch), Summary: "Tóm tắt", KeyEvents: []string{"Sự kiện"},
 		}, domain.StyleDelta{}); err != nil {
 			t.Fatalf("Accept %d: %v", ch, err)
 		}
@@ -467,23 +467,23 @@ func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 		}
 	}
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
-		{ID: "f_late", Description: "第七章才埋的线", PlantedAt: 7, Status: "planted"},
+		{ID: "f_late", Description: "Manh mối chỉ gieo ở chương bảy", PlantedAt: 7, Status: "planted"},
 	}); err != nil {
 		t.Fatalf("SaveForeshadowLedger: %v", err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试重写"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử viết lại"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatalf("SetFlow: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(2, "这是重写后的第二章正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "Đây là nội dung truyện chương hai sau khi viết lại."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	args, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "s",
-		"characters": []string{"主角"}, "key_events": []string{"e"},
+		"chapter": 2, "title": "Chương hai", "summary": "s",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"e"},
 		"foreshadow_updates": []map[string]any{{"id": "f_late", "action": "advance"}},
 	})
 	if err != nil {
@@ -491,28 +491,28 @@ func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 	}
 	_, err = newTestCommitChapterTool(s).Execute(context.Background(), args)
 	if err == nil {
-		t.Fatal("引用后续章节才种下的伏笔必须被拒")
+		t.Fatal("phải từ chối manh mối chỉ được gieo ở các chương về sau")
 	}
-	if !strings.Contains(err.Error(), "种植于第 7 章") {
-		t.Fatalf("报错须指明种植章，模型才能自行修正，实际: %v", err)
+	if !strings.Contains(err.Error(), "được gieo ở chương 7") {
+		t.Fatalf("lỗi phải chỉ rõ chương gieo manh mối, thì mô hình mới tự sửa được，thực tế: %v", err)
 	}
-	// 关键：拦在落盘之前——章节记录和返工队列都不得被这次失败污染。
+	// mấu chốt: chặn trước khi ghi xuống — bản ghi chương và hàng chờ làm lại không được bị lần thất bại này làm bẩn.
 	if pending, err := s.Signals.LoadPendingCommit(); err != nil || pending != nil {
-		t.Fatalf("校验失败不得留下 pending commit: pending=%+v err=%v", pending, err)
+		t.Fatalf("kiểm tra thất bại không được để lại pending commit: pending=%+v err=%v", pending, err)
 	}
 	record, err := s.ChapterRecords.Load(2)
 	if err != nil || record == nil {
 		t.Fatalf("Load record: %+v err=%v", record, err)
 	}
-	if record.Content != "旧版正文。" {
-		t.Fatalf("校验失败不得覆盖章节记录，实际 %q", record.Content)
+	if record.Content != "Nội dung truyện phiên bản cũ." {
+		t.Fatalf("kiểm tra thất bại không được ghi đè bản ghi chương，thực tế %q", record.Content)
 	}
 	p, err := s.Progress.Load()
 	if err != nil {
 		t.Fatalf("LoadProgress: %v", err)
 	}
 	if len(p.PendingRewrites) != 1 || p.PendingRewrites[0] != 2 {
-		t.Fatalf("返工队列应原样保留待重试: %v", p.PendingRewrites)
+		t.Fatalf("hàng chờ làm lạiphải được giữ nguyên để thử lại: %v", p.PendingRewrites)
 	}
 }
 
@@ -524,9 +524,9 @@ func TestCommitChapterClearsInvalidLegacyRewritePending(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatal(err)
 	}
-	oldContent := "旧终稿。"
+	oldContent := "Bản chính cũ."
 	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, oldContent, domain.ChapterFacts{
-		Title: "第二章", Summary: "旧摘要", KeyEvents: []string{"旧事件"},
+		Title: "Chương hai", Summary: "Tóm tắt cũ", KeyEvents: []string{"Sự kiện cũ"},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatal(err)
 	}
@@ -534,22 +534,22 @@ func TestCommitChapterClearsInvalidLegacyRewritePending(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{{
-		ID: "f_late", Description: "后续伏笔", PlantedAt: 7, Status: "planted",
+		ID: "f_late", Description: "Manh mối về sau", PlantedAt: 7, Status: "planted",
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "恢复旧冻结提交"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Khôi phục bài nộp cũ bị đóng băng"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatal(err)
 	}
 	payload, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "非法旧提交",
-		"characters": []string{"主角"}, "key_events": []string{"提前推进"},
+		"chapter": 2, "title": "Chương hai", "summary": "Bài nộp cũ không hợp lệ",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"Đẩy tiếp sớm"},
 		"foreshadow_updates": []map[string]any{{"id": "f_late", "action": "advance"}},
 	})
 	if err != nil {
@@ -557,13 +557,13 @@ func TestCommitChapterClearsInvalidLegacyRewritePending(t *testing.T) {
 	}
 	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
 		Chapter: 2, Stage: domain.CommitStageStarted, Rewrite: true,
-		Payload: payload, DraftContent: "冻结正文。",
+		Payload: payload, DraftContent: "Nội dung truyện bị đóng băng.",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err = newTestCommitChapterTool(s).Execute(context.Background(), payload)
-	if err == nil || !strings.Contains(err.Error(), "已解除冻结") || !strings.Contains(err.Error(), "种植于第 7 章") {
+	if err == nil || !strings.Contains(err.Error(), "đã gỡ đóng băng") || !strings.Contains(err.Error(), "được gieo ở chương 7") {
 		t.Fatalf("expected actionable legacy pending error, got %v", err)
 	}
 	if pending, err := s.Signals.LoadPendingCommit(); err != nil || pending != nil {
@@ -588,7 +588,7 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 	}
 	completed := []int{1, 2, 3, 4, 5}
 	for _, chapter := range completed {
-		content := fmt.Sprintf("# 第%d章\n普通正文。\n故事继续。", chapter)
+		content := fmt.Sprintf("# Chương %d\nNội dung thường.\nCâu chuyện tiếp tục.", chapter)
 		if err := s.Drafts.SaveFinalChapter(chapter, content); err != nil {
 			t.Fatal(err)
 		}
@@ -607,21 +607,21 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 		t.Fatal("expected initialized style stats")
 	}
 
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试增量风格统计"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử thống kê văn phong gia tăng"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Drafts.SaveDraft(2, "# 第二章\n他不是退缩，而是在等待。\n改写后的故事继续。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "# Chương hai\nAnh không lùi bước mà đang chờ.\nCâu chuyện sau khi viết lại vẫn tiếp tục."); err != nil {
 		t.Fatal(err)
 	}
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    2,
-		"title":      "第二章",
-		"summary":    "完成增量统计测试重写",
-		"characters": []string{"主角"},
-		"key_events": []string{"完成重写"},
+		"title":      "Chương hai",
+		"summary":    "Hoàn tất viết lại cho kiểm thử thống kê gia tăng",
+		"characters": []string{"Nhân vật chính"},
+		"key_events": []string{"Hoàn tất viết lại"},
 	})
 	if _, err := NewCommitChapterTool(s, styleStats).Execute(context.Background(), args); err != nil {
 		t.Fatal(err)
@@ -633,7 +633,7 @@ func TestCommitChapterRefreshesSharedStyleStatsAfterRewrite(t *testing.T) {
 	}
 	found := false
 	for _, pattern := range after.Patterns {
-		if strings.HasPrefix(pattern.Name, "矫正句") && pattern.Total == 1 {
+		if strings.HasPrefix(pattern.Name, "Câu đã hiệu chỉnh") && pattern.Total == 1 {
 			found = true
 			break
 		}
@@ -654,13 +654,13 @@ func TestCommitChapterRewriteRecoveryUsesFrozenDraft(t *testing.T) {
 	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("UpdatePhase: %v", err)
 	}
-	if err := s.Drafts.SaveFinalChapter(2, "第二章旧终稿"); err != nil {
+	if err := s.Drafts.SaveFinalChapter(2, "Bản chính cũ của chương hai"); err != nil {
 		t.Fatalf("SaveFinalChapter: %v", err)
 	}
 	if err := s.Progress.MarkChapterComplete(2, 100, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试重写恢复"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử khôi phục viết lại"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowRewriting); err != nil {
@@ -668,43 +668,43 @@ func TestCommitChapterRewriteRecoveryUsesFrozenDraft(t *testing.T) {
 	}
 
 	persistedArgs, err := json.Marshal(map[string]any{
-		"chapter": 2, "title": "冻结标题", "summary": "冻结摘要", "characters": []string{"主角"}, "key_events": []string{"冻结事件"},
+		"chapter": 2, "title": "Tiêu đề đóng băng", "summary": "Tóm tắt đóng băng", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện đóng băng"},
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
 		Chapter: 2, Stage: domain.CommitStageStarted, Rewrite: true, RewriteMode: "rewrite",
-		Payload: persistedArgs, DraftContent: "第二章已经完成的重写正文",
+		Payload: persistedArgs, DraftContent: "Nội dung truyện đã viết lại xong của chương hai",
 	}); err != nil {
 		t.Fatalf("SavePendingCommit: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(2, "重启后被错误覆盖的草稿"); err != nil {
+	if err := s.Drafts.SaveDraft(2, "Bản nháp bị ghi đè sai sau khi khởi động lại"); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	tool := newTestCommitChapterTool(s)
-	if _, err := tool.Execute(context.Background(), json.RawMessage(`{"chapter":2,"summary":"新参数不得采用"}`)); err != nil {
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{"chapter":2,"summary":"Tham số mới không được dùng"}`)); err != nil {
 		t.Fatalf("Execute recovery: %v", err)
 	}
 	final, err := s.Drafts.LoadChapterText(2)
 	if err != nil {
 		t.Fatalf("LoadChapterText: %v", err)
 	}
-	if final != "# 冻结标题\n\n第二章已经完成的重写正文" {
+	if final != "# Tiêu đề đóng băng\n\nNội dung truyện đã viết lại xong của chương hai" {
 		t.Fatalf("rewrite recovery used overwritten draft: %q", final)
 	}
 	summary, err := s.Summaries.LoadSummary(2)
 	if err != nil {
 		t.Fatalf("LoadSummary: %v", err)
 	}
-	if summary == nil || summary.Summary != "冻结摘要" {
+	if summary == nil || summary.Summary != "Tóm tắt đóng băng" {
 		t.Fatalf("rewrite recovery used regenerated args: %+v", summary)
 	}
 }
 
-// TestCommitChapterUpdatesCastLedger 验证：commit_chapter 把本章 characters 累加进 cast_ledger，
-// cast_intros 提供的 brief_role 被采用，且 characters.json 中的核心角色不进入 ledger。
+// TestCommitChapterUpdatesCastLedger xác minh: commit_chapter cộng dồn characters của chương này vào cast_ledger,
+// brief_role do cast_intros cung cấp được sử dụng, và các nhân vật cốt lõi trong characters.json không đi vào ledger.
 func TestCommitChapterUpdatesCastLedger(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -717,27 +717,27 @@ func TestCommitChapterUpdatesCastLedger(t *testing.T) {
 	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("UpdatePhase: %v", err)
 	}
-	// 设定核心角色档案（这些不应进 cast_ledger）
+	// thiết lập hồ sơ nhân vật cốt lõi (những người này không được đi vào cast_ledger)
 	if err := s.Characters.Save([]domain.Character{
-		{Name: "林墨", Role: "主角", Tier: "core"},
-		{Name: "李清砚", Role: "导师", Tier: "important"},
+		{Name: "Lâm Mặc", Role: "Nhân vật chính", Tier: "core"},
+		{Name: "Lý Thanh Nghiên", Role: "Sư phụ", Tier: "important"},
 	}); err != nil {
 		t.Fatalf("Save core characters: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(1, "第一章正文，林墨遇到客栈老板老周与小厮阿云。"); err != nil {
+	if err := s.Drafts.SaveDraft(1, "Nội dung truyện chương một, Lâm Mặc gặp chủ quán trọ Lão Chu và tên nhân viên A Vân."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    1,
-		"title":      "第一章",
-		"summary":    "林墨入住客栈",
-		"characters": []string{"林墨", "李清砚", "老周", "阿云"},
-		"key_events": []string{"入住"},
+		"title":      "Chương một",
+		"summary":    "Lâm Mặc nhận phòng ở quán trọ",
+		"characters": []string{"Lâm Mặc", "Lý Thanh Nghiên", "Lão Chu", "A Vân"},
+		"key_events": []string{"Nhận phòng"},
 		"cast_intros": []any{
-			map[string]any{"name": "老周", "brief_role": "客栈老板"},
-			map[string]any{"name": "阿云", "brief_role": "客栈小厮"},
+			map[string]any{"name": "Lão Chu", "brief_role": "Chủ quán trọ"},
+			map[string]any{"name": "A Vân", "brief_role": "Tên nhân viên trọ"},
 		},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
@@ -747,7 +747,7 @@ func TestCommitChapterUpdatesCastLedger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary == nil || summary.Title != "第一章" {
+	if summary == nil || summary.Title != "Chương một" {
 		t.Fatalf("committed title = %+v", summary)
 	}
 
@@ -756,23 +756,23 @@ func TestCommitChapterUpdatesCastLedger(t *testing.T) {
 		t.Fatalf("Cast.Load: %v", err)
 	}
 	if len(entries) != 2 {
-		t.Fatalf("expected 2 ledger entries (老周/阿云), got %d: %+v", len(entries), entries)
+		t.Fatalf("expected 2 ledger entries (Lão Chu/A Vân), got %d: %+v", len(entries), entries)
 	}
 	byName := map[string]domain.CastEntry{}
 	for _, e := range entries {
 		byName[e.Name] = e
 	}
-	if e, ok := byName["老周"]; !ok || e.BriefRole != "客栈老板" || e.FirstSeenChapter != 1 {
-		t.Errorf("老周 entry wrong: %+v", e)
+	if e, ok := byName["Lão Chu"]; !ok || e.BriefRole != "Chủ quán trọ" || e.FirstSeenChapter != 1 {
+		t.Errorf("Lão Chu entry wrong: %+v", e)
 	}
-	if e, ok := byName["阿云"]; !ok || e.BriefRole != "客栈小厮" || e.AppearanceCount != 1 {
-		t.Errorf("阿云 entry wrong: %+v", e)
+	if e, ok := byName["A Vân"]; !ok || e.BriefRole != "Tên nhân viên trọ" || e.AppearanceCount != 1 {
+		t.Errorf("A Vân entry wrong: %+v", e)
 	}
-	if _, ok := byName["林墨"]; ok {
-		t.Errorf("核心角色 林墨 不应进 ledger")
+	if _, ok := byName["Lâm Mặc"]; ok {
+		t.Errorf("nhân vật cốt lõi Lâm Mặc không được đi vào ledger")
 	}
-	if _, ok := byName["李清砚"]; ok {
-		t.Errorf("核心角色 李清砚 不应进 ledger")
+	if _, ok := byName["Lý Thanh Nghiên"]; ok {
+		t.Errorf("nhân vật cốt lõi Lý Thanh Nghiên không được đi vào ledger")
 	}
 }
 
@@ -785,30 +785,30 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(1, "第一章正文，林墨遇到黑影并突破。"); err != nil {
+	if err := s.Drafts.SaveDraft(1, "Nội dung truyện chương một, Lâm Mặc gặp bóng đen và thăng cấp."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	timeline := []domain.TimelineEvent{{
 		Chapter:    1,
-		Time:       "清晨",
-		Event:      "林墨遇到黑影",
-		Characters: []string{"林墨"},
+		Time:       "Buổi sớm",
+		Event:      "Lâm Mặc gặp bóng đen",
+		Characters: []string{"Lâm Mặc"},
 	}}
 	stateChanges := []domain.StateChange{{
 		Chapter:  1,
-		Entity:   "林墨",
+		Entity:   "Lâm Mặc",
 		Field:    "realm",
-		OldValue: "凡人",
-		NewValue: "练气期",
+		OldValue: "Phàm tử",
+		NewValue: "Tu luyện khí kỳ",
 	}}
 	foreshadow := []domain.ForeshadowUpdate{{
 		ID:          "f1",
 		Action:      "plant",
-		Description: "黑影身份",
+		Description: "Thân phận của bóng đen",
 	}}
 
-	// 模拟 commit_chapter 已写入世界状态，但尚未 MarkChapterComplete 时进程崩溃。
+	// mô phỏng tiến trình sập sau khi commit_chapter đã ghi trạng thái thế giới nhưng chưa MarkChapterComplete。
 	if err := s.World.AppendTimelineEvents(timeline); err != nil {
 		t.Fatalf("AppendTimelineEvents seed: %v", err)
 	}
@@ -820,10 +820,10 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	}
 	persistedArgs, _ := json.Marshal(map[string]any{
 		"chapter":            1,
-		"title":              "第一章",
-		"summary":            "林墨遇到黑影并突破",
-		"characters":         []string{"林墨"},
-		"key_events":         []string{"遇到黑影", "突破"},
+		"title":              "Chương một",
+		"summary":            "Lâm Mặc gặp bóng đen và thăng cấp",
+		"characters":         []string{"Lâm Mặc"},
+		"key_events":         []string{"gặp bóng đen", "thăng cấp"},
 		"timeline_events":    timeline,
 		"state_changes":      stateChanges,
 		"foreshadow_updates": foreshadow,
@@ -831,25 +831,25 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	if err := s.Signals.SavePendingCommit(domain.PendingCommit{
 		Chapter:      1,
 		Stage:        domain.CommitStageStarted,
-		Summary:      "半提交摘要",
+		Summary:      "Tóm tắt nửa chừng",
 		Payload:      persistedArgs,
-		DraftContent: "第一章正文，林墨遇到黑影并突破。",
+		DraftContent: "Nội dung truyện chương một, Lâm Mặc gặp bóng đen và thăng cấp.",
 	}); err != nil {
 		t.Fatalf("SavePendingCommit: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(1, "重启后被新 Worker 覆盖、绝不能混入旧提交的正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(1, "Bản nháp bị Worker mới ghi đè sau khi khởi động lại, tuyệt đối không được trộn vào bài đã nộp cũ."); err != nil {
 		t.Fatalf("overwrite draft: %v", err)
 	}
 
 	tool := newTestCommitChapterTool(s)
-	// 模拟重启后的 Writer 重新生成了不同参数；恢复必须忽略它，使用 persistedArgs。
+	// mô phỏng Writer sau khi khởi động lại sinh ra tham số khác; quá trình khôi phục phải bỏ qua nó và dùng persistedArgs。
 	args, _ := json.Marshal(map[string]any{
 		"chapter":         1,
-		"title":           "错误标题",
-		"summary":         "错误的新摘要",
-		"characters":      []string{"林墨"},
-		"key_events":      []string{"错误事件"},
-		"timeline_events": []domain.TimelineEvent{{Time: "夜晚", Event: "不应写入的新事件"}},
+		"title":           "Tiêu đề sai",
+		"summary":         "Tóm tắt mới sai",
+		"characters":      []string{"Lâm Mặc"},
+		"key_events":      []string{"Sự kiện sai"},
+		"timeline_events": []domain.TimelineEvent{{Time: "Ban đêm", Event: "Sự kiện mới không được ghi"}},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute replay: %v", err)
@@ -878,7 +878,7 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	if err != nil {
 		t.Fatalf("LoadChapterText: %v", err)
 	}
-	if final != "# 第一章\n\n第一章正文，林墨遇到黑影并突破。" {
+	if final != "# Chương một\n\nNội dung truyện chương một, Lâm Mặc gặp bóng đen và thăng cấp." {
 		t.Fatalf("recovery used overwritten draft: %q", final)
 	}
 }
@@ -897,14 +897,14 @@ func TestCommitChapterRecoversProgressMarkedWindowWithExactOutput(t *testing.T) 
 	if err := s.Progress.StartChapter(1); err != nil {
 		t.Fatalf("StartChapter: %v", err)
 	}
-	if err := s.Drafts.SaveFinalChapter(1, "第一章终稿"); err != nil {
+	if err := s.Drafts.SaveFinalChapter(1, "Bản chính chương một"); err != nil {
 		t.Fatalf("SaveFinalChapter: %v", err)
 	}
-	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 1, Title: "第一章", Summary: "摘要"}); err != nil {
+	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 1, Title: "Chương một", Summary: "Tóm tắt"}); err != nil {
 		t.Fatalf("SaveSummary: %v", err)
 	}
-	if _, err := s.ChapterRecords.Accept(1, domain.ChapterOriginGenerated, "第一章终稿", domain.ChapterFacts{
-		Title: "第一章", Summary: "摘要", KeyEvents: []string{"事件"},
+	if _, err := s.ChapterRecords.Accept(1, domain.ChapterOriginGenerated, "Bản chính chương một", domain.ChapterFacts{
+		Title: "Chương một", Summary: "Tóm tắt", KeyEvents: []string{"Sự kiện"},
 	}, domain.StyleDelta{}); err != nil {
 		t.Fatalf("SaveChapterRecord: %v", err)
 	}
@@ -948,10 +948,10 @@ func TestCommitChapterRecoversProgressMarkedWindowWithExactOutput(t *testing.T) 
 	}
 }
 
-// TestCommitChapterRejectsPolishWithoutDraftChange 验证：已完成章节进入打磨/重写队列后，
-// 若正文和标题都没有变化，commit_chapter 必须拒绝空返工。
-// TestCommitChapterNonLayeredRecompletesAfterRework 验证非分层书完本后经 reopen 返工，
-// 改完章节 commit、队列排空时能自动重新回到 complete（补 drain 后判完结的非分层分支）。
+// TestCommitChapterRejectsPolishWithoutDraftChange xác minh: khi chương đã hoàn thành bước vào hàng chờ hoàn thiện / viết lại thì
+// nếu cả nội dung truyện và tiêu đề đều không đổi, commit_chapter phải từ chối lần làm lại rỗng.
+// TestCommitChapterNonLayeredRecompletesAfterRework xác minh sách không phân tầng sau khi hoàn thành đi qua reopen làm lại,
+// khi commit chương đã sửa và hàng chờ rút cạn thì tự động quay lại complete (nhánh không phân tầng xác định hoàn thành sau drain).
 func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -962,9 +962,9 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 两章写完并完结。第 2 章备齐 drafts/chapters，供返工提交。
-	ch1 := "第一章原始正文。"
-	ch2 := "第二章原始正文，用于模拟已提交终稿。"
+	// hai chương viết xong và hoàn thành. chương 2 có đủ drafts/chapters để nộp làm lại.
+	ch1 := "Nội dung truyện gốc của chương một."
+	ch2 := "Nội dung truyện gốc của chương hai, mô phỏng bản chính đã nộp."
 	if err := s.Drafts.SaveFinalChapter(1, ch1); err != nil {
 		t.Fatalf("SaveFinalChapter(1): %v", err)
 	}
@@ -986,22 +986,22 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 		t.Fatalf("MarkComplete: %v", err)
 	}
 
-	// reopen 第 2 章 → phase 回 writing、PendingRewrites=[2]、flow=rewriting
-	if err := s.Progress.Reopen([]int{2}, "返工"); err != nil {
+	// reopen chương 2 → phase về writing, PendingRewrites=[2], flow=rewriting
+	if err := s.Progress.Reopen([]int{2}, "Làm lại"); err != nil {
 		t.Fatalf("Reopen: %v", err)
 	}
 
-	// 返工提交（草稿需与终稿不同才放行）
-	if err := s.Drafts.SaveDraft(2, ch2+"\n\n返工新增段落。"); err != nil {
+	// nộp làm lại (bản nháp phải khác bản chính thì mới được qua)
+	if err := s.Drafts.SaveDraft(2, ch2+"\n\nĐoạn văn thêm sau khi làm lại."); err != nil {
 		t.Fatalf("SaveDraft (reworked): %v", err)
 	}
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    2,
-		"title":      "第二章",
-		"summary":    "返工后摘要",
-		"characters": []string{"主角"},
-		"key_events": []string{"清理"},
+		"title":      "Chương hai",
+		"summary":    "Tóm tắt sau khi làm lại",
+		"characters": []string{"Nhân vật chính"},
+		"key_events": []string{"Dọn dẹp"},
 	})
 	raw, err := tool.Execute(context.Background(), args)
 	if err != nil {
@@ -1017,18 +1017,18 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 
 	p, _ := s.Progress.Load()
 	if p.Phase != domain.PhaseComplete {
-		t.Errorf("phase = %s, want complete (应自动重新收尾)", p.Phase)
+		t.Errorf("phase = %s, want complete (cần tự động thu gọn lại)", p.Phase)
 	}
 	if len(p.PendingRewrites) != 0 {
 		t.Errorf("PendingRewrites = %v, want empty", p.PendingRewrites)
 	}
 }
 
-// TestCommitChapterLayeredReopenRecompletesDespiteOpenThread 验证收口：分层书经 reopen
-// 返工后，即便 compass 仍有未收束长线（返工可能扰动），排空后也按"结构完整"重新完结——
-// 不卡在 writing，杜绝终卷末越界续写死循环（§6.5 / known_outline_exhaustion 家族）。
-// 反证：若 reopen 路径仍用质量级 layeredBookComplete，本例 open thread 会让其返 false、
-// book_complete 为假，测试即失败。
+// TestCommitChapterLayeredReopenRecompletesDespiteOpenThread xác minh chặn cuối: sách phân tầng đi qua reopen
+// làm lại, dù compass vẫn còn tuyến dài chưa khép lại (làm lại có thể làm nhiễu), sau khi rút cạn vẫn hoàn thành lại theo "cấu trúc hoàn chỉnh" —
+// không kẹt ở writing, loại bỏ vòng lặp vô hạn do viết tiếp vượt phạm vi ở cuối tập chốt hạt (§6.5 / họ known_outline_exhaustion).
+// phản chứng: nếu đường reopen vẫn dùng layeredBookComplete ở mức chất lượng, open thread của ví dụ này sẽ khiến nó trả false,
+// book_complete là giả, và test sẽ thất bại.
 func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1039,17 +1039,17 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 单卷单弧两章，全部展开
+	// một tập một cung hai chương, khai triển toàn bộ
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "卷一", "theme": "主题",
+			"index": 1, "title": "Tập một", "theme": "Chủ đề",
 			"arcs": []map[string]any{{
-				"index": 1, "title": "弧一", "goal": "目标",
+				"index": 1, "title": "Cung một", "goal": "Mục tiêu",
 				"chapters": []map[string]any{
-					{"title": "首章", "core_event": "起", "hook": "续"},
-					{"title": "次章", "core_event": "承", "hook": "终"},
+					{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"},
+					{"title": "Chương kế", "core_event": "Nối tiếp", "hook": "Kết"},
 				},
 			}},
 		}},
@@ -1059,9 +1059,9 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// 两章写完落盘并完结
-	ch2 := "第二章原始正文，模拟已提交终稿。"
-	for ch, body := range map[int]string{1: "第一章正文。", 2: ch2} {
+	// hai chương viết xong, ghi xuống và hoàn thành
+	ch2 := "Nội dung truyện gốc của chương hai, mô phỏng bản chính đã nộp."
+	for ch, body := range map[int]string{1: "Nội dung truyện chương một.", 2: ch2} {
 		if err := s.Drafts.SaveDraft(ch, body); err != nil {
 			t.Fatalf("SaveDraft %d: %v", ch, err)
 		}
@@ -1077,21 +1077,21 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("MarkComplete: %v", err)
 	}
 
-	// 模拟"返工扰动了长线"：compass 仍有未收束的 open thread
-	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
+	// mô phỏng "làm lại đã làm nhiễu tuyến dài": compass vẫn còn open thread chưa khép lại
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "Nhân vật chính trở về quê", OpenThreads: []string{"Kẻ thù chưa trừ"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 
-	// reopen 第 2 章 → 返工提交（草稿需与终稿不同才放行）
-	if err := s.Progress.Reopen([]int{2}, "返工"); err != nil {
+	// reopen chương 2 → nộp làm lại (bản nháp phải khác bản chính thì mới được qua)
+	if err := s.Progress.Reopen([]int{2}, "Làm lại"); err != nil {
 		t.Fatalf("Reopen: %v", err)
 	}
-	if err := s.Drafts.SaveDraft(2, ch2+"\n\n返工新增段落。"); err != nil {
+	if err := s.Drafts.SaveDraft(2, ch2+"\n\nĐoạn văn thêm sau khi làm lại."); err != nil {
 		t.Fatalf("SaveDraft reworked: %v", err)
 	}
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 2, "title": "第二章", "summary": "返工摘要", "characters": []string{"主角"}, "key_events": []string{"清理"},
+		"chapter": 2, "title": "Chương hai", "summary": "Tóm tắt làm lại", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Dọn dẹp"},
 	})
 	raw, err := tool.Execute(context.Background(), args)
 	if err != nil {
@@ -1102,14 +1102,14 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if bc, _ := out["book_complete"].(bool); !bc {
-		t.Error("reopen 返工排空后应按结构完整重新完结（即便长线未收束）")
+		t.Error("sau khi hàng chờ làm lại của reopen rút cạn thì phải hoàn thành lại theo \"cấu trúc hoàn chỉnh\" (dù tuyến dài chưa khép lại)")
 	}
 	p, _ := s.Progress.Load()
 	if p.Phase != domain.PhaseComplete {
 		t.Errorf("phase = %s, want complete", p.Phase)
 	}
 	if p.ReopenedFromComplete {
-		t.Error("重新完结后 ReopenedFromComplete 应被清除")
+		t.Error("sau khi hoàn thành lại, ReopenedFromComplete phải được xóa")
 	}
 }
 
@@ -1123,8 +1123,8 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 模拟第 2 章已正常完成：drafts 与 chapters 内容相同。
-	original := "第二章原始正文内容，用于模拟已提交终稿。"
+	// mô phỏng chương 2 đã hoàn thành bình thường: drafts và chapters có nội dung giống nhau.
+	original := "Nội dung truyện gốc của chương hai, mô phỏng bản chính đã nộp."
 	if err := s.Drafts.SaveDraft(2, original); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
@@ -1134,12 +1134,12 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 	if err := s.Progress.MarkChapterComplete(2, len([]rune(original)), "mystery", "quest"); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 2, Title: "第二章", Summary: "原摘要"}); err != nil {
+	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 2, Title: "Chương hai", Summary: "Tóm tắt gốc"}); err != nil {
 		t.Fatalf("SaveSummary: %v", err)
 	}
 
-	// 进入打磨队列：Flow=Polishing, PendingRewrites=[2]
-	if err := s.Progress.SetPendingRewrites([]int{2}, "测试打磨"); err != nil {
+	// đưa vào hàng chờ hoàn thiện：Flow=Polishing, PendingRewrites=[2]
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Kiểm thử hoàn thiện"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowPolishing); err != nil {
@@ -1149,18 +1149,18 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    2,
-		"title":      "第二章",
-		"summary":    "假装打磨了",
-		"characters": []string{"主角"},
-		"key_events": []string{"无改动"},
+		"title":      "Chương hai",
+		"summary":    "Giả vờ đã hoàn thiện",
+		"characters": []string{"Nhân vật chính"},
+		"key_events": []string{"Không thay đổi"},
 	})
 	_, err := tool.Execute(context.Background(), args)
 	if err == nil {
 		t.Fatal("expected commit to be rejected when drafts equals final content")
 	}
 
-	// 再写一版不同的草稿 → 应该通过
-	polished := original + "\n\n打磨后新增段落。"
+	// viết lại một bản nháp khác → thì phải được qua
+	polished := original + "\n\nĐoạn văn thêm sau khi hoàn thiện."
 	if err := s.Drafts.SaveDraft(2, polished); err != nil {
 		t.Fatalf("SaveDraft (polished): %v", err)
 	}
@@ -1177,14 +1177,14 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatal(err)
 	}
-	body := "正文无需修改，只有标题需要打磨。"
+	body := "Nội dung truyện không cần sửa, chỉ tiêu đề cần hoàn thiện."
 	if err := s.Drafts.SaveDraft(2, body); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Drafts.SaveFinalChapter(2, body); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 2, Title: "旧标题", Summary: "原摘要"}); err != nil {
+	if err := s.Summaries.SaveSummary(domain.ChapterSummary{Chapter: 2, Title: "Tiêu đề cũ", Summary: "Tóm tắt gốc"}); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.Checkpoints.AppendArtifacts(
@@ -1196,7 +1196,7 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	if err := s.Progress.MarkChapterComplete(2, len([]rune(body)), "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Progress.SetPendingRewrites([]int{2}, "优化标题"); err != nil {
+	if err := s.Progress.SetPendingRewrites([]int{2}, "Tối ưu tiêu đề"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress.SetFlow(domain.FlowPolishing); err != nil {
@@ -1204,8 +1204,8 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	}
 
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 2, "title": "更准确的新标题", "summary": "原摘要",
-		"characters": []string{"主角"}, "key_events": []string{"既有事件"},
+		"chapter": 2, "title": "Tiêu đề mới chính xác hơn", "summary": "Tóm tắt gốc",
+		"characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện có sẵn"},
 	})
 	if _, err := newTestCommitChapterTool(s).Execute(context.Background(), args); err != nil {
 		t.Fatalf("title-only rewrite failed: %v", err)
@@ -1214,7 +1214,7 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary == nil || summary.Title != "更准确的新标题" {
+	if summary == nil || summary.Title != "Tiêu đề mới chính xác hơn" {
 		t.Fatalf("committed title = %+v", summary)
 	}
 	after := s.Checkpoints.LatestByStep(domain.ChapterScope(2), "commit")
@@ -1225,15 +1225,15 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 标题由引擎渲染进正文首行，因此只改标题也会改变文件——变的必须只有标题行。
-	if final != "# 更准确的新标题\n\n"+body {
+	// Tiêu đề được engine kết xuất vào dòng đầu nội dung truyện, nên chỉ đổi tiêu đề cũng làm đổi tệp — phần đổi phải chỉ là dòng tiêu đề.
+	if final != "# Tiêu đề mới chính xác hơn\n\n"+body {
 		t.Fatalf("title-only rewrite changed body: %q", final)
 	}
 }
 
-// TestCommitChapterLayeredRejectsOutOfRangeChapter 验证分层模式下，
-// 章号越出 layered_outline 的 commit 必须硬失败，而不是 slog.Warn 放行。
-// 这是阻止"裁定误判后 writer 一路裸跑"的物理刹车（《凡骨》ch204..347 案例）。
+// TestCommitChapterLayeredRejectsOutOfRangeChapter xác minh ở chế độ phân tầng,，
+// commit có số chương vượt ra ngoài layered_outline phải thất bại cứng, không được slog.Warn cho qua.
+// Đây là phanh cứng chặn "sau khi quyết định sai, writer chạy thẳng không có chặn" (ca 《凡骨》ch204..347).
 func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1244,16 +1244,16 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 建一份 layered_outline，只有 1 卷 1 弧 1 章
+	// dựng một layered_outline chỉ có 1 tập 1 cung 1 chương
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "卷一", "theme": "主题",
+			"index": 1, "title": "Tập một", "theme": "Chủ đề",
 			"arcs": []map[string]any{{
-				"index": 1, "title": "弧一", "goal": "目标",
+				"index": 1, "title": "Cung một", "goal": "Mục tiêu",
 				"chapters": []map[string]any{
-					{"title": "首章", "core_event": "起", "hook": "续"},
+					{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"},
 				},
 			}},
 		}},
@@ -1264,24 +1264,24 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
-	// 越界章节 2 的 commit 必须硬失败
-	if err := s.Drafts.SaveDraft(2, "越界章节正文，必须被拦下。"); err != nil {
+	// commit của chương vượt phạm vi 2 phải thất bại cứng
+	if err := s.Drafts.SaveDraft(2, "Nội dung truyện chương vượt phạm vi, phải bị chặn lại."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"chapter":    2,
-		"title":      "第二章",
-		"summary":    "越界章节",
-		"characters": []string{"主角"},
-		"key_events": []string{"不该被允许"},
+		"title":      "Chương hai",
+		"summary":    "Chương vượt phạm vi",
+		"characters": []string{"Nhân vật chính"},
+		"key_events": []string{"không được phép"},
 	})
 	_, err := tool.Execute(context.Background(), args)
 	if err == nil {
 		t.Fatal("expected commit to fail when chapter out of layered outline range")
 	}
 
-	// 章节文件不应落盘、Progress 不应推进
+	// tệp chương không được ghi xuống、Progress không được được đẩy tiếp
 	if _, statErr := os.Stat(dir + "/chapters/02.md"); !os.IsNotExist(statErr) {
 		t.Fatalf("chapter 2 should not be persisted, stat err=%v", statErr)
 	}
@@ -1291,11 +1291,11 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	}
 }
 
-// TestCommitChapterLayeredAutoCompletesWhenDone 验证分层模式确定性完结兜底：
-// 大纲全部展开并写完 + 无骨架弧 + 无返工 + 活跃伏笔为零 + 指南针长线收束时，
-// 最后一章 commit 自动推 Phase=Complete，不依赖架构师主动调 complete_book。
-// 这是 9bf26a5 删掉分层自动完结后引入的 livelock 的修复（终卷末尾模型既不 append
-// 也不 complete → 写手裸跑越界死循环）。
+// TestCommitChapterLayeredAutoCompletesWhenDone xác minh lớp chốt an toàn hoàn thành tất định ở chế độ phân tầng：
+// khi dàn ý đã khai triển và viết xong toàn bộ + không có cung khung + không có làm lại + manh mối hoạt động bằng 0 + tuyến dài của la bàn đã khép lại thì，
+// commit chương cuối tự đẩy Phase=Complete, không phụ thuộc kiến trúc sư chủ động gọi complete_book.
+// Đây là bản sửa livelock do 9bf26a5 xóa hoàn thành tự động phân tầng (ở cuối tập chốt hạt mô hình vừa không append
+// vừa không complete → viết tay chạy trần vượt phạm vi rồi kẹt vòng lặp).
 func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1306,17 +1306,17 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 单卷单弧两章，全部展开（无骨架弧）
+	// một tập một cung hai chương, khai triển toàn bộ (không có cung khung)
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "卷一", "theme": "主题",
+			"index": 1, "title": "Tập một", "theme": "Chủ đề",
 			"arcs": []map[string]any{{
-				"index": 1, "title": "弧一", "goal": "目标",
+				"index": 1, "title": "Cung một", "goal": "Mục tiêu",
 				"chapters": []map[string]any{
-					{"title": "首章", "core_event": "起", "hook": "续"},
-					{"title": "次章", "core_event": "承", "hook": "终"},
+					{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"},
+					{"title": "Chương kế", "core_event": "Nối tiếp", "hook": "Kết"},
 				},
 			}},
 		}},
@@ -1325,19 +1325,19 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 	if _, err := foundation.Execute(context.Background(), layeredArgs); err != nil {
 		t.Fatalf("Execute layered: %v", err)
 	}
-	// 指南针长线已收束（OpenThreads 空）
-	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡"}); err != nil {
+	// tuyến dài của la bàn đã khép lại (OpenThreads rỗng)
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "Nhân vật chính trở về quê"}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
 	tool := newTestCommitChapterTool(s)
 	commit := func(ch int) map[string]any {
-		if err := s.Drafts.SaveDraft(ch, fmt.Sprintf("第 %d 章正文内容，用于测试确定性完结。", ch)); err != nil {
+		if err := s.Drafts.SaveDraft(ch, fmt.Sprintf("Chương %d nội dung truyện, dùng để kiểm thử hoàn thành tất định.", ch)); err != nil {
 			t.Fatalf("SaveDraft %d: %v", ch, err)
 		}
 		args, _ := json.Marshal(map[string]any{
-			"chapter": ch, "title": fmt.Sprintf("第%d章", ch), "summary": "摘要", "characters": []string{"主角"}, "key_events": []string{"事件"},
+			"chapter": ch, "title": fmt.Sprintf("Chương %d", ch), "summary": "Tóm tắt", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện"},
 		})
 		raw, err := tool.Execute(context.Background(), args)
 		if err != nil {
@@ -1350,31 +1350,31 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 		return out
 	}
 
-	// 第 1 章：未写完，不应完结
+	// Chương 1: chưa viết xong thì không được hoàn thành
 	if bc, _ := commit(1)["book_complete"].(bool); bc {
-		t.Fatal("写完第 1 章不应触发完结")
+		t.Fatal("Viết xong chương 1 không được kích hoạt hoàn thành")
 	}
 	if p, _ := s.Progress.Load(); p.Phase == domain.PhaseComplete {
-		t.Fatal("写完第 1 章 phase 不应为 complete")
+		t.Fatal("Viết xong chương 1 thì phase không được là complete")
 	}
 
-	// 第 2 章（最后一章）：应自动完结
+	// Chương 2 (chương cuối): phải tự động hoàn thành
 	if bc, _ := commit(2)["book_complete"].(bool); !bc {
-		t.Fatal("写完最后一章应自动完结")
+		t.Fatal("Viết xong chương cuối thì phải tự động hoàn thành")
 	}
 	if p, _ := s.Progress.Load(); p.Phase != domain.PhaseComplete {
 		t.Fatalf("expected phase=complete, got %s", p.Phase)
 	}
 }
 
-// TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads 验证收官卷全链路：
-// 已宣告收官卷（append_volume 带 final:true）后——
-//  1. 末章 commit 不完结：完结不抢在卷末收尾三连（弧评审/弧摘要/卷摘要）之前，
-//     结局必须过 editor 质量闸；
-//  2. 三连齐备、卷摘要落盘（save_volume_summary 触发点）即完结，不再要求
-//     伏笔/长线双归零——否则 estimated_scale 高估的书永远无法合法完本。
+// TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads xác minh toàn bộ chuỗi tập chốt hạt：
+// sau khi đã tuyên bố tập chốt hạt (append_volume kèm final:true) —
+//  1. commit chương cuối không hoàn thành: việc hoàn thành không được vượt trước bộ ba chốt cuối tập (đánh giá cung / tóm tắt cung / tóm tắt tập),
+//     kết cục phải qua chất cổng chất lượng của editor;
+//  2. khi bộ ba đủ và tóm tắt tập được lưu (điểm kích hoạt của save_volume_summary) thì hoàn thành, không còn yêu cầu
+//     manh mối và tuyến dài cùng về 0 — nếu không thì những cuốn bị estimated_scale đánh giá quá cao sẽ không bao giờ hoàn thành được.
 //
-// 与下方 NoAutoCompleteWithOpenThreads 互为对照：同样带未收长线，未宣告不完结、已宣告完结。
+// đối chiếu với NoAutoCompleteWithOpenThreads bên dưới: cùng có tuyến dài chưa khép, chưa tuyên bố thì không hoàn thành, đã tuyên bố thì hoàn thành.
 func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1389,10 +1389,10 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "卷一", "theme": "主题",
+			"index": 1, "title": "Tập một", "theme": "Chủ đề",
 			"arcs": []map[string]any{{
-				"index": 1, "title": "弧一", "goal": "目标",
-				"chapters": []map[string]any{{"title": "首章", "core_event": "起", "hook": "续"}},
+				"index": 1, "title": "Cung một", "goal": "Mục tiêu",
+				"chapters": []map[string]any{{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"}},
 			}},
 		}},
 		"scale": "long",
@@ -1401,15 +1401,15 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// 卷末宣告收官卷：append_volume 带 final:true
+	// tuyên bố tập chốt hạt ở cuối tập: append_volume kèm final:true
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
-		"reason": "长线可在一卷内收完，宣告收官卷",
+		"reason": "Tuyến dài có thể khép trong một tập, tuyên bố tập chốt hạt",
 		"content": map[string]any{
-			"index": 2, "title": "终卷", "theme": "收束", "final": true,
+			"index": 2, "title": "Tập chốt hạt", "theme": "Khép lại", "final": true,
 			"arcs": []map[string]any{{
-				"index": 1, "title": "收官弧", "goal": "回收所有长线",
-				"chapters": []map[string]any{{"title": "终章", "core_event": "合", "hook": "终"}},
+				"index": 1, "title": "Cung chốt hạt", "goal": "Thu về mọi tuyến dài",
+				"chapters": []map[string]any{{"title": "Chương cuối", "core_event": "Hợp", "hook": "Kết"}},
 			}},
 		},
 	})
@@ -1422,22 +1422,22 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatalf("Unmarshal append result: %v", err)
 	}
 	if appendOut["final_volume"] != true {
-		t.Fatalf("append_volume 应返回 final_volume=true 事实, got %v", appendOut)
+		t.Fatalf("append_volume phải trả về sự thật final_volume=true, thực tế: %v", appendOut)
 	}
 
-	// 长线未收束（未宣告时这会阻止完结，见对照测试）
-	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
+	// tuyến dài chưa khép lại (khi chưa tuyên bố thì điều này chặn hoàn thành, xem test đối chiếu)
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "Nhân vật chính trở về quê", OpenThreads: []string{"Kẻ thù chưa trừ"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
 	tool := newTestCommitChapterTool(s)
 	commit := func(ch int) map[string]any {
-		if err := s.Drafts.SaveDraft(ch, fmt.Sprintf("第 %d 章正文内容，用于收官卷完结测试。", ch)); err != nil {
+		if err := s.Drafts.SaveDraft(ch, fmt.Sprintf("Chương %d nội dung truyện, dùng để kiểm thử hoàn thành tập chốt hạt.", ch)); err != nil {
 			t.Fatalf("SaveDraft %d: %v", ch, err)
 		}
 		args, _ := json.Marshal(map[string]any{
-			"chapter": ch, "title": fmt.Sprintf("第%d章", ch), "summary": "摘要", "characters": []string{"主角"}, "key_events": []string{"事件"},
+			"chapter": ch, "title": fmt.Sprintf("Chương %d", ch), "summary": "Tóm tắt", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện"},
 		})
 		raw, err := tool.Execute(context.Background(), args)
 		if err != nil {
@@ -1450,38 +1450,38 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		return out
 	}
 
-	// 第 1 章（非终卷末章）：不应完结
+	// Chương 1 (không phải chương cuối tập chốt hạt): không được hoàn thành
 	if bc, _ := commit(1)["book_complete"].(bool); bc {
-		t.Fatal("收官卷尚未写完不应完结")
+		t.Fatal("Tập chốt hạt chưa viết xong thì không được hoàn thành")
 	}
-	// 第一卷的聚合工件必须先完成，第二卷末的卷摘要才是 Router 当前目标。
-	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "第一卷评审"}); err != nil {
+	// tổng hợp của tập một phải hoàn tất trước, tóm tắt tập ở cuối tập hai mới là Mục tiêu hiện tại của Router.
+	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "Đánh giá tập một"}); err != nil {
 		t.Fatalf("SaveReview v1: %v", err)
 	}
-	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 1, Arc: 1, Title: "弧一", Summary: "完成", KeyEvents: []string{"起"}}); err != nil {
+	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 1, Arc: 1, Title: "Cung một", Summary: "Hoàn tất", KeyEvents: []string{"Khởi"}}); err != nil {
 		t.Fatalf("SaveArcSummary v1: %v", err)
 	}
-	if err := s.Summaries.SaveVolumeSummary(domain.VolumeSummary{Volume: 1, Title: "卷一", Summary: "完成", KeyEvents: []string{"起"}}); err != nil {
+	if err := s.Summaries.SaveVolumeSummary(domain.VolumeSummary{Volume: 1, Title: "Tập một", Summary: "Hoàn tất", KeyEvents: []string{"Khởi"}}); err != nil {
 		t.Fatalf("SaveVolumeSummary v1: %v", err)
 	}
-	// 第 2 章（收官卷末章）：卷末收尾三连未齐，完结不得抢在 editor 评审/摘要之前
+	// Chương 2 (chương cuối tập chốt hạt): bộ ba chốt cuối tập chưa đủ, việc hoàn thành không được vượt trước đánh giá của editor / tóm tắt
 	if bc, _ := commit(2)["book_complete"].(bool); bc {
-		t.Fatal("末章 commit 时三连未齐，不应完结")
+		t.Fatal("Khi commit chương cuối mà ba điều kiện chưa đủ thì không được hoàn thành")
 	}
 	if p, _ := s.Progress.Load(); p.Phase == domain.PhaseComplete {
-		t.Fatal("完结不应发生在卷末评审与摘要之前")
+		t.Fatal("Không được hoàn thành trước khi đánh giá cuối tập và tóm tắt")
 	}
 
-	// 卷末收尾三连：弧评审 + 弧摘要落盘后，卷摘要（save_volume_summary）是完结触发点
-	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 2, Scope: "arc", Verdict: "accept", Summary: "末弧评审"}); err != nil {
+	// bộ ba chốt cuối tập: đánh giá cung + tóm tắt cung đã lưu, tóm tắt tập (save_volume_summary) là điểm kích hoạt hoàn thành
+	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 2, Scope: "arc", Verdict: "accept", Summary: "Đánh giá cung cuối"}); err != nil {
 		t.Fatalf("SaveReview: %v", err)
 	}
-	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 2, Arc: 1, Title: "收官弧", Summary: "收束", KeyEvents: []string{"终局"}}); err != nil {
+	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 2, Arc: 1, Title: "Cung chốt hạt", Summary: "Khép lại", KeyEvents: []string{"Kết cục"}}); err != nil {
 		t.Fatalf("SaveArcSummary: %v", err)
 	}
 	volTool := NewSaveVolumeSummaryTool(s)
 	volArgs, _ := json.Marshal(map[string]any{
-		"volume": 2, "title": "终卷", "summary": "全卷收束", "key_events": []string{"终局"},
+		"volume": 2, "title": "Tập chốt hạt", "summary": "Khép lại toàn tập", "key_events": []string{"Kết cục"},
 	})
 	volRaw, err := volTool.Execute(context.Background(), volArgs)
 	if err != nil {
@@ -1492,16 +1492,16 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatalf("Unmarshal volume summary result: %v", err)
 	}
 	if volOut["book_complete"] != true {
-		t.Fatalf("卷摘要落盘应触发收官完结并回显 book_complete, got %v", volOut)
+		t.Fatalf("Lưu tóm tắt tập phải kích hoạt hoàn thành chốt hạt và trả lại book_complete, thực tế: %v", volOut)
 	}
 	if p, _ := s.Progress.Load(); p.Phase != domain.PhaseComplete {
 		t.Fatalf("expected phase=complete, got %s", p.Phase)
 	}
 }
 
-// TestCommitChapterFinaleSkeletonArcBlocksCompletion 验证收官完结的结构闸门：
-// 收官卷仍有骨架弧（规划内容未写）时，即使三连齐备也不得完结——这是防止
-// "过早完结"的唯一防线（layeredStructurallyComplete 条件 2）。
+// TestCommitChapterFinaleSkeletonArcBlocksCompletion xác minh chặn cấu trúc cho việc hoàn thành chốt hạt：
+// khi tập chốt hạt vẫn còn cung khung (phần quy hoạch chưa viết) thì dù bộ ba đủ cũng không được hoàn thành — đây là cách ngăn
+// "hoàn thành quá sớm" (điều kiện 2 của layeredStructurallyComplete).
 func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1513,15 +1513,15 @@ func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	}
 
 	foundation := NewSaveFoundationTool(s)
-	// 收官卷：第一弧展开 1 章，第二弧仍是骨架
+	// tập chốt hạt: cung một khai triển 1 chương, cung hai vẫn là khung
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "终卷", "theme": "收束", "final": true,
+			"index": 1, "title": "Tập chốt hạt", "theme": "Khép lại", "final": true,
 			"arcs": []map[string]any{
-				{"index": 1, "title": "收官弧", "goal": "收线",
-					"chapters": []map[string]any{{"title": "首章", "core_event": "起", "hook": "续"}}},
-				{"index": 2, "title": "骨架弧", "goal": "待展开", "estimated_chapters": 5},
+				{"index": 1, "title": "Cung chốt hạt", "goal": "Gom mối",
+					"chapters": []map[string]any{{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"}}},
+				{"index": 2, "title": "Cung khung", "goal": "Chờ khai triển", "estimated_chapters": 5},
 			},
 		}},
 		"scale": "long",
@@ -1529,45 +1529,45 @@ func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	if _, err := foundation.Execute(context.Background(), layeredArgs); err != nil {
 		t.Fatalf("Execute layered: %v", err)
 	}
-	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "归乡"}); err != nil {
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "Trở về quê"}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
 	tool := newTestCommitChapterTool(s)
-	if err := s.Drafts.SaveDraft(1, "第一章正文。"); err != nil {
+	if err := s.Drafts.SaveDraft(1, "Nội dung truyện chương một."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 1, "title": "第一章", "summary": "摘要", "characters": []string{"主角"}, "key_events": []string{"事件"},
+		"chapter": 1, "title": "Chương một", "summary": "Tóm tắt", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện"},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	// 三连齐备也不放行：骨架弧意味着规划内容还没写
-	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "弧评审"}); err != nil {
+	// bộ ba đủ cũng không được cho qua: cung khung nghĩa là phần quy hoạch chưa viết
+	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "Đánh giá cung"}); err != nil {
 		t.Fatalf("SaveReview: %v", err)
 	}
-	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 1, Arc: 1, Title: "收官弧", Summary: "s", KeyEvents: []string{"e"}}); err != nil {
+	if err := s.Summaries.SaveArcSummary(domain.ArcSummary{Volume: 1, Arc: 1, Title: "Cung chốt hạt", Summary: "s", KeyEvents: []string{"e"}}); err != nil {
 		t.Fatalf("SaveArcSummary: %v", err)
 	}
 	volTool := NewSaveVolumeSummaryTool(s)
 	volArgs, _ := json.Marshal(map[string]any{
-		"volume": 1, "title": "终卷", "summary": "s", "key_events": []string{"e"},
+		"volume": 1, "title": "Tập chốt hạt", "summary": "s", "key_events": []string{"e"},
 	})
-	if _, err := volTool.Execute(context.Background(), volArgs); err == nil || !strings.Contains(err.Error(), "当前没有待处理") {
-		t.Fatalf("骨架弧尚未展开时卷并未结束，卷摘要必须被拒绝，got %v", err)
+	if _, err := volTool.Execute(context.Background(), volArgs); err == nil || !strings.Contains(err.Error(), "hiện không có hạng mục") {
+		t.Fatalf("khi cung khung chưa khai triển thì tập chưa kết thúc, tóm tắt tập phải bị từ chối，got %v", err)
 	}
 	if p, _ := s.Progress.Load(); p.Phase == domain.PhaseComplete {
-		t.Fatal("骨架弧未展开，phase 不应为 complete")
+		t.Fatal("cung khung chưa khai triển, phase không được là complete")
 	}
 }
 
-// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads 验证保守性：仍有活跃长线时
-// 即使章节写满也不自动完结，把"是否继续"的裁定权留给架构师。
+// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads xác minh tính thận trọng: khi vẫn còn tuyến dài hoạt động thì
+// dù đã viết đủ chương cũng không tự động hoàn thành, giữ quyền quyết "có tiếp tục hay không" cho kiến trúc sư.
 
-// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads 验证保守性：仍有活跃长线时
-// 即使章节写满也不自动完结，把"是否继续"的裁定权留给架构师。
+// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads xác minh tính thận trọng: khi vẫn còn tuyến dài hoạt động thì
+// dù đã viết đủ chương cũng không tự động hoàn thành, giữ quyền quyết "có tiếp tục hay không" cho kiến trúc sư.
 func TestCommitChapterLayeredNoAutoCompleteWithOpenThreads(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1582,10 +1582,10 @@ func TestCommitChapterLayeredNoAutoCompleteWithOpenThreads(t *testing.T) {
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
-			"index": 1, "title": "卷一", "theme": "主题",
+			"index": 1, "title": "Tập một", "theme": "Chủ đề",
 			"arcs": []map[string]any{{
-				"index": 1, "title": "弧一", "goal": "目标",
-				"chapters": []map[string]any{{"title": "首章", "core_event": "起", "hook": "续"}},
+				"index": 1, "title": "Cung một", "goal": "Mục tiêu",
+				"chapters": []map[string]any{{"title": "Chương đầu", "core_event": "Khởi", "hook": "Nối tiếp"}},
 			}},
 		}},
 		"scale": "long",
@@ -1593,23 +1593,23 @@ func TestCommitChapterLayeredNoAutoCompleteWithOpenThreads(t *testing.T) {
 	if _, err := foundation.Execute(context.Background(), layeredArgs); err != nil {
 		t.Fatalf("Execute layered: %v", err)
 	}
-	// 仍有未收束的活跃长线
-	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
+	// vẫn còn tuyến dài hoạt động chưa khép lại
+	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "Nhân vật chính trở về quê", OpenThreads: []string{"Kẻ thù chưa trừ"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
-	if err := s.Drafts.SaveDraft(1, "唯一一章的正文，但长线未收束。"); err != nil {
+	if err := s.Drafts.SaveDraft(1, "Nội dung truyện của chương duy nhất, nhưng tuyến dài chưa khép lại."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 	tool := newTestCommitChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
-		"chapter": 1, "title": "第一章", "summary": "摘要", "characters": []string{"主角"}, "key_events": []string{"事件"},
+		"chapter": 1, "title": "Chương một", "summary": "Tóm tắt", "characters": []string{"Nhân vật chính"}, "key_events": []string{"Sự kiện"},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if p, _ := s.Progress.Load(); p.Phase == domain.PhaseComplete {
-		t.Fatal("活跃长线未收束时不应自动完结")
+		t.Fatal("khi tuyến dài hoạt động chưa khép lạithì không được tự động hoàn thành")
 	}
 }

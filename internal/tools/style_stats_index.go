@@ -9,8 +9,10 @@ import (
 	"github.com/voocel/ainovel-cli/internal/stylestat"
 )
 
-// StyleStatsIndex 把 Store 中的已完成章节同步到增量统计器。
-// 首次 Snapshot 全量恢复一次；之后只加载新增章节，重写由 commit_chapter 主动刷新。
+// StyleStatsIndex đồng bộ các chương đã hoàn thành trong Store sang bộ thống kê
+// gia tăng.
+// Lần Snapshot đầu tiên khôi phục toàn bộ một lượt; sau đó chỉ nạp các chương
+// mới, còn lúc viết lại thì commit_chapter chủ động làm mới.
 type StyleStatsIndex struct {
 	store *store.Store
 
@@ -78,8 +80,9 @@ func (s *StyleStatsIndex) Snapshot(
 	return s.tracker.Snapshot(titles, stopwords), nil
 }
 
-// ChapterCommitted 在提交 Saga 完整成功后刷新一章。索引尚未初始化时，
-// 下一次 Snapshot 会从 Progress 事实一次性恢复。
+// ChapterCommitted làm mới một chương sau khi Saga nộp chương hoàn tất trọn vẹn.
+// Khi chỉ mục chưa khởi tạo, lần Snapshot sau sẽ khôi phục một lượt từ sự thật
+// trong Progress.
 func (s *StyleStatsIndex) ChapterCommitted(chapter int, text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,10 +97,10 @@ func (s *StyleStatsIndex) ChapterCommitted(chapter int, text string) {
 func (s *StyleStatsIndex) loadChapter(chapter int) (string, error) {
 	text, err := s.store.Drafts.LoadChapterText(chapter)
 	if err != nil {
-		return "", fmt.Errorf("读取第 %d 章终稿: %w", chapter, err)
+		return "", fmt.Errorf("đọc bản chính chương %d: %w", chapter, err)
 	}
 	if text == "" {
-		return "", fmt.Errorf("第 %d 章已标记完成但终稿不存在", chapter)
+		return "", fmt.Errorf("chương %d đã đánh dấu hoàn thành nhưng không có bản chính", chapter)
 	}
 	return text, nil
 }
@@ -108,10 +111,10 @@ func normalizeCompletedChapters(chapters []int) ([]int, map[int]struct{}, error)
 	set := make(map[int]struct{}, len(normalized))
 	for _, chapter := range normalized {
 		if chapter <= 0 {
-			return nil, nil, fmt.Errorf("已完成章节号必须大于 0，实际为 %d", chapter)
+			return nil, nil, fmt.Errorf("số chương đã hoàn thành phải lớn hơn 0, thực tế là %d", chapter)
 		}
 		if _, exists := set[chapter]; exists {
-			return nil, nil, fmt.Errorf("已完成章节重复：第 %d 章", chapter)
+			return nil, nil, fmt.Errorf("chương đã hoàn thành bị trùng lặp: chương %d", chapter)
 		}
 		set[chapter] = struct{}{}
 	}

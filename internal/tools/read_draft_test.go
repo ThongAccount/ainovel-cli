@@ -15,7 +15,7 @@ func TestReadChapterFinal(t *testing.T) {
 	if err := store.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := store.Drafts.SaveFinalChapter(1, "第一章的终稿正文。"); err != nil {
+	if err := store.Drafts.SaveFinalChapter(1, "Nội dung truyện bản chính của chương một."); err != nil {
 		t.Fatalf("SaveFinalChapter: %v", err)
 	}
 
@@ -35,10 +35,10 @@ func TestReadChapterFinal(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if payload.Content == "" {
-		t.Fatal("expected non-empty content")
+		t.Fatal("cần nội dung không rỗng")
 	}
 	if payload.WordCount == 0 {
-		t.Fatal("expected non-zero word count")
+		t.Fatal("cần số từ khác 0")
 	}
 }
 
@@ -48,7 +48,7 @@ func TestReadChapterDraft(t *testing.T) {
 	if err := store.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	if err := store.Drafts.SaveDraft(3, "第三章的草稿内容。"); err != nil {
+	if err := store.Drafts.SaveDraft(3, "Nội dung bản nháp của chương ba."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestReadChapterDraft(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if payload.Content == "" {
-		t.Fatal("expected draft content")
+		t.Fatal("cần có nội dung bản nháp")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestReadChapterFinalDoesNotSubstituteDraft(t *testing.T) {
 	if err := st.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Drafts.SaveDraft(2, "只有草稿，不是终稿"); err != nil {
+	if err := st.Drafts.SaveDraft(2, "Chỉ có bản nháp, không phải bản chính"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,7 +94,7 @@ func TestReadChapterFinalDoesNotSubstituteDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Exists || got.Source != "final" || got.Content != "" {
-		t.Fatalf("请求 final 不得静默替换为 draft: %+v", got)
+		t.Fatalf("yêu cầu final không được âm thầm thay bằng draft: %+v", got)
 	}
 }
 
@@ -105,16 +105,16 @@ func TestReadChapterDialogue(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 	if err := store.Characters.Save([]domain.Character{
-		{Name: "张三", Aliases: []string{"老张"}},
+		{Name: "Trương Tam", Aliases: []string{"Lão Trương"}},
 	}); err != nil {
 		t.Fatalf("SaveCharacters: %v", err)
 	}
-	if err := store.Drafts.SaveFinalChapter(1, "张三站起身来。\u201c我不同意这个方案，\u201d张三冷冷地说。"); err != nil {
+	if err := store.Drafts.SaveFinalChapter(1, "Trương Tam đứng dậy. \u201cTôi không đồng ý với phương án này,\u201d Trương Tam lạnh lùng nói."); err != nil {
 		t.Fatalf("SaveFinalChapter: %v", err)
 	}
 
 	tool := NewReadChapterTool(store)
-	args, _ := json.Marshal(map[string]any{"source": "final", "character": "张三"})
+	args, _ := json.Marshal(map[string]any{"source": "final", "character": "Trương Tam"})
 	result, err := tool.Execute(context.Background(), args)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -127,8 +127,8 @@ func TestReadChapterDialogue(t *testing.T) {
 	if err := json.Unmarshal(result, &payload); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if payload.Character != "张三" {
-		t.Fatalf("expected character 张三, got %s", payload.Character)
+	if payload.Character != "Trương Tam" {
+		t.Fatalf("cần nhân vật Trương Tam, thực tế: %s", payload.Character)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestReadChapterRange(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 	for i := 1; i <= 3; i++ {
-		if err := store.Drafts.SaveFinalChapter(i, "这是一段正文内容。"); err != nil {
+		if err := store.Drafts.SaveFinalChapter(i, "Đây là một đoạn nội dung truyện."); err != nil {
 			t.Fatalf("SaveFinalChapter(%d): %v", i, err)
 		}
 	}
@@ -158,7 +158,7 @@ func TestReadChapterRange(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if len(payload.Chapters) != 3 {
-		t.Fatalf("expected 3 chapters, got %d", len(payload.Chapters))
+		t.Fatalf("cần 3 chương, thực tế: %d", len(payload.Chapters))
 	}
 }
 
@@ -178,7 +178,7 @@ func TestDraftChapterWrite(t *testing.T) {
 	tool := NewDraftChapterTool(store)
 	args, _ := json.Marshal(map[string]any{
 		"chapter": 1,
-		"content": "这是整章的正文内容，一次写完。",
+		"content": "Đây là toàn bộ nội dung truyện của chương, viết một lạt.",
 		"mode":    "write",
 	})
 	result, err := tool.Execute(context.Background(), args)
@@ -194,29 +194,29 @@ func TestDraftChapterWrite(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if !payload.Written {
-		t.Fatal("expected written=true")
+		t.Fatal("cần written=true")
 	}
 	if payload.WordCount == 0 {
-		t.Fatal("expected non-zero word count")
+		t.Fatal("cần số từ khác 0")
 	}
 
-	// 验证能读回来
+	// Kiểm tra đọc lại được
 	content, err := store.Drafts.LoadDraft(1)
 	if err != nil {
 		t.Fatalf("LoadDraft: %v", err)
 	}
 	if content == "" {
-		t.Fatal("expected non-empty draft")
+		t.Fatal("cần bản nháp không rỗng")
 	}
 	progress, err := store.Progress.Load()
 	if err != nil {
 		t.Fatalf("LoadProgress: %v", err)
 	}
 	if progress.InProgressChapter != 1 {
-		t.Fatalf("expected in-progress chapter 1, got %d", progress.InProgressChapter)
+		t.Fatalf("cần chương 1 đang viết, thực tế: %d", progress.InProgressChapter)
 	}
 	if progress.Phase != domain.PhaseWriting {
-		t.Fatalf("expected phase writing, got %s", progress.Phase)
+		t.Fatalf("cần phase writing, thực tế: %s", progress.Phase)
 	}
 }
 
@@ -232,14 +232,14 @@ func TestDraftChapterAppend(t *testing.T) {
 	if err := store.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("UpdatePhase: %v", err)
 	}
-	if err := store.Drafts.SaveDraft(2, "前半部分。"); err != nil {
+	if err := store.Drafts.SaveDraft(2, "Phần trước."); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
 
 	tool := NewDraftChapterTool(store)
 	args, _ := json.Marshal(map[string]any{
 		"chapter": 2,
-		"content": "后半部分。",
+		"content": "Phần sau.",
 		"mode":    "append",
 	})
 	result, err := tool.Execute(context.Background(), args)
@@ -255,12 +255,12 @@ func TestDraftChapterAppend(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if payload.Mode != "append" {
-		t.Fatalf("expected mode=append, got %s", payload.Mode)
+		t.Fatalf("cần mode=append, thực tế: %s", payload.Mode)
 	}
 
 	content, _ := store.Drafts.LoadDraft(2)
-	if content == "" || content == "前半部分。" {
-		t.Fatal("expected appended content")
+	if content == "" || content == "Phần trước." {
+		t.Fatal("cần nội dung đã được nối thêm")
 	}
 }
 
@@ -275,14 +275,14 @@ func TestReadChapterMissingReturnsJSON(t *testing.T) {
 	args, _ := json.Marshal(map[string]any{"chapter": 1, "source": "final"})
 	result, err := tool.Execute(context.Background(), args)
 	if err != nil {
-		t.Fatalf("expected no error for missing chapter, got: %v", err)
+		t.Fatalf("không được lỗi khi thiếu chương, thực tế: %v", err)
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if parsed["exists"] != false {
-		t.Fatal("expected exists=false")
+		t.Fatal("cần exists=false")
 	}
 }
 
@@ -302,10 +302,10 @@ func TestPlanChapterMarksInProgress(t *testing.T) {
 	tool := NewPlanChapterTool(store)
 	args, _ := json.Marshal(map[string]any{
 		"chapter":  1,
-		"title":    "起头",
-		"goal":     "建立处境",
-		"conflict": "债务逼近",
-		"hook":     "发现线索",
+		"title":    "Mở đầu",
+		"goal":     "Xác lập hoàn cảnh",
+		"conflict": "Nợ bên cạnh",
+		"hook":     "Phát hiện manh mối",
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -316,10 +316,10 @@ func TestPlanChapterMarksInProgress(t *testing.T) {
 		t.Fatalf("LoadProgress: %v", err)
 	}
 	if progress.Phase != domain.PhaseWriting {
-		t.Fatalf("expected phase writing, got %s", progress.Phase)
+		t.Fatalf("cần phase writing, thực tế: %s", progress.Phase)
 	}
 	if progress.InProgressChapter != 1 {
-		t.Fatalf("expected in-progress chapter 1, got %d", progress.InProgressChapter)
+		t.Fatalf("cần chương 1 đang viết, thực tế: %d", progress.InProgressChapter)
 	}
 }
 
@@ -332,24 +332,24 @@ func TestDraftChapterRejectsCompleted(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	_ = s.Drafts.SaveDraft(1, "第一章正文")
+	_ = s.Drafts.SaveDraft(1, "Nội dung truyện chương một")
 	_ = s.Progress.StartChapter(1)
 	_ = s.Progress.MarkChapterComplete(1, 3000, "", "")
 
 	tool := NewDraftChapterTool(s)
 	args, _ := json.Marshal(map[string]any{
 		"chapter": 1,
-		"content": "试图覆盖已提交的章节",
+		"content": "Cố ghi đè chương đã nộp",
 	})
 	result, err := tool.Execute(context.Background(), args)
 	if err != nil {
-		t.Fatalf("expected soft rejection, got error: %v", err)
+		t.Fatalf("cần từ chối mềm, thực tế là lỗi: %v", err)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(result, &payload); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if payload["skipped"] != true {
-		t.Fatalf("expected skipped=true, got %+v", payload)
+		t.Fatalf("cần skipped=true, thực tế: %+v", payload)
 	}
 }
