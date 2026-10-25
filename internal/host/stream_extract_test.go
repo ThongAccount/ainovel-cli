@@ -5,20 +5,21 @@ import (
 	"testing"
 )
 
-// feedAll 一次性喂入，返回累积输出。
+// feedAll nạp một lần toàn bộ input, trả về output tích luỹ.
 func feedAll(t *testing.T, tool, input string) string {
 	t.Helper()
-	e := newToolExtractor(tool)
+	e := newToolExtractor(tool, observerTextsVI)
 	if e == nil {
 		t.Fatalf("no extractor for tool %q", tool)
 	}
 	return e.Feed(input)
 }
 
-// feedChunked 按指定字节数分片喂入，验证流式与一次喂入结果一致。
+// feedChunked nạp input theo số byte cố định, kiểm tra kết quả dạng luồng khớp với
+// nạp một lần.
 func feedChunked(t *testing.T, tool, input string, chunk int) string {
 	t.Helper()
-	e := newToolExtractor(tool)
+	e := newToolExtractor(tool, observerTextsVI)
 	if e == nil {
 		t.Fatalf("no extractor for tool %q", tool)
 	}
@@ -44,12 +45,12 @@ func mustNotContain(t *testing.T, got, want string) {
 	}
 }
 
-// ── 通用模式：扁平 obj ──
+// ── Chế độ chung: obj phẳng ──
 
 func TestExtract_PlanChapter(t *testing.T) {
 	in := `{"chapter":1,"title":"卖身契","goal":"建立矿场基线","conflict":"父债","hook":"灰矿","emotion_arc":"压抑"}`
 	out := feedAll(t, "plan_chapter", in)
-	mustContain(t, out, "✻ 规划")
+	mustContain(t, out, "✻ Quy hoạch")
 	mustContain(t, out, "chapter: 1")
 	mustContain(t, out, "title: 卖身契")
 	mustContain(t, out, "goal: 建立矿场基线")
@@ -58,7 +59,7 @@ func TestExtract_PlanChapter(t *testing.T) {
 	mustContain(t, out, "emotion_arc: 压抑")
 }
 
-// ── 通用模式：嵌套 obj + 数组 ──
+// ── Chế độ chung: obj lồng nhau + mảng ──
 
 func TestExtract_FoundationCharacters(t *testing.T) {
 	in := `{"type":"characters","scale":"long","content":[` +
@@ -66,10 +67,10 @@ func TestExtract_FoundationCharacters(t *testing.T) {
 		`{"name":"顾小灯","role":"重要配角","description":"药坊试药童女。"}` +
 		`]}`
 	out := feedAll(t, "save_foundation", in)
-	mustContain(t, out, "✻ 设定")
+	mustContain(t, out, "✻ Thiết lập")
 	mustContain(t, out, "type: characters")
 	mustContain(t, out, "scale: long")
-	// 通用渲染：所有字段都展示，包括之前被白名单跳过的 aliases / traits
+	// Dựng theo chế độ chung: mọi trường đều hiện, gồm cả aliases / traits trước đây bị danh sách trắng bỏ qua
 	mustContain(t, out, "name: 沈砺")
 	mustContain(t, out, "role: 主角")
 	mustContain(t, out, "aliases:")
@@ -91,17 +92,17 @@ func TestExtract_FoundationLayeredOutline(t *testing.T) {
 		`]}]}]}`
 	out := feedAll(t, "save_foundation", in)
 	mustContain(t, out, "type: layered_outline")
-	// 卷
+	// Tập
 	mustContain(t, out, "index: 1")
 	mustContain(t, out, "title: 矿火微明")
-	// 弧
+	// Cung
 	mustContain(t, out, "title: 乌鳞矿役")
 	mustContain(t, out, "goal: 求活")
-	// 章
+	// Chương
 	mustContain(t, out, "chapter: 1")
 	mustContain(t, out, "title: 卖身契")
 	mustContain(t, out, "core_event: 被卖入矿场。")
-	// 嵌套缩进体现层级
+	// Thụt lề lồng nhau thể hiện phân cấp
 	mustContain(t, out, "arcs:\n")
 	mustContain(t, out, "chapters:\n")
 }
@@ -117,12 +118,12 @@ func TestExtract_FoundationUpdateCompass(t *testing.T) {
 	mustContain(t, out, "- 活人票账簿")
 }
 
-// ── save_review：含数组对象 + 数字数组 ──
+// ── save_review: có object trong mảng + mảng số ──
 
 func TestExtract_SaveReview(t *testing.T) {
 	in := `{"chapter":3,"scope":"chapter","verdict":"polish","summary":"节奏略慢。","dimensions":[{"dimension":"hook","score":55,"verdict":"fail"}],"issues":[{"type":"hook","severity":"error","description":"章末缺钩子。"}],"affected_chapters":[3,4]}`
 	out := feedAll(t, "save_review", in)
-	mustContain(t, out, "✻ 审阅")
+	mustContain(t, out, "✻ Thẩm duyệt")
 	mustContain(t, out, "verdict: polish")
 	mustContain(t, out, "summary: 节奏略慢。")
 	mustContain(t, out, "dimension: hook")
@@ -135,12 +136,12 @@ func TestExtract_SaveReview(t *testing.T) {
 	mustContain(t, out, "- 4")
 }
 
-// ── commit_chapter：复杂嵌套 ──
+// ── commit_chapter: lồng nhau phức tạp ──
 
 func TestExtract_CommitChapter(t *testing.T) {
 	in := `{"chapter":1,"summary":"被卖入矿场。","characters":["沈砺","母亲"],"key_events":["签卖身契"],"foreshadow_updates":[{"id":"f1","action":"plant","description":"灰矿发烫。"}],"state_changes":[{"entity":"沈砺","field":"身份","old_value":"采药少年","new_value":"矿场杂役"}]}`
 	out := feedAll(t, "commit_chapter", in)
-	mustContain(t, out, "✻ 章节提交")
+	mustContain(t, out, "✻ Chốt chương")
 	mustContain(t, out, "summary: 被卖入矿场。")
 	mustContain(t, out, "- 沈砺")
 	mustContain(t, out, "- 母亲")
@@ -154,53 +155,54 @@ func TestExtract_CommitChapter(t *testing.T) {
 	mustContain(t, out, "new_value: 矿场杂役")
 }
 
-// ── edit_chapter：通用模式 + 多行 string ──
+// ── edit_chapter: chế độ chung + string nhiều dòng ──
 
 func TestExtract_EditChapter(t *testing.T) {
 	in := `{"chapter":24,"old_string":"沈砺低头不语。\n他攥紧了拳头。","new_string":"沈砺没有抬头，喉结滚动一下。\n指节攥得发白。","replace_all":false}`
 	out := feedAll(t, "edit_chapter", in)
-	mustContain(t, out, "✻ 打磨")
+	mustContain(t, out, "✻ Hoàn thiện")
 	mustContain(t, out, "chapter: 24")
 	mustContain(t, out, "old_string: 沈砺低头不语。\n他攥紧了拳头。")
 	mustContain(t, out, "new_string: 沈砺没有抬头，喉结滚动一下。\n指节攥得发白。")
 	mustContain(t, out, "replace_all: false")
 }
 
-// ── 读类工具：args 信息密度低但 header + 关键字段仍应可见 ──
+// ── Công cụ đọc: args ít thông tin nhưng header + trường quan trọng vẫn phải thấy ──
 
 func TestExtract_ReadChapter(t *testing.T) {
 	in := `{"chapter":234,"source":"final"}`
 	out := feedAll(t, "read_chapter", in)
-	mustContain(t, out, "✻ 读章节")
+	mustContain(t, out, "✻ Đọc chương")
 	mustContain(t, out, "chapter: 234")
 	mustContain(t, out, "source: final")
 }
 
 func TestExtract_CheckConsistency(t *testing.T) {
 	out := feedAll(t, "check_consistency", `{"chapter":234}`)
-	mustContain(t, out, "✻ 一致性检查")
+	mustContain(t, out, "✻ Kiểm tra tính nhất quán")
 	mustContain(t, out, "chapter: 234")
 }
 
-// 空 args 兜底：architect 调 novel_context 不传参时 args 是 {}，
-// 不能完全静默，至少要输出 header 让用户感知调用。
+// Xử lý dự phòng cho args rỗng: khi architect gọi novel_context mà không truyền
+// tham số thì args là {}; không được im lặng hoàn toàn, ít nhất phải xuất header để
+// người dùng nhận biết có lệnh gọi.
 func TestExtract_NovelContextEmptyArgs(t *testing.T) {
 	out := feedAll(t, "novel_context", `{}`)
-	mustContain(t, out, "✻ 查询上下文")
+	mustContain(t, out, "✻ Truy vấn ngữ cảnh")
 }
 
 func TestExtract_NovelContextWithChapter(t *testing.T) {
 	out := feedAll(t, "novel_context", `{"chapter":234}`)
-	mustContain(t, out, "✻ 查询上下文")
+	mustContain(t, out, "✻ Truy vấn ngữ cảnh")
 	mustContain(t, out, "chapter: 234")
 }
 
-// ── 裸流模式 ──
+// ── Chế độ luồng trần ──
 
 func TestExtract_DraftChapterRawMarkdown(t *testing.T) {
 	in := `{"chapter":1,"content":"# 第一章\n\n沈砺站在矿口。\n"}`
 	out := feedAll(t, "draft_chapter", in)
-	// 裸流：无装饰、无 key prefix
+	// Luồng trần: không trang trí, không có tiền tố key
 	mustNotContain(t, out, "【")
 	mustNotContain(t, out, "content:")
 	mustNotContain(t, out, "chapter:")
@@ -209,7 +211,7 @@ func TestExtract_DraftChapterRawMarkdown(t *testing.T) {
 }
 
 func TestExtract_DraftChapterIgnoresOtherFields(t *testing.T) {
-	// content 之外的字段应被静默跳过，不污染输出
+	// Các trường ngoài content phải bị bỏ qua im lặng, không làm bẩn output
 	in := `{"chapter":7,"summary":"meta","content":"正文","extra_array":[1,2,3]}`
 	out := feedAll(t, "draft_chapter", in)
 	mustContain(t, out, "正文")
@@ -219,25 +221,25 @@ func TestExtract_DraftChapterIgnoresOtherFields(t *testing.T) {
 	mustNotContain(t, out, "1")
 }
 
-// ── 行为不变量 ──
+// ── Bất biến hành vi ──
 
 func TestExtract_UnknownTool(t *testing.T) {
-	if e := newToolExtractor("nonexistent_tool"); e != nil {
+	if e := newToolExtractor("nonexistent_tool", observerTextsVI); e != nil {
 		t.Errorf("expected nil for unknown tool")
 	}
 }
 
 func TestExtract_DoneAfterClose(t *testing.T) {
-	e := newToolExtractor("plan_chapter")
+	e := newToolExtractor("plan_chapter", observerTextsVI)
 	e.Feed(`{"title":"x"}`)
 	if !e.Done() {
 		t.Error("expected Done after closing brace")
 	}
 }
 
-// ── 流式分片不变性 ──
+// ── Bất biến khi chia chunk ──
 
-// 同一份输入按 1/3/7/13 字节分片，输出应与一次喂入完全相同。
+// Cùng một input chia theo 1/3/7/13 byte, output phải giống hệt lúc nạp một lần.
 func TestExtract_ChunkedEqualsWhole(t *testing.T) {
 	cases := []struct {
 		tool  string
@@ -260,7 +262,7 @@ func TestExtract_ChunkedEqualsWhole(t *testing.T) {
 	}
 }
 
-// ── 转义与 Unicode ──
+// ── Ký tự thoát và Unicode ──
 
 func TestExtract_EscapeSequences(t *testing.T) {
 	in := `{"goal":"行1\n行2 \"引号\" \\反斜线 中字"}`
@@ -272,13 +274,13 @@ func TestExtract_EscapeSequences(t *testing.T) {
 }
 
 func TestExtract_UnicodeEscape(t *testing.T) {
-	// 中 = 中
+	// \u4e2d giải mã thành 中
 	in := `{"goal":"中文"}`
 	out := feedAll(t, "plan_chapter", in)
 	mustContain(t, out, "中文")
 }
 
-// ── 空容器 / 简单结构 ──
+// ── Container rỗng / cấu trúc đơn giản ──
 
 func TestExtract_EmptyArrays(t *testing.T) {
 	in := `{"key_events":[],"characters":["沈砺"]}`
@@ -296,10 +298,10 @@ func TestExtract_BoolAndNull(t *testing.T) {
 	mustContain(t, out, "description: null")
 }
 
-// ── 边角场景：数组嵌数组、深层嵌套 ──
+// ── Tình huống biên: mảng lồng mảng, lồng sâu ──
 
 func TestExtract_NestedArrays(t *testing.T) {
-	// affected_chapters 是 int 数组；这里换成数组嵌数组验证
+	// affected_chapters vốn là mảng int; ở đây thay bằng mảng lồng mảng để kiểm tra
 	in := `{"summary":"x","key_events":[],"characters":["a"],"foreshadow_updates":[],"relationship_changes":[]}`
 	out := feedAll(t, "commit_chapter", in)
 	mustContain(t, out, "summary: x")
@@ -309,7 +311,7 @@ func TestExtract_NestedArrays(t *testing.T) {
 
 func TestExtract_DeeplyNested(t *testing.T) {
 	in := `{"a":{"b":{"c":{"d":"deep"}}}}`
-	e := newToolExtractor("plan_chapter")
+	e := newToolExtractor("plan_chapter", observerTextsVI)
 	out := e.Feed(in)
 	mustContain(t, out, "a:")
 	mustContain(t, out, "b:")
@@ -320,10 +322,10 @@ func TestExtract_DeeplyNested(t *testing.T) {
 	}
 }
 
-// ── chunk 切在 utf-8 多字节中间 ──
+// ── Chunk cắt giữa ký tự UTF-8 nhiều byte ──
 
 func TestExtract_ChunkSplitInUTF8(t *testing.T) {
-	// "中" 是 3 字节 (E4 B8 AD)。把切片大小定到 1，确保每个 byte 单独喂入。
+	// "中" dài 3 byte (E4 B8 AD). Đặt kích thước lát ở 1 để mỗi byte được nạp riêng.
 	in := `{"goal":"中文测试"}`
 	whole := feedAll(t, "plan_chapter", in)
 	chunked := feedChunked(t, "plan_chapter", in, 1)
@@ -333,20 +335,21 @@ func TestExtract_ChunkSplitInUTF8(t *testing.T) {
 	mustContain(t, chunked, "中文测试")
 }
 
-// ── 裸流模式：嵌套 obj 内同名 key 不应误命中 ──
+// ── Chế độ luồng trần: key trùng tên trong obj lồng nhau không được nhận nhầm ──
 
 func TestExtract_NakedKeyOnlyTopLevel(t *testing.T) {
-	// "content" 出现在两处：嵌套对象内 + 顶层。只有顶层那个应被流出。
+	// "content" xuất hiện hai lần: bên trong object lồng + ở cấp ngoài cùng. Chỉ bản
+	// ở cấp ngoài cùng được trả ra.
 	in := `{"meta":{"content":"嵌套不应输出"},"content":"顶层应输出"}`
 	out := feedAll(t, "draft_chapter", in)
 	mustContain(t, out, "顶层应输出")
 	mustNotContain(t, out, "嵌套不应输出")
 }
 
-// ── 裸流模式：content 是非 string 时全跳过 ──
+// ── Chế độ luồng trần: content không phải string thì bỏ qua toàn bộ ──
 
 func TestExtract_NakedKeyNonStringValue(t *testing.T) {
-	// content 错写成对象（不应该发生但要容忍）
+	// content bị ghi nhầm thành object (không nên xảy ra nhưng phải chịu được)
 	in := `{"content":{"unexpected":true}}`
 	out := feedAll(t, "draft_chapter", in)
 	if out != "" {
@@ -354,10 +357,10 @@ func TestExtract_NakedKeyNonStringValue(t *testing.T) {
 	}
 }
 
-// ── 顶层闭合后再 Feed 不再产出 ──
+// ── Sau khi container ngoài cùng đóng, Feed nữa không sinh gì ──
 
 func TestExtract_FeedAfterDone(t *testing.T) {
-	e := newToolExtractor("plan_chapter")
+	e := newToolExtractor("plan_chapter", observerTextsVI)
 	e.Feed(`{"title":"x"}`)
 	if !e.Done() {
 		t.Fatal("expected Done")
@@ -367,10 +370,10 @@ func TestExtract_FeedAfterDone(t *testing.T) {
 	}
 }
 
-// ── 空 chunk / 空 input ──
+// ── Chunk rỗng / input rỗng ──
 
 func TestExtract_EmptyFeed(t *testing.T) {
-	e := newToolExtractor("plan_chapter")
+	e := newToolExtractor("plan_chapter", observerTextsVI)
 	if got := e.Feed(""); got != "" {
 		t.Errorf("expected empty output for empty feed, got: %q", got)
 	}
@@ -379,7 +382,7 @@ func TestExtract_EmptyFeed(t *testing.T) {
 	}
 }
 
-// ── 数组里直接嵌数组（不经过 obj） ──
+// ── Mảng lồng trực tiếp trong mảng (không qua obj) ──
 
 func TestExtract_ArrayOfArrays(t *testing.T) {
 	in := `{"matrix":[[1,2],[3,4]]}`
@@ -391,10 +394,10 @@ func TestExtract_ArrayOfArrays(t *testing.T) {
 	mustContain(t, out, "- 4")
 }
 
-// ── number 后空格再分隔符 ──
+// ── Số rồi khoảng trắng rồi dấu phân tách ──
 
 func TestExtract_NumberWithTrailingSpace(t *testing.T) {
-	// "chapter": 1 ,  ← 数字前后多空格
+	// "chapter": 1 ,  ← có nhiều khoảng trắng trước và sau số
 	in := `{ "chapter" : 1 , "title" : "x" }`
 	out := feedAll(t, "plan_chapter", in)
 	mustContain(t, out, "chapter: 1")

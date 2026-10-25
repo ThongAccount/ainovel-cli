@@ -36,23 +36,26 @@ func errorKind(err error, msg string) string {
 		return "tool_validation"
 	case strings.Contains(lower, "too many concurrent requests"):
 		return "overloaded"
-	// providerError 会把 litellm 的结构化类型附在文本末尾。
-	// HTTP/2 INTERNAL_ERROR 本身没有可分类关键词，保留这个显式 network 标记即可。
+	// providerError gắn loại có cấu trúc của litellm vào cuối văn bản.
+	// Bản thân HTTP/2 INTERNAL_ERROR không có từ khóa để phân loại, nên giữ lại dấu
+	// hiệu network tường minh này là đủ.
 	case strings.Contains(lower, "[network,"):
 		return "network"
 	}
 	return ""
 }
 
-// 单调递增的事件 ID 计数器；配合时间戳生成稳定 ID。
+// Bộ đếm ID sự kiện tăng đơn điệu; phối hợp với dấu thời gian để tạo ID ổn định.
 var eventIDCounter uint64
 
 func nextEventID() string {
 	return fmt.Sprintf("e%d", atomic.AddUint64(&eventIDCounter, 1))
 }
 
-// activeCall 记录一次正在进行的调用（TOOL / DISPATCH）的 ID、起点时间与 summary。
-// summary 在完成事件时回填进 finish Event，保证 replay（runtime queue）能还原行内容。
+// activeCall ghi lại ID, thời điểm bắt đầu và summary của một lần gọi đang diễn ra
+// (TOOL / DISPATCH).
+// summary được điền lại vào Event lúc hoàn thành, đảm bảo replay (runtime queue)
+// khôi phục được nội dung dòng.
 type activeCall struct {
 	id      string
 	start   time.Time
@@ -60,39 +63,43 @@ type activeCall struct {
 	depth   int
 }
 
-// observer 把 Engine 派发与 Worker 进度投影到 Host 的输出通道。
-// 它是纯观察者,不参与任何控制决策。
+// observer chiếu các lần Engine phân công và tiến độ Worker vào kênh đầu ra của
+// Host.
+// Nó thuần túy là người quan sát, không tham gia quyết định điều khiển nào.
 type observer struct {
 	emitEv  func(Event)
 	emitD   func(string)
 	emitC   func()
-	store   *storepkg.Store // 用于 runtime queue 持久化（ReplayQueue 消费）
+	store   *storepkg.Store // dùng cho việc ghi runtime queue (ReplayQueue tiêu thụ)
 	agents  map[string]*agentState
 	agentMu sync.Mutex
 
-	// aborting 由 Host 在 Abort()/Close() 入口置位、Start/Resume/Continue 清位。
-	// 置位期间所有 context-cancel 衍生的错误事件被抑制（既是用户期望，也避免与
-	// "用户手动暂停"事件重复）。真实异常（非 cancel）仍照常上报。
+	// aborting do Host đặt ở các cửa vào Abort()/Close(), xoá ở Start/Resume/Continue.
+	// Trong lúc cờ này bật, mọi sự kiện lỗi phái sinh từ context-cancel đều bị chặn
+	// (vừa đúng như người dùng mong đợi, vừa tránh trùng với sự kiện "người dùng tạm
+	// dừng thủ công"). Sự cố thật (không phải cancel) vẫn được báo như thường.
 	aborting atomic.Bool
 
 	streamThinking      bool
-	lastThinkingByAgent map[string]string          // agent → 最近的累积 thinking 文本（用于提取增量 delta）
-	dispatchStarts      map[string]*activeCall     // dispatched agent → 进行中的 DISPATCH 调用
-	toolStarts          map[string]*activeCall     // agent → 进行中的 TOOL 调用
-	streamExtractors    map[string]*agentExtractor // agent → 当前工具调用 JSON 参数的内容抽取器
-	streamArgPrefixes   map[string]string          // agent/tool → 参数流前缀，用于提前识别轻量标签
-	streamArgLabels     map[string]string          // agent/tool → 已从参数流提前识别出的展示名
-	retryEvents         map[string]string          // retry scope → event ID，用同一行原地更新 (2/7)
-	streamHasContent    bool                       // 当前 streamRound 是否已输出过内容（判断是否需要段落分隔）
-	streamLastByte      byte                       // 最近一次流式输出的末字节（用于精确补齐换行）
+	lastThinkingByAgent map[string]string          // agent → văn bản thinking tích luỹ gần nhất (dùng để trích phần delta tăng dần)
+	dispatchStarts      map[string]*activeCall     // agent đã được phân công → lần gọi DISPATCH đang chạy
+	toolStarts          map[string]*activeCall     // agent → lần gọi TOOL đang chạy
+	streamExtractors    map[string]*agentExtractor // agent → bộ trích nội dung tham số JSON của lần gọi công cụ hiện tại
+	streamArgPrefixes   map[string]string          // agent/tool → tiền tố luồng tham số, dùng để nhận diện sớm nhãn nhẹ
+	streamArgLabels     map[string]string          // agent/tool → tên hiển thị đã nhận diện sớm từ luồng tham số
+	retryEvents         map[string]string          // phạm vi thử lại → ID sự kiện, dùng để cập nhật tại chỗ trên cùng một dòng (2/7)
+	streamHasContent    bool                       // streamRound hiện tại đã xuất nội dung hay chưa (để biết có cần phân tách đoạn không)
+	streamLastByte      byte                       // byte cuối của lần xuất dạng luồng gần nhất (dùng để chèn xuống dòng chính xác)
 }
 
-// agentExtractor 记录某个 agent 当前正在抽取的工具名与抽取器实例。
-// 工具名用于检测"新的工具调用开始了"，避免缓存被上一轮残留污染。
+// agentExtractor ghi lại tên công cụ đang được trích và thể hiện của bộ trích cho
+// agent đó.
+// Tên công cụ dùng để phát hiện "lần gọi công cụ mới đã bắt đầu", tránh để bộ nhớ đệm
+// bị dữ liệu sót lại của vòng trước làm bẩn.
 type agentExtractor struct {
 	tool       string
 	ext        *jsonFieldExtractor
-	emittedAny bool // 本 extractor 是否已经产出过内容；用于首次输出前补段落分隔
+	emittedAny bool // extractor này đã từng xuất nội dung; dùng để chèn phân tách đoạn trước lần xuất đầu tiên
 }
 
 type agentState struct {
@@ -122,15 +129,25 @@ func newObserver(s *storepkg.Store, emitEv func(Event), emitD func(string), emit
 	}
 }
 
-// ── Engine 直驱入口 ──
-//
-// Engine 直接运行 Worker，事件来源分为两条:
-//  1. dispatchStart/dispatchFinish —— Engine 在派发边界直接调用(DISPATCH 行)
-//  2. workerProgress —— Worker 的进度中继(ctx ToolProgress)，
-//     由 handleToolUpdate 统一处理 TOOL/流式正文/thinking/retry/context
-//     (TOOL 行/流式正文/thinking/retry/context)。
+// texts trả về bảng văn bản của cụm quan sát theo ngôn ngữ tác phẩm.
+// Ngôn ngữ được đọc lười từ store.Language() ở mỗi lần dùng, không ghi cứng vào
+// cấu trúc lúc khởi tạo, nên việc đổi ngôn ngữ giữa phiên vẫn có hiệu lực.
+// Khi không có store (kịch bản kiểm thử) thì dùng bản tiếng Việt.
+func (o *observer) texts() *observerTexts {
+	if o == nil || o.store == nil {
+		return observerTextsVI
+	}
+	return observerTextsFor(o.store.Language())
+}
 
-// dispatchStart 记录一次 Worker 派发开始并发 DISPATCH 行。
+// ── Cửa vào Engine gọi trực tiếp ──
+//
+// Engine chạy Worker trực tiếp, nguồn sự kiện chia làm hai nhánh:
+//  1. dispatchStart/dispatchFinish — Engine gọi trực tiếp ở ranh giới phân công (dòng DISPATCH)
+//  2. workerProgress — bản trung chuyển tiến độ của Worker (ctx ToolProgress),
+//     do handleToolUpdate xử lý thống nhất cho TOOL/nội dung luồng/thinking/retry/context
+
+// dispatchStart ghi lại lúc bắt đầu phân công Worker và phát dòng DISPATCH.
 func (o *observer) dispatchStart(agent, task, reason string) {
 	summary := dispatchSummary(agent, task)
 	o.updateAgent(agent, func(a *agentState) {
@@ -151,8 +168,10 @@ func (o *observer) dispatchStart(agent, task, reason string) {
 	})
 }
 
-// dispatchFinish 把 DISPATCH 行落成完成态并复位 Worker 状态;
-// 清理该 Worker 名下的孤儿 TOOL 行(abort/错误路径 ProgressToolEnd 可能缺席)。
+// dispatchFinish chuyển dòng DISPATCH sang trạng thái hoàn thành và đặt lại trạng thái
+// của Worker;
+// dọn các dòng TOOL mồ côi của Worker đó (ở đường abort/lỗi, ProgressToolEnd có thể
+// không đến).
 func (o *observer) dispatchFinish(agent string, runErr error) {
 	o.updateAgent(agent, func(a *agentState) {
 		a.state = "idle"
@@ -171,7 +190,7 @@ func (o *observer) dispatchFinish(agent string, runErr error) {
 	o.streamClear()
 }
 
-// workerProgress 把 Worker 进度中继适配为既有的 ToolExecUpdate 处理。
+// workerProgress chuyển bản trung chuyển tiến độ của Worker thành xử lý ToolExecUpdate sẵn có.
 func (o *observer) workerProgress(p agentcore.ProgressPayload) {
 	payload := p
 	o.handleToolUpdate(agentcore.Event{Type: agentcore.EventToolExecUpdate, Progress: &payload})
@@ -186,8 +205,9 @@ func (o *observer) finalize() {
 	}
 }
 
-// setAborting 由 Host 在 Abort/Close/Start 等生命周期切换处调用，控制
-// "context canceled" 类衍生事件是否需要抑制（避免与"用户手动暂停"重复）。
+// setAborting do Host gọi ở các mốc chuyển vòng đời như Abort/Close/Start, để điều
+// khiển việc có chặn các sự kiện phái sinh kiểu "context canceled" hay không (tránh
+// trùng với "người dùng tạm dừng thủ công").
 func (o *observer) setAborting(v bool) { o.aborting.Store(v) }
 
 func (o *observer) retryEventID(scope string, attempt int) string {
@@ -203,13 +223,14 @@ func (o *observer) retryEventID(scope string, attempt int) string {
 	return o.retryEvents[scope]
 }
 
-// emitAndLog 用于调用类事件的"开始"态：发给 TUI 但不写入 runtime queue，
-// 避免 replay 时"开始一行、完成又一行"重复。slog 由 host.emitEvent 统一记录。
+// emitAndLog dùng cho trạng thái "bắt đầu" của sự kiện loại gọi: gửi TUI nhưng không
+// ghi vào runtime queue, tránh khi replay lặp lại "một dòng bắt đầu, một dòng hoàn
+// thành". slog do host.emitEvent ghi nhất quán.
 func (o *observer) emitAndLog(ev Event) {
 	o.emitEv(ev)
 }
 
-// persistEvent 把事件写入 runtime queue（slog 由 host.emitEvent 统一记录）。
+// persistEvent ghi sự kiện vào runtime queue (slog do host.emitEvent ghi nhất quán).
 func (o *observer) persistEvent(ev Event) {
 	if o.store == nil || o.store.Runtime == nil {
 		return
@@ -228,7 +249,7 @@ func (o *observer) persistEvent(ev Event) {
 		Summary:  ev.Summary,
 		Payload:  ev,
 	}); err != nil {
-		slog.Warn("运行事件持久化失败", "module", "observer", "category", ev.Category, "err", err)
+		slog.Warn("ghi sự kiện vận hành thất bại", "module", "observer", "category", ev.Category, "err", err)
 	}
 }
 
