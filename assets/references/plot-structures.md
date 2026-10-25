@@ -73,7 +73,7 @@ Phù hợp với thể loại trinh thám / suy luận / kinh dị.
 |--------|----------|-----------|
 | Chương 1 | Phát hiện thi thể / sự kiện xảy ra | Ai đã làm? |
 | Chương 2 | Thám tử tiếp nhận vụ án | Tại sao vụ án này đặc biệt? |
-| Chương 3 | Điều tra ban đầu, phát hiện manh mối | Manh mối chỉ về ai? |
+| Chương 3 | Điều tra ban đầu, phát hiện phục bút | Phục bút chỉ về ai? |
 
 ### Hồi 2: Điều Tra Đi Sâu
 
@@ -164,7 +164,7 @@ Chương 9–10: Đảo ngược cuối cùng (lật đổ tất cả)
 
 ### Chìa Khóa
 
-- Gieo manh mối tưởng như vô hại từ sớm
+- Gieo phục bút tưởng như vô hại từ sớm
 - Mỗi lần đảo ngược đều có logic (nhìn lại thấy có dấu hiệu)
 - Tránh dùng deus ex machina (giải pháp từ trên trời rơi xuống)
 

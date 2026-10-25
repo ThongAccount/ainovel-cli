@@ -388,7 +388,7 @@ Khác với các công cụ AI thông thường lên dàn ý cứng một lần 
 1. **ToolResultMicrocompact**: Dọn dẹp kết quả trung gian của các lệnh tool cũ.
 2. **LightTrim**: Cắt tỉa các đoạn text dài không còn cần thiết.
 3. **StoreSummaryCompact**: Thay thế tin nhắn cũ bằng bản tóm tắt đã lưu trong Store (0 tốn LLM token).
-4. **FullSummary**: Dùng prompt chuyên dụng tóm tắt ngữ cảnh tự sự (giữ vững trạng thái nhân vật, manh mối phục bút).
+4. **FullSummary**: Dùng prompt chuyên dụng tóm tắt ngữ cảnh tự sự (giữ vững trạng thái nhân vật, phục bút).
 
 ---
 

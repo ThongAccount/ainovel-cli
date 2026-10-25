@@ -3,14 +3,14 @@
 Các cung truyện dưới đây phù hợp với tiểu thuyết dài thể loại trinh thám, suy lý, hình sự và hồi hộp. Kết hợp tự do tùy theo bối cảnh cụ thể, không nhất thiết phải dùng hết.
 
 ### Cung Điều Tra Vụ Án (10-15 chương)
-2-3 chương vụ án xảy ra / khám nghiệm hiện trường → 3-5 chương điều tra nhiều hướng (mỗi manh mối mở ra nghi vấn mới) → 2-3 chương đột phá then chốt → 1-2 chương tiết lộ sự thật + hậu quả
+2-3 chương vụ án xảy ra / khám nghiệm hiện trường → 3-5 chương điều tra nhiều hướng (mỗi phục bút mở ra nghi vấn mới) → 2-3 chương đột phá then chốt → 1-2 chương tiết lộ sự thật + hậu quả
 
 - Manh mối phải được trình bày công bằng, khi tiết lộ độc giả có thể nhìn lại các phục bút trước đó
 - Mỗi hướng điều tra không chỉ đơn thuần "loại trừ nghi phạm" mà phải hé lộ thông tin bối cảnh mới
 - Cú sốc cảm xúc sau khi tiết lộ sự thật quan trọng hơn bản thân quá trình suy luận logic
 
 ### Cung Tiếp Cận Sự Thật (8-12 chương)
-2-3 chương vụ án cũ tái hiện / manh mối mới nổi lên → 3-5 chương truy tìm sâu hơn (nhân vật chính dần tiếp cận cốt lõi) → 2-3 chương leo thang căng thẳng + lựa chọn bắt buộc
+2-3 chương vụ án cũ tái hiện / phục bút mới nổi lên → 3-5 chương truy tìm sâu hơn (nhân vật chính dần tiếp cận cốt lõi) → 2-3 chương leo thang căng thẳng + lựa chọn bắt buộc
 
 - Phù hợp với kiểu bí ẩn xuyên suốt nhiều cung truyện (bí ẩn chính chạy qua nhiều cung)
 - Mỗi lần tiếp cận sự thật đều phải trả giá (niềm tin tan vỡ, nguy hiểm thân thể, tình thế đạo đức)
@@ -38,7 +38,7 @@ Các cung truyện dưới đây phù hợp với tiểu thuyết dài thể lo�
 - Động cơ của kẻ chủ mưu phải có phục bút hỗ trợ từ phần trước
 
 ### Cung Thường Ngày / Chuyển Tiếp (4-6 chương)
-Hàn gắn quan hệ nhân vật / ủ mầm manh mối mới / hồi phục tâm lý / đẩy mạch ngầm tiến lên
+Hàn gắn quan hệ nhân vật / ủ mầm phục bút mới / hồi phục tâm lý / đẩy mạch ngầm tiến lên
 
 - Sau cung căng thẳng cao độ cần có không gian thở, nhưng không được thả lỏng hoàn toàn
 - Đẩy mạch ngầm: độc giả có thể cảm nhận được "có điều gì đó sắp xảy ra"

@@ -229,7 +229,7 @@ Kiểm tra và sửa các mẫu sau:
 
 ### Thể Loại Trinh Thám / Huyền Bí
 
-- [ ] Có tiết lộ manh mối
+- [ ] Có tiết lộ phục bút
 - [ ] Có đặt ra bí ẩn mới
 - [ ] Logic không có lỗ hổng
 

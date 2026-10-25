@@ -63,7 +63,7 @@ type Progress struct {
 	// ReopenedFromComplete đánh dấu tác phẩm được mở lại từ trạng thái hoàn thành
 	// để làm lại. Việc làm lại chỉ sửa các chương đã có, không thay đổi cấu trúc;
 	// sau khi hàng đợi rỗng, tác phẩm được phép hoàn thành lại theo quy tắc "cấu trúc
-	// đầy đủ là hoàn thành" (tránh manh mối ở tập cuối bị làm lại khiến tác phẩm mắc
+	// đầy đủ là hoàn thành" (tránh phục bút ở tập cuối bị làm lại khiến tác phẩm mắc
 	// ở writing → vòng lặp viết vượt phạm vi). Quá trình viết tiến không đặt cờ này;
 	// phán quyết hoàn thành giữ ngữ nghĩa thận trọng về việc chốt tuyến kể.
 	ReopenedFromComplete bool `json:"reopened_from_complete,omitempty"`

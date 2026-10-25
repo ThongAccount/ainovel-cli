@@ -2,9 +2,9 @@
 
 ## Bố Cục Manh Mối
 
-- Mỗi chương phải cài ít nhất một manh mối (manh mối thật hoặc red herring)
+- Mỗi chương phải cài ít nhất một phục bút (phục bút thật hoặc red herring)
 - Manh mối quan trọng phải xuất hiện ít nhất hai lần trước khi được tiết lộ
-- Lần đầu manh mối xuất hiện phải hòa tan tự nhiên vào cảnh, không được cố ý nhấn mạnh
+- Lần đầu phục bút xuất hiện phải hòa tan tự nhiên vào cảnh, không được cố ý nhấn mạnh
 
 ## Kỹ Thuật Đánh Lạc Hướng
 
@@ -22,4 +22,4 @@
 
 - Dòng thời gian phải có thể truy ngược và kiểm chứng được
 - Ba yếu tố không thể thiếu: ngoại phạm, động cơ, phương thức gây án
-- Khi tiết lộ sự thật, độc giả phải có thể tự suy ra kết luận bằng các manh mối đã biết
+- Khi tiết lộ sự thật, độc giả phải có thể tự suy ra kết luận bằng các phục bút đã biết

@@ -8,7 +8,7 @@ type TimelineEvent struct {
 	Characters []string `json:"characters,omitempty"`
 }
 
-// ForeshadowEntry là một mục manh mối.
+// ForeshadowEntry là một mục phục bút.
 type ForeshadowEntry struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
@@ -17,16 +17,16 @@ type ForeshadowEntry struct {
 	ResolvedAt  int    `json:"resolved_at,omitempty"`
 }
 
-// ForeshadowUpdate là thao tác tăng dần trên manh mối.
+// ForeshadowUpdate là thao tác tăng dần trên phục bút.
 type ForeshadowUpdate struct {
 	ID          string `json:"id"`
 	Action      string `json:"action"` // plant / advance / resolve
 	Description string `json:"description,omitempty"`
 }
 
-// RestoreOwnPlants đưa lại các manh mối plant mà bản ghi cũ ghi trong chương này
+// RestoreOwnPlants đưa lại các phục bút plant mà bản ghi cũ ghi trong chương này
 // nhưng bản ghi mới không khai báo lại vào đầu danh sách.
-// Những manh mối một chương đã gieo là sự thật lịch sử của chính chương đó; viết
+// Những phục bút một chương đã gieo là sự thật lịch sử của chính chương đó; viết
 // lại nội dung không thay đổi điều này. Nếu làm mất, khi phát lại toàn bộ bản ghi
 // chương, advance/resolve ở chương này và các chương sau sẽ không tìm thấy plant
 // tiền thân và cả chuỗi sẽ báo lỗi.
