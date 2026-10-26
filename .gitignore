@@ -36,6 +36,10 @@ go.work.sum
 .cache
 .DS_Store
 
+# Python bytecode (cổng Việt hóa dùng python3)
+__pycache__/
+*.pyc
+
 # GoReleaser artifacts
 dist/
 release-notes.md

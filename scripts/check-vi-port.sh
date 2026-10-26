@@ -20,7 +20,12 @@
 #                        eval, domain, rules                              [TẮT]
 #   --all                bật tất cả các cờ track ở trên
 #   --none               tắt tất cả các cờ track (chỉ in báo cáo cờ)
+#   --production         chỉ quét mã production, bỏ qua file _test.go      [TẮT]
 #   --strict-comments    coi ký tự CJK trong comment Go cũng là vi phạm     [TẮT]
+#   --baseline <file>    literal CJK đã biết được xem là "đã biết", chỉ
+#                        literal MỚI mới làm cổng đỏ
+#   --update-baseline <file>
+#                        ghi lại baseline hiện tại (dùng để ratchet backlog)
 #   --list-flags         in danh sách cờ + đường dẫn được bảo vệ rồi thoát
 #   -h, --help           in phần trợ giúp này rồi thoát
 #
@@ -34,6 +39,10 @@
 #     ví dụ tiếng Trung hợp lệ.
 #   * Các package chưa có track nào phụ trách (internal/errs, internal/i18n,
 #     internal/llmretry) chỉ được kiểm tra khi Chief gán track.
+#   * Bộ quét nằm trong `scripts/vi_port_scan.py`: nó tự nhận diện các hình
+#     thức ngữ zh hợp lệ (bảng song ngữ `xxxZH`, trường `VI:`/`ZH:`, regex bắt
+#     mã Trung, nhánh so khớp song ngữ, nhãn Việt nhúng mẫu Trung, hằng dữ
+#     liệu tiếng Trung) nên không cần bảo vệ thủ công từng file.
 #
 set -euo pipefail
 
@@ -53,9 +62,13 @@ TÙY CHỌN
                       domain/rules)                             [TẮT]
   --all                bật tất cả cờ track
   --none               tắt tất cả cờ track
+  --production         chỉ quét mã production (bỏ qua _test.go) [TẮT]
   --strict-comments    ký tự CJK trong comment Go cũng là vi phạm [TẮT]
+  --baseline <file>    literal đã biết không tính là vi phạm mới
+  --update-baseline <file>
+                      ghi lại baseline hiện tại
   --list-flags         in danh sách cờ + đường dẫn được bảo vệ
-  -h, --help           in trợ giúp
+  -h, --help           in phần trợ giúp
 
 MÃ THOÁT
   0  không có vi phạm
@@ -74,6 +87,8 @@ SCOPES_TRACK_E="internal/entry internal/bootstrap internal/logger internal/notif
 
 # Danh sách denylist: đường dẫn luôn được bỏ qua vì còn CJK có chủ đích.
 # Thư mục kết thúc bằng "/" nghĩa là bỏ qua cả cây thư mục.
+# Bộ quét mới tự nhận diện bảng ngữ zh, nên danh sách này chỉ giữ lại những
+# trường hợp không nhận diện được bằng hình thức câu lệnh.
 PATHS_DENYLIST="assets/prompts/zh/|assets/references/zh/|assets/styles/zh/|assets/voice_zh.md|internal/store/labels.go|internal/rules/snapshot.go|internal/rules/lint.go|internal/tools/premise_structure.go|internal/host/exp/texts.go|internal/entry/tui/panels_test.go|internal/bootstrap/configfile_test.go"
 
 enable_a=0
@@ -82,6 +97,9 @@ enable_c=0
 enable_d=0
 enable_e=1
 strict=0
+production=0
+baseline=""
+update_baseline=""
 
 list_flags() {
 	printf 'Cờ hiện tại:\n'
@@ -90,7 +108,9 @@ list_flags() {
 	printf '  --track-b  : %s  %s\n' "$([[ $enable_b -eq 1 ]] && echo BẬT || echo TẮT)" "$SCOPES_TRACK_B"
 	printf '  --track-c  : %s  %s\n' "$([[ $enable_c -eq 1 ]] && echo BẬT || echo TẮT)" "$SCOPES_TRACK_C"
 	printf '  --track-d  : %s  %s\n' "$([[ $enable_d -eq 1 ]] && echo BẬT || echo TẮT)" "$SCOPES_TRACK_D"
+	printf '  --production: %s\n' "$([[ $production -eq 1 ]] && echo BẬT || echo TẮT)"
 	printf '  --strict-comments: %s\n' "$([[ $strict -eq 1 ]] && echo BẬT || echo TẮT)"
+	printf '  --baseline : %s\n' "${baseline:-<không có>}"
 	printf '\nĐường dẫn được bảo vệ (luôn bỏ qua):\n'
 	local entry
 	while IFS= read -r entry; do
@@ -119,7 +139,18 @@ while [[ $# -gt 0 ]]; do
 		enable_d=0
 		enable_e=0
 		;;
+	--production) production=1 ;;
 	--strict-comments) strict=1 ;;
+	--baseline)
+		[[ $# -ge 2 ]] || { printf 'Thiếu đường dẫn file sau --baseline.\n' >&2; exit 2; }
+		baseline="$2"
+		shift
+		;;
+	--update-baseline)
+		[[ $# -ge 2 ]] || { printf 'Thiếu đường dẫn file sau --update-baseline.\n' >&2; exit 2; }
+		update_baseline="$2"
+		shift
+		;;
 	--list-flags)
 		list_flags
 		exit 0
@@ -164,141 +195,28 @@ else
 	exit 2
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCANNER="$SCRIPT_DIR/vi_port_scan.py"
+if [[ ! -f "$SCANNER" ]]; then
+	printf 'Không tìm thấy bộ quét: %s\n' "$SCANNER" >&2
+	exit 2
+fi
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-read -r -d '' PY_CHECK <<'PYTHON' || true
-"""Quét file Go trong phạm vi allowlist, báo chuỗi literal CJK còn sót."""
-import re
-import subprocess
-import sys
+# `--scope` nhận danh sách thư mục; mảng bash được truyền thành các tham số riêng.
+scan_args=(--scope $scopes --denylist "$PATHS_DENYLIST")
+[[ $production -eq 1 ]] && scan_args+=(--production)
+[[ $strict -eq 1 ]] && scan_args+=(--strict-comments)
+[[ -n "$baseline" ]] && scan_args+=(--baseline "$baseline")
 
-CJK = re.compile(r'[一-鿿]')
+if [[ -n "$update_baseline" ]]; then
+	"$PYTHON_BIN" "$SCANNER" "${scan_args[@]}" --update-baseline "$update_baseline"
+	exit 0
+fi
 
-
-def scan(text):
-    """Trả về (literals, comments) dạng list (offset, nội dung)."""
-    literals, comments = [], []
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch == '/' and i + 1 < n and text[i + 1] == '/':
-            end = text.find('\n', i)
-            end = n if end == -1 else end
-            comments.append((i, text[i:end]))
-            i = end
-        elif ch == '/' and i + 1 < n and text[i + 1] == '*':
-            end = text.find('*/', i + 2)
-            end = n if end == -1 else end + 2
-            comments.append((i, text[i:end]))
-            i = end
-        elif ch == '`':
-            end = text.find('`', i + 1)
-            end = n if end == -1 else end + 1
-            literals.append((i, text[i:end]))
-            i = end
-        elif ch == '"':
-            j = i + 1
-            while j < n:
-                if text[j] == '\\':
-                    j += 2
-                    continue
-                if text[j] == '"':
-                    j += 1
-                    break
-                if text[j] == '\n':
-                    break
-                j += 1
-            literals.append((i, text[i:j]))
-            i = j
-        elif ch == "'":
-            j = i + 1
-            while j < n:
-                if text[j] == '\\':
-                    j += 2
-                    continue
-                if text[j] == "'":
-                    j += 1
-                    break
-                if text[j] == '\n':
-                    break
-                j += 1
-            i = j
-        else:
-            i += 1
-    return literals, comments
-
-
-def protected(path, entries):
-    for entry in entries:
-        if entry.endswith('/'):
-            if path.startswith(entry):
-                return True
-        elif path == entry:
-            return True
-    return False
-
-
-def main():
-    strict = sys.argv[1] == '1'
-    denylist = [p for p in sys.argv[2].split('|') if p]
-    scopes = sys.argv[3].split()
-
-    tracked = subprocess.run(
-        ['git', 'ls-files', '--'] + scopes,
-        check=True, capture_output=True, text=True,
-    ).stdout.split()
-
-    files = []
-    skipped = []
-    for path in tracked:
-        if not path.endswith('.go'):
-            continue
-        if protected(path, denylist):
-            skipped.append(path)
-            continue
-        files.append(path)
-
-    violations = 0
-    for path in files:
-        try:
-            text = open(path, encoding='utf-8', errors='replace').read()
-        except OSError:
-            continue
-        literals, comments = scan(text)
-        for offset, body in literals:
-            if not CJK.search(body):
-                continue
-            line = text.count('\n', 0, offset) + 1
-            source = text.splitlines()[line - 1].strip() if text.splitlines() else ''
-            print('%s:%d: chuỗi literal CJK còn sót: %s' % (path, line, body))
-            print('    %s:%d: %s' % (path, line, source))
-            violations += 1
-        if strict:
-            for offset, body in comments:
-                if not CJK.search(body):
-                    continue
-                line = text.count('\n', 0, offset) + 1
-                source = text.splitlines()[line - 1].strip() if text.splitlines() else ''
-                print('%s:%d: ký tự CJK còn sót trong comment: %s' % (path, line, body))
-                print('    %s:%d: %s' % (path, line, source))
-                violations += 1
-
-    print('')
-    print('Đã quét %d file Go trong phạm vi đang bật, bỏ qua %d file được bảo vệ.'
-          % (len(files), len(skipped)))
-    if violations:
-        print('Phát hiện %d vi phạm CJK.' % violations)
-        return 1
-    print('Không còn chuỗi literal CJK trong phạm vi đang bật.')
-    return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())
-PYTHON
-
-if "$PYTHON_BIN" -c "$PY_CHECK" "$strict" "$PATHS_DENYLIST" "$scopes"; then
+if "$PYTHON_BIN" "$SCANNER" "${scan_args[@]}"; then
 	exit 0
 else
 	status=$?

@@ -49,6 +49,10 @@ jobs:
         shell: bash
         run: bash scripts/check-vi-port.sh
 
+      - name: Vietnamese port check — không được sót chuỗi MỚI
+        shell: bash
+        run: bash scripts/check-vi-port.sh --all --production --baseline scripts/vi-port-baseline.json
+
       - name: Race test critical state paths
         if: runner.os == 'Linux'
         env:
