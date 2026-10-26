@@ -43,9 +43,9 @@ func TestNextActionChain(t *testing.T) {
 			if got != c.want {
 				t.Fatalf("NextAction=%s want=%s", got, c.want)
 			}
-			// 对同一事实快照恒定。
+			// Phải không đổi với cùng một ảnh chụp sự thật.
 			if NextAction(c.f) != got {
-				t.Fatal("NextAction 对同一 Facts 不恒定")
+				t.Fatal("NextAction phải không đổi với cùng một Facts")
 			}
 		})
 	}
@@ -53,12 +53,12 @@ func TestNextActionChain(t *testing.T) {
 
 func TestLoadStateReflectsWorkspace(t *testing.T) {
 	book := t.TempDir()
-	// 未建区：非活动 → ingest。
+	// Chưa tạo vùng: không hoạt động → ingest.
 	w := OpenWorkspace(book)
 	if NextAction(mustLoadState(t, w)) != ActionIngest {
-		t.Fatal("空书应先 ingest")
+		t.Fatal("cuốn sách trống phải ingest trước")
 	}
-	// 建区后：workspace ready、未切分 → segment。
+	// Sau khi tạo vùng: workspace ready, chưa cắt → segment.
 	src := filepath.Join(book, "book.txt")
 	if err := os.WriteFile(src, []byte("第一章\n正文\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -69,10 +69,10 @@ func TestLoadStateReflectsWorkspace(t *testing.T) {
 	}
 	f := mustLoadState(t, ws)
 	if !f.WorkspaceReady || f.Segmented {
-		t.Fatalf("建区后事实不符：%+v", f)
+		t.Fatalf("sự thật sau khi tạo vùng không khớp: %+v", f)
 	}
 	if NextAction(f) != ActionSegment {
-		t.Fatal("建区后应 segment")
+		t.Fatal("sau khi tạo vùng phải segment")
 	}
 }
 
@@ -90,7 +90,7 @@ func TestLoadStateReportsCorruptArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadState(ws); err == nil || !strings.Contains(err.Error(), "sản phẩm cắt") {
-		t.Fatalf("损坏工件不得伪装成尚未切分: %v", err)
+		t.Fatalf("sản phẩm hỏng không được giả làm chưa cắt: %v", err)
 	}
 }
 
@@ -106,23 +106,23 @@ func TestIngestSnapshotConsistent(t *testing.T) {
 		t.Fatalf("Ingest: %v", err)
 	}
 	if m.Encoding != encodingUTF8 || m.SourceName != "book.txt" {
-		t.Fatalf("manifest 不符：%+v", m)
+		t.Fatalf("manifest không khớp: %+v", m)
 	}
 	snap, err := ws.LoadSource()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 源快照必须已归一化，且摘要与 manifest 一致。
+	// Ảnh chụp nguồn phải đã được chuẩn hoá, và tóm tắt phải khớp với manifest.
 	if string(snap) != "第一章\n正文一\n\n第二章\n正文二" {
-		t.Fatalf("源快照未归一化：%q", snap)
+		t.Fatalf("ảnh chụp nguồn chưa được chuẩn hoá: %q", snap)
 	}
 	if Digest(snap) != m.NormalizedSHA256 {
-		t.Fatal("源快照摘要与 manifest 不一致")
+		t.Fatal("tóm tắt ảnh chụp nguồn không khớp với manifest")
 	}
 }
 
-// TestGuidanceChangeInvalidatesSegmentation 守护 §18.3：切分指导是 segmentation 的语义输入，
-// 指导变化使旧切分（及其全部下游）自然失配重做，不需要手工失效规则。
+// TestGuidanceChangeInvalidatesSegmentation bảo vệ §18.3: hướng dẫn cắt là đầu vào ngữ nghĩa của segmentation,
+// khi hướng dẫn đổi thì kết quả cắt cũ (và mọi thứ phía dưới) tự nhiên lệch khớp để làm lại, không cần quy tắc huỷ hiệu lực thủ công.
 func TestGuidanceChangeInvalidatesSegmentation(t *testing.T) {
 	book := t.TempDir()
 	src := filepath.Join(book, "book.txt")
@@ -142,18 +142,18 @@ func TestGuidanceChangeInvalidatesSegmentation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !mustLoadState(t, ws).Segmented {
-		t.Fatal("无指导时切分应有效")
+		t.Fatal("khi không có hướng dẫn thì kết quả cắt phải còn hiệu lực")
 	}
 	if err := ws.writeAtomic(fileGuidance, []byte("幕间也是独立章节")); err != nil {
 		t.Fatal(err)
 	}
 	if mustLoadState(t, ws).Segmented {
-		t.Fatal("指导变化后旧切分应失效（需重识别）")
+		t.Fatal("sau khi hướng dẫn đổi thì kết quả cắt cũ phải mất hiệu lực (cần nhận diện lại)")
 	}
 }
 
-// TestResumeSummary 守护 §18.2 启动提示：无工作区返回空串；停在半路时给出阶段化描述，
-// 使用户不必等到创作被门禁拒绝才发现这本书停在导入半路。
+// TestResumeSummary bảo vệ thông báo khởi động §18.2: không có không gian làm việc thì trả về chuỗi rỗng; khi dừng dở giữa chừng thì đưa ra mô tả theo giai đoạn,
+// để người dùng không phải chờ đến lúc việc sáng tác bị chặn mới biết cuốn sách này đang dừng giữa chừng quá trình nhập.
 func TestResumeSummary(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -161,7 +161,7 @@ func TestResumeSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := ResumeSummary(st); got != "" {
-		t.Fatalf("无导入工作区应返回空串，得 %q", got)
+		t.Fatalf("không có không gian làm việc nhập thì phải trả về chuỗi rỗng, được %q", got)
 	}
 	src := filepath.Join(dir, "book.txt")
 	if err := os.WriteFile(src, []byte("第一章\n正文\n"), 0o644); err != nil {
@@ -172,9 +172,9 @@ func TestResumeSummary(t *testing.T) {
 		t.Fatalf("Ingest: %v", err)
 	}
 	if got := ResumeSummary(st); !strings.Contains(got, "chưa hoàn tất phần cắt") {
-		t.Fatalf("刚建区应提示未完成切分，得 %q", got)
+		t.Fatalf("vừa tạo vùng phải nhắc chưa xong phần cắt, được %q", got)
 	}
-	// 切分+确认就绪、分析 0/1 → 提示分析进度。
+	// Cắt + xác nhận đã sẵn sàng, phân tích 0/1 → nhắc tiến độ phân tích.
 	norm, _ := ws.LoadSource()
 	seg := Segmentation{Chapters: []ChapterSpan{{Number: 1, Title: "第一章", Start: 0, End: len(norm)}}}
 	if err := writeArtifact(ws, fileSegmentation, segmentInputDigest(Digest(norm), "", segmentPromptVersion), seg); err != nil {
@@ -185,13 +185,13 @@ func TestResumeSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := ResumeSummary(st); !strings.Contains(got, "đã phân tích 0/1 chương") {
-		t.Fatalf("应提示分析进度，得 %q", got)
+		t.Fatalf("phải nhắc tiến độ phân tích, được %q", got)
 	}
 }
 
-// TestResumeStatusPublishedIsTerminal 守护发布终态（实测事故）：书已全量发布后，
-// segmentPromptVersion 升级使工作区切分工件失鲜，ResumeStatus 不得据此把书判回
-// "导入半路"——否则 startEngine 跨重启门禁会永久拒启已发布书的续写。
+// TestResumeStatusPublishedIsTerminal bảo vệ trạng thái cuối sau khi phát hành (sự cố đã đo thực tế): khi cuốn sách đã phát hành toàn bộ,
+// việc segmentPromptVersion nâng cấp làm sản phẩm cắt trong không gian làm việc bị cũ, ResumeStatus không được vì thế mà xếp lại cuốn sách
+// về «dở dang giữa chừng quá trình nhập» — nếu không thì cổng chặn startEngine qua các lần khởi động lại sẽ vĩnh viễn từ chối cho viết tiếp cuốn sách đã phát hành.
 func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -207,16 +207,16 @@ func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 		t.Fatalf("Ingest: %v", err)
 	}
 	norm, _ := ws.LoadSource()
-	// 用旧版本号写切分：模拟发布后 prompt 升级导致的 digest 失配。
+	// Ghi kết quả cắt bằng số phiên bản cũ: mô phỏng digest lệch khớp do nâng cấp prompt sau khi phát hành.
 	seg := Segmentation{Chapters: []ChapterSpan{{Number: 1, Title: "第一章", Start: 0, End: len(norm)}}}
 	if err := writeArtifact(ws, fileSegmentation, segmentInputDigest(Digest(norm), "", "seg-v0"), seg); err != nil {
 		t.Fatal(err)
 	}
-	// 未发布 + 切分失鲜：仍是半路导入，门禁应拦。
+	// Chưa phát hành + kết quả cắt đã cũ: vẫn là nhập dở dang, cổng chặn phải chặn lại.
 	if active, done, err := ResumeStatus(st); err != nil || !active || done {
-		t.Fatalf("未发布的失鲜工作区应判未完成（active=%v done=%v）", active, done)
+		t.Fatalf("không gian làm việc đã cũ mà chưa phát hành phải bị xếp là chưa hoàn tất (active=%v done=%v)", active, done)
 	}
-	// 正式库已按该切分全量落库 → 发布对账通过，终态不受上游失鲜影响。
+	// Thư viện chính thức đã ghi đủ theo kết quả cắt đó → đối soát phát hành pass, trạng thái cuối không bị ảnh hưởng bởi phía trên đã cũ.
 	if err := st.Book.Save(domain.BookMetadata{Title: "测试书", Synopsis: "测试简介"}); err != nil {
 		t.Fatal(err)
 	}
@@ -230,32 +230,32 @@ func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if active, done, err := ResumeStatus(st); err != nil || !active || !done {
-		t.Fatalf("已发布书应判导入完成（active=%v done=%v）", active, done)
+		t.Fatalf("cuốn sách đã phát hành phải được xếp là nhập đã hoàn tất (active=%v done=%v)", active, done)
 	}
 	if got := ResumeSummary(st); got != "" {
-		t.Fatalf("已发布书不应提示未完成导入，得 %q", got)
+		t.Fatalf("cuốn sách đã phát hành không nên nhắc nhập chưa hoàn tất, được %q", got)
 	}
 }
 
 func TestImportPreconditions(t *testing.T) {
-	// 空书通过。
+	// Cuốn sách trống thì pass.
 	empty := store.NewStore(t.TempDir())
 	if err := checkImportPreconditions(empty); err != nil {
-		t.Fatalf("空书应通过前置校验：%v", err)
+		t.Fatalf("cuốn sách trống phải qua kiểm tra tiền điều kiện: %v", err)
 	}
-	// 有完成章节被拒。
+	// Có chương đã hoàn tất thì bị từ chối.
 	nonEmpty := store.NewStore(t.TempDir())
 	if err := nonEmpty.Progress.Save(&domain.Progress{CompletedChapters: []int{1, 2}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkImportPreconditions(nonEmpty); err == nil {
-		t.Fatal("非空书应被拒绝导入")
+		t.Fatal("cuốn sách không rỗng phải bị từ chối nhập")
 	}
 	withBook := store.NewStore(t.TempDir())
 	if err := withBook.Book.Save(domain.BookMetadata{Title: "已有作品", Synopsis: "已有简介"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkImportPreconditions(withBook); err == nil {
-		t.Fatal("已有作品信息时应被拒绝导入")
+		t.Fatal("khi đã có thông tin tác phẩm thì phải bị từ chối nhập")
 	}
 }

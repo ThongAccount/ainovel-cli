@@ -12,7 +12,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/tools"
 )
 
-// testDeps 构造三个语义函数同用一个 mock 档位的最小 Deps。
+// testDeps dựng Deps tối thiểu cho ba hàm ngữ nghĩa dùng chung một mức mock.
 func testDeps(st *store.Store, m callModel) Deps {
 	c := Caller{Model: m}
 	return Deps{
@@ -25,8 +25,8 @@ func testDeps(st *store.Store, m callModel) Deps {
 	}
 }
 
-// TestRunEndToEnd 用 mock 模型驱动完整管线 ingest→segment→analyze→synthesize→publish，
-// 经真实 commit_chapter 落盘，验证正式 Foundation 与全部章节就绪。
+// TestRunEndToEnd dùng mô hình mock để chạy trọn vẹn đường ống ingest→segment→analyze→synthesize→publish,
+// đi qua commit_chapter thật để ghi xuống đĩa, xác minh Foundation chính thức và toàn bộ chương đã sẵn sàng.
 func TestRunEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -61,36 +61,36 @@ func TestRunEndToEnd(t *testing.T) {
 		}
 	}
 	if runErr != nil {
-		t.Fatalf("管线失败：%v", runErr)
+		t.Fatalf("đường ống thất bại: %v", runErr)
 	}
 	if !doneSeen {
-		t.Fatal("未收到 StageDone")
+		t.Fatal("không nhận được StageDone")
 	}
-	// 正式状态就绪：作品信息、premise 与覆盖全章的扁平大纲已落盘（world_rules 合法为空，不做要求）。
+	// Trạng thái chính thức đã sẵn sàng: thông tin tác phẩm, premise và dàn ý phẳng phủ toàn bộ chương đã được ghi xuống đĩa (world_rules hợp lệ khi rỗng nên không yêu cầu).
 	if book, _ := st.Book.Load(); book == nil || book.Synopsis == "" {
-		t.Fatalf("作品信息未落盘: %+v", book)
+		t.Fatalf("thông tin tác phẩm chưa được ghi xuống đĩa: %+v", book)
 	}
 	if p, _ := st.Outline.LoadPremise(); p == "" {
-		t.Fatal("premise 未落盘")
+		t.Fatal("premise chưa được ghi xuống đĩa")
 	}
 	if o, _ := st.Outline.LoadOutline(); len(o) != 2 {
-		t.Fatalf("扁平大纲应覆盖 2 章，得 %d", len(o))
+		t.Fatalf("dàn ý phẳng phải phủ 2 chương, được %d", len(o))
 	}
 	prog, _ := st.Progress.Load()
 	if prog == nil || len(prog.CompletedChapters) != 2 {
-		t.Fatalf("应完成 2 章：%+v", prog)
+		t.Fatalf("phải hoàn tất 2 chương: %+v", prog)
 	}
 	if active, done, err := ResumeStatus(st); err != nil || !active || !done {
-		t.Fatalf("ResumeStatus 应为 active&done，得 active=%v done=%v", active, done)
+		t.Fatalf("ResumeStatus phải là active&done, được active=%v done=%v", active, done)
 	}
-	// --continue：不设导入完成 Hold（交由 host 自动接力）。
+	// --continue: không đặt Hold hoàn tất nhập (để host tự tiếp tục).
 	if meta, _ := st.RunMeta.Load(); meta != nil && meta.AdvanceHold != nil {
-		t.Fatalf("--continue 不应留下导入完成 Hold：%+v", meta.AdvanceHold)
+		t.Fatalf("--continue không nên để lại Hold hoàn tất nhập: %+v", meta.AdvanceHold)
 	}
 }
 
-// TestRunSetsCompletionHold 验证非 --continue 导入完成后设置 boundary Hold（RFC §12.4）。
-// Hold 是"导入后不误续写"的唯一保障，必须在发布路径持久化。
+// TestRunSetsCompletionHold xác minh rằng sau khi nhập xong mà không có --continue thì đặt boundary Hold (RFC §12.4).
+// Hold là biện pháp duy nhất bảo đảm «sau khi nhập không vô tình viết tiếp», phải được lưu bền trên đường phát hành.
 func TestRunSetsCompletionHold(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -109,13 +109,13 @@ func TestRunSetsCompletionHold(t *testing.T) {
 	syn := synthesisFixtureJSON(2, storyClosed)
 	m := &mockModel{responses: []string{seg, ana, syn}}
 
-	ch, err := Run(context.Background(), testDeps(st, m), Options{SourcePath: src, AutoConfirm: true}) // 无 --continue
+	ch, err := Run(context.Background(), testDeps(st, m), Options{SourcePath: src, AutoConfirm: true}) // không có --continue
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	for ev := range ch {
 		if ev.Stage == StageError {
-			t.Fatalf("管线失败：%v", ev.Err)
+			t.Fatalf("đường ống thất bại: %v", ev.Err)
 		}
 	}
 	meta, err := st.RunMeta.Load()
@@ -123,13 +123,13 @@ func TestRunSetsCompletionHold(t *testing.T) {
 		t.Fatalf("load run meta: %v", err)
 	}
 	if meta == nil || meta.AdvanceHold == nil {
-		t.Fatalf("导入完成应设置 boundary Hold，得 %+v", meta)
+		t.Fatalf("hoàn tất nhập phải đặt boundary Hold, được %+v", meta)
 	}
 }
 
-// TestRunRejectsDifferentSource 守护换源拦截（RFC §12.1/§18.2）：工作区进行中传入不同
-// 内容的源文件必须明确报错——ingest 只在无工作区时执行，不比对会静默从旧书断点继续、
-// 把旧书发布完毕而新文件一个字节都没读。同一文件重复传路径是常见恢复习惯，按内容摘要比对放行。
+// TestRunRejectsDifferentSource bảo vệ chặn đổi nguồn (RFC §12.1/§18.2): khi không gian làm việc đang chạy mà truyền vào tệp nguồn
+// có nội dung khác thì phải báo lỗi rõ ràng — ingest chỉ chạy khi chưa có không gian làm việc, không đối chiếu sẽ âm thầm tiếp tục từ điểm dừng của cuốn sách cũ,
+// phát hành xong cuốn sách cũ mà chưa đọc được byte nào của tệp mới. Truyền lại cùng đường dẫn tệp là thói quen khôi phục thường gặp, nên so theo tóm tắt nội dung để cho qua.
 func TestRunRejectsDifferentSource(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -141,7 +141,7 @@ func TestRunRejectsDifferentSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := Ingest(dir, a, Options{}.intent()); err != nil {
-		t.Fatalf("建立工作区：%v", err)
+		t.Fatalf("tạo không gian làm việc: %v", err)
 	}
 	b := filepath.Join(dir, "b.txt")
 	if err := os.WriteFile(b, []byte("完全不同的另一本书\n"), 0o644); err != nil {
@@ -158,13 +158,13 @@ func TestRunRejectsDifferentSource(t *testing.T) {
 		}
 	}
 	if runErr == nil || !strings.Contains(runErr.Error(), "khác nội dung") {
-		t.Fatalf("不同源文件应被明确拒绝，得 %v", runErr)
+		t.Fatalf("tệp nguồn khác phải bị từ chối rõ ràng, được %v", runErr)
 	}
 }
 
-// TestConfirmNotesGate 守护 --yes 的容错门槛：语义容错（Notes 非空）发生过的切分结构
-// 被确定性改写过，不由未看预览的 --yes 盲放行；TUI 预览后按 y（AcceptSegmentation）放行，
-// 确认方法记 user_confirmed 溯源。
+// TestConfirmNotesGate bảo vệ ngưỡng dung sai của --yes: cấu trúc cắt từng có dung sai về ngữ nghĩa (Notes khác rỗng)
+// đã bị viết lại một cách tất định, không nên để --yes chưa xem bản xem trước mù quáng cho qua; sau khi xem trước ở TUI và bấm y (AcceptSegmentation) thì cho qua,
+// phương thức xác nhận ghi lại user_confirmed để truy vết.
 func TestConfirmNotesGate(t *testing.T) {
 	newRunner := func(opts Options, notes []string) *runner {
 		ws := &Workspace{dir: t.TempDir()}
@@ -179,29 +179,29 @@ func TestConfirmNotesGate(t *testing.T) {
 	}
 	r := newRunner(Options{AutoConfirm: true}, []string{"空正文占位并入前段"})
 	if r.confirm() {
-		t.Fatal("--yes 不应放行带容错说明的切分")
+		t.Fatal("--yes không nên cho qua kết quả cắt có ghi chú dung sai")
 	}
 	if ev := <-r.events; !strings.Contains(ev.Message, "không tự động duyệt") {
-		t.Fatalf("预览应说明未放行原因：%q", ev.Message)
+		t.Fatalf("bản xem trước phải nêu lý do không cho qua: %q", ev.Message)
 	}
 	if !newRunner(Options{AutoConfirm: true}, nil).confirm() {
-		t.Fatal("--yes 应放行无容错说明的切分")
+		t.Fatal("--yes nên cho qua kết quả cắt không có ghi chú dung sai")
 	}
 	r = newRunner(Options{AcceptSegmentation: true}, []string{"空正文占位并入前段"})
 	if !r.confirm() {
-		t.Fatal("预览后的人工 y 应放行带容错说明的切分")
+		t.Fatal("phím y thủ công sau bản xem trước nên cho qua kết quả cắt có ghi chú dung sai")
 	}
 	conf, err := readArtifact[Confirmation](r.ws, fileConfirmation)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if conf.Payload.Method != confirmMethodUser {
-		t.Fatalf("人工确认应记 user_confirmed，得 %q", conf.Payload.Method)
+		t.Fatalf("xác nhận thủ công phải ghi user_confirmed, được %q", conf.Payload.Method)
 	}
 }
 
-// TestStoryChoiceIgnoresStaleResolution 守护 #5：重新综合后旧故事裁定失效，
-// storyChoice 不得把旧 open/closed 静默套到新 synthesis 上（否则用户不会被重新征询）。
+// TestStoryChoiceIgnoresStaleResolution bảo vệ #5: sau khi tổng hợp lại thì phán quyết câu chuyện cũ mất hiệu lực,
+// storyChoice không được âm thầm áp open/closed cũ lên synthesis mới (nếu không người dùng sẽ không được hỏi lại).
 func TestStoryChoiceIgnoresStaleResolution(t *testing.T) {
 	ws := OpenWorkspace(t.TempDir())
 	if err := ws.writeJSON(fileIntent, Intent{}); err != nil {
@@ -216,19 +216,19 @@ func TestStoryChoiceIgnoresStaleResolution(t *testing.T) {
 	}
 	r := &runner{ws: ws}
 	if got, err := r.storyChoice(); err != nil || got != storyClosed {
-		t.Fatalf("绑定当前 synthesis 的裁定应返回 closed，得 %q", got)
+		t.Fatalf("phán quyết gắn với synthesis hiện tại phải trả về closed, được %q", got)
 	}
-	// 重新综合：改写 synthesis → 旧裁定 InputDigest 失配，应被忽略，回到"需重新征询"（返回空）。
+	// Tổng hợp lại: viết lại synthesis → InputDigest của phán quyết cũ lệch khớp, phải bị bỏ qua, trở lại «cần hỏi lại» (trả về rỗng).
 	if err := writeArtifact(ws, fileSynthesis, "d", BookSynthesis{Premise: "p2", StoryStatus: storyUncertain}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := r.storyChoice(); err != nil || got != "" {
-		t.Fatalf("重新综合后旧裁定应失效返回空，得 %q", got)
+		t.Fatalf("sau khi tổng hợp lại thì phán quyết cũ phải mất hiệu lực và trả về rỗng, được %q", got)
 	}
 }
 
-// TestBudgetsFromDepsPerTier 守护档位旋钮（RFC §13.1）：各语义函数预算按各自档位派生，
-// 廉价档位的小窗口只约束它自己的函数，不拖累其它阶段。
+// TestBudgetsFromDepsPerTier bảo vệ nút xoay mức (RFC §13.1): ngân sách của từng hàm ngữ nghĩa được suy ra theo mức của chính nó,
+// cửa sổ nhỏ của mức rẻ chỉ ràng buộc hàm của nó, không kéo theo các giai đoạn khác.
 func TestBudgetsFromDepsPerTier(t *testing.T) {
 	small := ModelRuntime{ContextTokens: 32000, MaxOutputTokens: 4000}
 	big := ModelRuntime{ContextTokens: 200000, MaxOutputTokens: 16000}
@@ -238,15 +238,15 @@ func TestBudgetsFromDepsPerTier(t *testing.T) {
 		Synthesize: Caller{Runtime: big},
 	})
 	if b.SegmentChunkBytes >= b.Analyze.ContextBytes {
-		t.Fatalf("segment 小档位窗口应只约束自身：seg=%d analyze=%d", b.SegmentChunkBytes, b.Analyze.ContextBytes)
+		t.Fatalf("cửa sổ mức nhỏ của segment chỉ nên ràng buộc chính nó: seg=%d analyze=%d", b.SegmentChunkBytes, b.Analyze.ContextBytes)
 	}
 	if b.Analyze.MaxOutputTokens != 16000 || b.SegmentMaxTokens != 4000 {
-		t.Fatalf("输出预算应各取自身档位上限：analyze=%d segment=%d", b.Analyze.MaxOutputTokens, b.SegmentMaxTokens)
+		t.Fatalf("ngân sách đầu ra mỗi cái phải lấy trần của mức riêng: analyze=%d segment=%d", b.Analyze.MaxOutputTokens, b.SegmentMaxTokens)
 	}
 }
 
-// TestRunSavesFailureOnContractViolation 守护 §14.2：原生 Schema 契约违约
-// 必须立即暴露，并把原始响应与元数据落 failures/。
+// TestRunSavesFailureOnContractViolation bảo vệ §14.2: vi phạm hợp đồng của Schema gốc
+// phải lộ ra ngay, và phản hồi gốc cùng siêu dữ liệu phải được ghi vào failures/.
 func TestRunSavesFailureOnContractViolation(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -269,23 +269,23 @@ func TestRunSavesFailureOnContractViolation(t *testing.T) {
 		}
 	}
 	if !failed {
-		t.Fatal("非法输出应以 StageError 结束")
+		t.Fatal("đầu ra không hợp lệ phải kết thúc bằng StageError")
 	}
 	ws := OpenWorkspace(dir)
 	if !ws.has("failures/last-response.txt") {
-		t.Fatal("应保存最后一次原始模型响应")
+		t.Fatal("phải lưu phản hồi gốc cuối cùng của mô hình")
 	}
 	var meta FailureMeta
 	if err := ws.readJSON("failures/last.json", &meta); err != nil {
-		t.Fatalf("读失败元数据：%v", err)
+		t.Fatalf("đọc siêu dữ liệu lỗi: %v", err)
 	}
 	if meta.Stage != string(ActionSegment) {
-		t.Fatalf("失败元数据应标注 segment 阶段，得 %q", meta.Stage)
+		t.Fatalf("siêu dữ liệu lỗi phải ghi giai đoạn segment, được %q", meta.Stage)
 	}
 }
 
-// TestRunGuidanceResegments 守护 §18.3：恢复时携带 --guide 使旧切分自然失配，
-// 按新指导重新识别并再次停在确认处；新切分 InputDigest 绑定指导文本。
+// TestRunGuidanceResegments bảo vệ §18.3: khi khôi phục mà mang theo --guide thì kết quả cắt cũ tự nhiên lệch khớp,
+// nhận diện lại theo hướng dẫn mới và lại dừng ở bước xác nhận; InputDigest của kết quả cắt mới gắn với văn bản hướng dẫn.
 func TestRunGuidanceResegments(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -299,7 +299,7 @@ func TestRunGuidanceResegments(t *testing.T) {
 	drain := func(ch <-chan Event) (awaiting bool) {
 		for ev := range ch {
 			if ev.Stage == StageError {
-				t.Fatalf("管线失败：%v", ev.Err)
+				t.Fatalf("đường ống thất bại: %v", ev.Err)
 			}
 			if ev.Stage == StageAwaitingConfirmation {
 				awaiting = true
@@ -307,16 +307,16 @@ func TestRunGuidanceResegments(t *testing.T) {
 		}
 		return awaiting
 	}
-	// 首次交互导入：模型把全书切成 1 章，停在确认。
+	// Nhập tương tác lần đầu: mô hình cắt cả cuốn sách thành 1 chương, dừng ở bước xác nhận.
 	one := boundariesJSON(boundaryFixture("L1", "", kindChapter, "第一章"))
 	ch, err := Run(context.Background(), testDeps(st, &mockModel{responses: []string{one}}), Options{SourcePath: src})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !drain(ch) {
-		t.Fatal("首次导入应停在切分确认")
+		t.Fatal("nhập lần đầu phải dừng ở bước xác nhận kết quả cắt")
 	}
-	// 带指导恢复：旧切分失配 → 重识别为 2 章，再次停在确认。
+	// Khôi phục kèm hướng dẫn: kết quả cắt cũ lệch khớp → nhận diện lại thành 2 chương, lại dừng ở bước xác nhận.
 	two := boundariesJSON(
 		boundaryFixture("L1", "", kindChapter, "第一章"),
 		boundaryFixture("L3", "", kindChapter, "第二章"),
@@ -324,43 +324,43 @@ func TestRunGuidanceResegments(t *testing.T) {
 	guidance := "第二章也是独立章节"
 	ch2, err := Run(context.Background(), testDeps(st, &mockModel{responses: []string{two}}), Options{Guidance: guidance})
 	if err != nil {
-		t.Fatalf("恢复 Run: %v", err)
+		t.Fatalf("Run khôi phục: %v", err)
 	}
 	if !drain(ch2) {
-		t.Fatal("重识别后应再次停在切分确认")
+		t.Fatal("sau khi nhận diện lại phải lại dừng ở bước xác nhận kết quả cắt")
 	}
 	ws := OpenWorkspace(dir)
 	art, err := readArtifact[Segmentation](ws, fileSegmentation)
 	if err != nil {
-		t.Fatalf("读切分工件：%v", err)
+		t.Fatalf("đọc sản phẩm cắt: %v", err)
 	}
 	if len(art.Payload.Chapters) != 2 {
-		t.Fatalf("应按指导切成 2 章，得 %d", len(art.Payload.Chapters))
+		t.Fatalf("phải cắt thành 2 chương theo hướng dẫn, được %d", len(art.Payload.Chapters))
 	}
 	norm, _ := ws.LoadSource()
 	if art.InputDigest != segmentInputDigest(Digest(norm), guidance, segmentPromptVersion) {
-		t.Fatal("新切分 InputDigest 应绑定指导文本")
+		t.Fatal("InputDigest của kết quả cắt mới phải gắn với văn bản hướng dẫn")
 	}
 }
 
-// TestBudgetsFromRuntime 验证双预算随模型真实容量放大，能力未知时回退保守默认（RFC §9.2/§21）。
+// TestBudgetsFromRuntime xác minh cả hai ngân sách lớn theo dung lượng thật của mô hình, khi không biết năng lực thì lùi về mặc định thận trọng (RFC §9.2/§21).
 func TestBudgetsFromRuntime(t *testing.T) {
 	if got := budgetsFromRuntime(ModelRuntime{}); got != DefaultRunBudgets() {
-		t.Fatal("能力未知应回退保守默认")
+		t.Fatal("khi không biết năng lực phải lùi về mặc định thận trọng")
 	}
 	small := budgetsFromRuntime(ModelRuntime{ContextTokens: 32000, MaxOutputTokens: 4000})
 	big := budgetsFromRuntime(ModelRuntime{ContextTokens: 200000, MaxOutputTokens: 16000})
 	if big.Analyze.ContextBytes <= small.Analyze.ContextBytes {
-		t.Fatalf("更大 context 应放大 analyze 输入预算：small=%d big=%d", small.Analyze.ContextBytes, big.Analyze.ContextBytes)
+		t.Fatalf("context lớn hơn phải phóng to ngân sách đầu vào của analyze: small=%d big=%d", small.Analyze.ContextBytes, big.Analyze.ContextBytes)
 	}
 	if big.Analyze.MaxOutputTokens != 16000 {
-		t.Fatalf("输出预算应取模型 completion 上限，得 %d", big.Analyze.MaxOutputTokens)
+		t.Fatalf("ngân sách đầu ra phải lấy trần completion của mô hình, được %d", big.Analyze.MaxOutputTokens)
 	}
 }
 
-// TestProfileForKeyPolicy 守护事件合并范围：请求退避（带截止时刻）同 Key 原地跳动；
-// 校验重问是跨调用的语义事件，不带 Key 各自成行——切分逐块调用，共用 Key 会让后块覆盖前块，
-// 面板只剩一条 unit_id 不断变化的行，排查线索全丢；step 是普通进度事件（无警示级别）。
+// TestProfileForKeyPolicy bảo vệ phạm vi gộp sự kiện: yêu cầu lùi (có mốc chặn) cùng Key cập nhật tại chỗ;
+// hỏi lại do kiểm tra là sự kiện ngữ nghĩa xuyên các lần gọi, không có Key nên mỗi cái một dòng — cắt gọi theo từng khối, dùng chung Key sẽ khiến khối sau ghi đè khối trước,
+// bảng chỉ còn một dòng unit_id đổi liên tục, mất sạch manh mối để truy; step là sự kiện tiến trình thường (không có mức cảnh báo).
 func TestProfileForKeyPolicy(t *testing.T) {
 	r := &runner{events: make(chan Event, 3)}
 	prof := r.profileFor(Caller{}, StageSegmenting)
@@ -369,23 +369,23 @@ func TestProfileForKeyPolicy(t *testing.T) {
 	prof.step(2, 12, "切分第 %d/%d 块...", 2, 12)
 	backoff, reask, step := <-r.events, <-r.events, <-r.events
 	if backoff.Key == "" || backoff.Level != "warn" || backoff.RetryAt.IsZero() {
-		t.Fatalf("请求退避应为带 Key 与截止时刻的 warn 事件：%+v", backoff)
+		t.Fatalf("yêu cầu lùi phải là sự kiện warn có Key và mốc chặn: %+v", backoff)
 	}
 	if reask.Key != "" || reask.Level != "warn" {
-		t.Fatalf("校验重问应为不带 Key 的 warn 事件（独立成行）：%+v", reask)
+		t.Fatalf("hỏi lại do kiểm tra phải là sự kiện warn không có Key (đứng riêng một dòng): %+v", reask)
 	}
 	if step.Level != "" || step.Current != 2 || step.Total != 12 {
-		t.Fatalf("step 应为普通进度事件：%+v", step)
+		t.Fatalf("step phải là sự kiện tiến trình thường: %+v", step)
 	}
 }
 
-// TestCallProfileOptions 验证 callProfile 只负责输出预算与 thinking；response_format
-// 由 callStructured 根据模型事实和 Contract 选择，不能在 Profile 中重复组装。
+// TestCallProfileOptions xác minh callProfile chỉ phụ trách ngân sách đầu ra và thinking; response_format
+// do callStructured chọn dựa trên thực tế của mô hình và Contract, không được lắp ráp lại trong Profile.
 func TestCallProfileOptions(t *testing.T) {
 	if got := (callProfile{}).callOptions(100); len(got) != 1 {
-		t.Fatalf("零值只应带 maxTokens，得 %d 个 option", len(got))
+		t.Fatalf("giá trị 0 chỉ nên mang maxTokens, được %d option", len(got))
 	}
 	if got := (callProfile{thinking: "high"}).callOptions(100); len(got) != 2 {
-		t.Fatalf("thinking 应带 2 个 option，得 %d", len(got))
+		t.Fatalf("thinking nên mang 2 option, được %d", len(got))
 	}
 }
