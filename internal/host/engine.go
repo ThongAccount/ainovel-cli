@@ -778,7 +778,7 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 			hold := domain.AdvanceHold{After: op.hold.After, TargetChapter: op.hold.TargetChapter, Reason: op.hold.Reason}
 			if err := e.store.RunMeta.SetAdvanceHold(hold); err != nil {
 				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "thiết lập lần tạm dừng một lần thất bại: " + err.Error(), Level: "error"})
-				return err // hold 未落盘时关联 dispatch 不得执行
+				return err // khi hold chưa ghi xuống đĩa thì dispatch liên kết không được thực thi
 			}
 			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "đã thiết lập lần tạm dừng một lần: " + op.hold.Reason, Level: "info"})
 		}

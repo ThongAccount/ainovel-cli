@@ -7,8 +7,9 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// Action 是 NextAction 从工作区事实推导出的下一步确定性动作。
-// 持久状态不写会漂移的阶段枚举；下一动作只由工件推导（RFC §6.2）。
+// Action là hành động tất định bước kế tiếp mà NextAction suy ra từ các sự thật của workspace.
+// Trạng thái bền vững không ghi bộ enum giai đoạn có thể trôi lệch; hành động kế tiếp chỉ được
+// suy ra từ sản phẩm (RFC §6.2).
 type Action string
 
 const (
@@ -22,27 +23,31 @@ const (
 	ActionDone                 Action = "done"
 )
 
-// Facts 是从工作区读出的、决定下一动作所需的最小事实快照。
-// 把纯决策（NextAction）与 IO（LoadState）分离：NextAction 对同一 Facts 恒定（RFC §20.1）。
+// Facts là ảnh chụp sự thật tối thiểu đọc từ workspace, đủ để quyết định hành động kế tiếp.
+// Tách quyết định thuần (NextAction) khỏi IO (LoadState): NextAction là hằng với cùng một
+// Facts (RFC §20.1).
 type Facts struct {
-	WorkspaceReady   bool // manifest + intent + source 三件套齐备
+	WorkspaceReady   bool // đủ bộ ba manifest + intent + source
 	Segmented        bool
 	Confirmed        bool
-	ExpectedChapters int // 切分确认的章节总数（阶段二起填充）
-	AnalyzedChapters int // 从第 1 章起连续、InputDigest 匹配的分析数（阶段三起填充）
+	ExpectedChapters int // tổng số chương đã xác nhận cắt (điền từ giai đoạn hai)
+	AnalyzedChapters int // số chương đã phân tích liên tục từ chương 1, khớp InputDigest (điền từ giai đoạn ba)
 	Synthesized      bool
 	StoryUncertain   bool
 	StoryResolved    bool
-	Published        bool // 正式工件与 synthesis 完全一致（阶段五起填充）
+	Published        bool // sản phẩm chính thức khớp hoàn toàn với synthesis (điền từ giai đoạn năm)
 }
 
-// NextAction 沿固定线性管线，返回第一份缺失或未满足的动作。纯函数，无 IO。
+// NextAction đi theo pipeline tuyến tính cố định và trả về hành động đầu tiên còn thiếu hoặc
+// chưa thoả mãn. Hàm thuần, không có IO.
 func NextAction(f Facts) Action {
 	switch {
 	case f.Published:
-		// 发布是终态：正式库对账已全量一致，工作区只是审计存档。上游工件因
-		// prompt 版本 / 指导升级失鲜不再要求重做——否则版本升级会把已发布的书
-		// 追溯判回半路，Engine 跨重启门禁将其永久锁死。
+		// Phát hành là trạng thái cuối: kho chính thức đã đối chiếu khớp toàn bộ, workspace chỉ
+		// còn là bản lưu trữ kiểm toán. Sản phẩm thượng nguồn đã cũ vì nâng phiên bản prompt /
+		// hướng dẫn không còn bắt phải làm lại—nếu không, việc nâng phiên bản sẽ bị truy ngược
+		// đánh giá lại cuốn sách đã phát hành thành đang dở dang, và cổng chặn Engine qua các
+		// lần khởi động sẽ khoá vĩnh viễn.
 		return ActionDone
 	case !f.WorkspaceReady:
 		return ActionIngest
@@ -61,8 +66,9 @@ func NextAction(f Facts) Action {
 	}
 }
 
-// artifactFresh 判定工件存在且其 InputDigest 等于当前应重建的 want；
-// 缺失、解析失败、schema 或 digest 失配都视为不新鲜（需重做）。
+// artifactFresh xác định sản phẩm có tồn tại và InputDigest của nó có bằng giá trị want cần
+// dựng lại ở thời điểm hiện tại hay không;
+// thiếu, phân tích lỗi, lệch schema hoặc lệch digest đều bị coi là không còn mới (cần làm lại).
 func artifactFresh[T any](w *Workspace, rel, want string) (bool, error) {
 	a, err := readArtifact[T](w, rel)
 	if os.IsNotExist(err) {
@@ -74,10 +80,13 @@ func artifactFresh[T any](w *Workspace, rel, want string) (bool, error) {
 	return a.InputDigest == want, nil
 }
 
-// LoadState 从工作区读出当前事实快照（仅工作区，不含正式 Store）。
-// 线性短路：每一步都校验工件 InputDigest 与当前上游可重建的摘要一致，任一步失配即视为该步未完成，
-// 下游事实保持 false，交 NextAction 从此处重做——这才让「改切分/prompt 版本/源」自然失效下游（RFC §6.2/§6.3 / 不变量 1）。
-// Published 由调用方按正式发布对账补齐（统一走 CollectFacts）。
+// LoadState đọc ảnh chụp sự thật hiện tại từ workspace (chỉ workspace, không gồm Store chính thức).
+// Ngắt mạch tuyến tính: mỗi bước đều kiểm tra InputDigest của sản phẩm có khớp với tóm tắt dựng
+// lại được từ thượng nguồn hiện tại hay không; bước nào lệch thì coi như bước đó chưa hoàn thành,
+// các sự thật phía dưới giữ nguyên false, để NextAction làm lại từ đó—chính điều này khiến
+// việc đổi cắt / phiên bản prompt / nguồn làm hỏng phía dưới một cách tự nhiên
+// (RFC §6.2/§6.3 / bất biến 1).
+// Published do bên gọi bổ sung theo đối chiếu phát hành chính thức (đi qua CollectFacts thống nhất).
 func LoadState(w *Workspace) (Facts, error) {
 	var f Facts
 	if !w.Active() {
@@ -96,7 +105,8 @@ func LoadState(w *Workspace) (Facts, error) {
 		return f, fmt.Errorf("đọc hướng dẫn cắt: %w", err)
 	}
 
-	// segmentation：绑定归一化源 + 用户指导 + 切分 prompt 版本。指导变化（--guide 重识别）自然失效旧切分。
+	// segmentation: gắn với nguồn đã chuẩn hoá + hướng dẫn của người dùng + phiên bản prompt cắt.
+	// Đổi hướng dẫn (nhận diện lại bằng --guide) làm kết quả cắt cũ mất hiệu lực một cách tự nhiên.
 	segArt, err := readArtifact[Segmentation](w, fileSegmentation)
 	if os.IsNotExist(err) {
 		return f, nil
@@ -111,7 +121,7 @@ func LoadState(w *Workspace) (Facts, error) {
 	seg := &segArt.Payload
 	f.ExpectedChapters = len(seg.Chapters)
 
-	// confirmation：绑定 segmentation 工件原始字节。
+	// confirmation: gắn với byte gốc của sản phẩm segmentation.
 	segRaw, err := w.readBytes(fileSegmentation)
 	if err != nil {
 		return f, fmt.Errorf("đọc nguyên bản sản phẩm cắt: %w", err)
@@ -125,7 +135,8 @@ func LoadState(w *Workspace) (Facts, error) {
 	}
 	f.Confirmed = true
 
-	// 逐章分析：逐章 InputDigest 与切分身份/版本/正文匹配的连续数。
+	// Phân tích từng chương: số chương đã phân tích liên tục mà InputDigest từng chương khớp
+	// với danh tính / phiên bản / nội dung của kết quả cắt.
 	f.AnalyzedChapters, err = analyzedChaptersStrict(w, seg, src, segArt.InputDigest, analyzePromptVersion)
 	if err != nil {
 		return f, err
@@ -134,7 +145,7 @@ func LoadState(w *Workspace) (Facts, error) {
 		return f, nil
 	}
 
-	// synthesis：绑定有序逐章事实。
+	// synthesis: gắn với tập sự thật từng chương có thứ tự.
 	facts, err := loadPriorFactsStrict(w, f.ExpectedChapters)
 	if err != nil {
 		return f, err
@@ -152,7 +163,8 @@ func LoadState(w *Workspace) (Facts, error) {
 	f.Synthesized = true
 	f.StoryUncertain = synArt.Payload.StoryStatus == storyUncertain
 
-	// story resolution：uncertain 时绑定 synthesis 工件原始字节，或由 intent 预选。
+	// story resolution: khi uncertain thì gắn với byte gốc của sản phẩm synthesis, hoặc do intent
+	// chọn trước.
 	synRaw, err := w.readBytes(fileSynthesis)
 	if err != nil {
 		return f, fmt.Errorf("đọc nguyên bản sản phẩm tổng hợp toàn tác phẩm: %w", err)
@@ -171,10 +183,12 @@ func LoadState(w *Workspace) (Facts, error) {
 	return f, nil
 }
 
-// CollectFacts 组合工作区事实与正式发布对账，是 ResumeStatus/ResumeSummary/runner
-// 的统一事实入口。发布对账的期望章数优先取新鲜切分；切分因 prompt 版本 / 指导升级
-// 而失配时，退回工件里当时确认的章数——已发布书的正式章节正是按那份切分落库的，
-// 用当前版本重算 digest 对账反而对不上任何东西。
+// CollectFacts kết hợp sự thật của workspace với đối chiếu phát hành chính thức, là cửa vào
+// sự thật thống nhất cho ResumeStatus/ResumeSummary/runner.
+// Số chương kỳ vọng khi đối chiếu phát hành lấy từ kết quả cắt còn mới trước; khi kết quả cắt
+// lệch vì nâng phiên bản prompt / hướng dẫn thì lùi về số chương đã xác nhận trong sản phẩm
+// lúc đó—các chương chính thức của cuốn sách đã phát hành đúng là được ghi theo bản cắt ấy,
+// nên tính lại digest bằng phiên bản hiện tại để đối chiếu sẽ không khớp với bất cứ thứ gì.
 func CollectFacts(st *store.Store, w *Workspace) (Facts, error) {
 	f, err := LoadState(w)
 	if err != nil {
@@ -190,8 +204,10 @@ func CollectFacts(st *store.Store, w *Workspace) (Facts, error) {
 	return f, err
 }
 
-// ResumeStatus 报告是否存在活动导入工作区，以及它是否已彻底完成（含正式发布对账）。
-// 供跨重启 Engine 门禁使用（RFC §12.5）：active && !done 时禁止普通创作流程消费半发布状态。
+// ResumeStatus báo cáo có tồn tại workspace nhập đang hoạt động hay không, và nó đã hoàn tất
+// triệt để chưa (kèm đối chiếu phát hành chính thức).
+// Dùng cho cổng chặn Engine qua các lần khởi động (RFC §12.5): khi active && !done thì cấm quy
+// trình sáng tác thường tiêu thụ trạng thái phát hành dở dang.
 func ResumeStatus(st *store.Store) (active, done bool, err error) {
 	w := OpenWorkspace(st.Dir())
 	if !w.Active() {
@@ -204,8 +220,10 @@ func ResumeStatus(st *store.Store) (active, done bool, err error) {
 	return true, NextAction(f) == ActionDone, nil
 }
 
-// ResumeSummary 生成未完成导入的一行提示（RFC §18.2）；无未完成导入返回空串。
-// 供宿主在启动/欢迎界面主动告知，避免用户只有在创作被门禁拒绝时才发现这本书停在导入半路。
+// ResumeSummary sinh một dòng nhắc cho import chưa hoàn tất (RFC §18.2); không có import dở dang
+// thì trả về chuỗi rỗng.
+// Dùng để host chủ động thông báo ngay ở màn khởi động / chào mừng, tránh để người dùng chỉ phát
+// hiện cuốn sách đang dở dang ở giữa import khi bị cổng chặn từ chối sáng tác.
 func ResumeSummary(st *store.Store) string {
 	w := OpenWorkspace(st.Dir())
 	if !w.Active() {
@@ -235,8 +253,10 @@ func ResumeSummary(st *store.Store) string {
 	return "phát hiện bản nhập chưa hoàn tất (" + state + "), nhập /import để tiếp tục từ điểm dừng"
 }
 
-// checkImportPreconditions 校验新导入前置条件（RFC §12.1）：
-// 没有既有作品信息、已完成章节和在途 PendingCommit。已有小说与新外部文本的合并语义不清楚，第一版明确拒绝。
+// checkImportPreconditions kiểm tra các điều kiện tiên quyết của import mới (RFC §12.1):
+// không có thông tin tác phẩm sẵn có, chương đã hoàn thành hay PendingCommit đang dở.
+// Ngữ nghĩa gộp tiểu thuyết đã có với văn bản bên ngoài mới chưa rõ ràng, phiên bản đầu tiên
+// quyết định từ chối rõ ràng.
 func checkImportPreconditions(st *store.Store) error {
 	book, err := st.Book.Load()
 	if err != nil {

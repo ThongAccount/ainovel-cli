@@ -10,7 +10,7 @@ import (
 	"unicode"
 )
 
-// BoundaryDecision 是模型对单个 owned range 的边界判断（RFC §8.2）。
+// BoundaryDecision là phán quyết ranh giới của mô hình cho một owned range đơn lẻ (RFC §8.2).
 type BoundaryDecision struct {
 	UnitID    string `json:"unit_id"`
 	Anchor    string `json:"anchor,omitempty"`
@@ -27,12 +27,12 @@ const (
 	kindBackMatter  = "back_matter"
 )
 
-// boundaryBatch 是一次分段调用的结构化返回。
+// boundaryBatch là kết quả có cấu trúc của một lời gọi phân đoạn.
 type boundaryBatch struct {
 	Boundaries []BoundaryDecision `json:"boundaries"`
 }
 
-// ChapterSpan 是切分确认后的一个可提交章节：标题 + 归一化文本字节范围（含标题行）。
+// ChapterSpan là một chương có thể ghi sau khi xác nhận kết quả cắt: tiêu đề + phạm vi byte của văn bản đã chuẩn hoá (gồm cả dòng tiêu đề).
 type ChapterSpan struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
@@ -40,7 +40,7 @@ type ChapterSpan struct {
 	End    int    `json:"end_byte"`
 }
 
-// MatterSpan 是卷/篇标题或明确的附属区域。
+// MatterSpan là tiêu đề tập/phần hoặc một vùng phụ được đánh dấu rõ ràng.
 type MatterSpan struct {
 	Kind  string `json:"kind"`
 	Title string `json:"title,omitempty"`
@@ -48,27 +48,27 @@ type MatterSpan struct {
 	End   int    `json:"end_byte"`
 }
 
-// Segmentation 是全文覆盖校验通过的切分结果（confirmation 与逐章分析的上游）。
+// Segmentation là kết quả cắt đã vượt qua kiểm tra bao phủ toàn văn (đầu vào của confirmation và phân tích từng chương).
 type Segmentation struct {
 	Chapters  []ChapterSpan `json:"chapters"`
 	Matter    []MatterSpan  `json:"matter,omitempty"`    // group / front / back
-	Uncertain []int         `json:"uncertain,omitempty"` // 标记 uncertain 的章节号，供预览提示
-	Notes     []string      `json:"notes,omitempty"`     // 切分期需人工核对的说明（如空正文占位标题并入前段）
+	Uncertain []int         `json:"uncertain,omitempty"` // Số chương được đánh dấu uncertain, để bản xem trước gợi ý
+	Notes     []string      `json:"notes,omitempty"`     // Ghi chú trong giai đoạn cắt cần người kiểm tra (ví dụ tiêu đề giữ chỗ nội dung rỗng được gộp vào đoạn trước)
 }
 
-// Content 返回第 i 个章节的归一化正文（含标题行）。
+// Content trả về nội dung đã chuẩn hoá của chương thứ i (gồm cả dòng tiêu đề).
 func (s *Segmentation) Content(normalized []byte, i int) string {
 	c := s.Chapters[i]
 	return string(normalized[c.Start:c.End])
 }
 
-// resolveSegmentation 把有序边界决策映射为经全文覆盖校验的 Segmentation（RFC §8.3）。
-// 纯函数：模型输出与代码校验分离，"某行是不是章标题"不由 Go 复判，但覆盖不变量必须成立。
+// resolveSegmentation ánh xạ các phán quyết ranh giới đã sắp xếp thành Segmentation đã qua kiểm tra bao phủ toàn văn (RFC §8.3).
+// Hàm thuần: tách đầu ra của mô hình khỏi kiểm tra của mã, "某行是不是章标题" không do Go phán xử lại, nhưng bất biến bao phủ vẫn phải đúng.
 func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []BoundaryDecision) (*Segmentation, error) {
 	if len(decisions) == 0 {
 		return nil, fmt.Errorf("không nhận diện được ranh giới nào")
 	}
-	// 前置契约：units 必须按 (Line,Part) 数值序排列（禁止 ID 字典序）。
+	// Hợp đồng tiền điều kiện: units phải được sắp theo thứ tự số (Line,Part) (cấm sắp theo thứ tự từ điển của ID).
 	for i := 1; i < len(units); i++ {
 		if !unitLess(units[i-1], units[i]) {
 			return nil, fmt.Errorf("SourceUnit không sắp theo thứ tự số (Line,Part): %s sau %s", units[i-1].ID, units[i].ID)
@@ -96,18 +96,17 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 		}
 		points = append(points, point{byte: b, d: d})
 	}
-	// 模型偶发的乱序与重复是坐标纪律问题，Go 确定性修复而非终局否决——全部块成功后因
-	// 两个边界次序颠倒废弃整个切分阶段，代价不可接受（实测 319 个边界败于 1 处块内倒序，
-	// 且块缓存会让失败确定性复现）。块间顺序由 owned 区间不重叠保证，乱序只可能发生在
-	// 块内：按字节稳定排序即恢复真实顺序，零信息损失；同字节重复保留先出现者并记 Notes
-	// 交确认预览人工核对。
+	// Việc mô hình thỉnh thoảng trả về ranh giới sai thứ tự hoặc trùng lặp là vấn đề kỷ luật toạ độ, Go sửa một cách tất định thay vì phủ quyết cuối cùng — sau khi mọi khối đã thành công mà vì hai ranh giới bị đảo thứ tự mà bỏ cả giai đoạn cắt thì cái giá không thể chấp nhận (thực đo: 319 ranh giới hỏng vì đúng một chỗ đảo thứ tự trong khối,
+	// hơn nữa bộ nhớ đệm khối khiến lỗi tái hiện một cách tất định). Thứ tự giữa các khối được bảo đảm bởi các khoảng owned không chồng lấn, nên chỉ có thể sai thứ tự
+	// bên trong khối: sắp xếp ổn định theo byte là khôi phục lại thứ tự thật, không mất thông tin; trùng lặp cùng byte thì giữ lại cái xuất hiện trước và ghi Notes
+	// để bản xem trước xác nhận cho người kiểm tra.
 	sort.SliceStable(points, func(i, j int) bool { return points[i].byte < points[j].byte })
 	var notes []string
 	uniq := points[:0]
 	for _, p := range points {
 		if n := len(uniq); n > 0 && uniq[n-1].byte == p.byte {
-			// 完全相同的重复是机械冗余，静默去重；同位语义冲突（kind/标题不同）在调用期
-			// 已重问，走到这里只可能来自修复前的旧缓存——保留先出现者并记 Notes 人工核对。
+			// Trùng lặp hoàn toàn giống nhau là dư thừa cơ học, khử trùng lặp trong im lặng; xung đột ngữ nghĩa cùng vị trí (kind/tiêu đề khác nhau) đã được hỏi lại trong lúc gọi,
+			// đi tới đây thì chỉ có thể đến từ bộ nhớ đệm cũ trước khi sửa — giữ lại cái xuất hiện trước và ghi Notes để người kiểm tra.
 			if prev := uniq[n-1].d; prev.Kind != p.d.Kind || boundaryLabel(prev) != boundaryLabel(p.d) {
 				notes = append(notes, fmt.Sprintf("ranh giới %q và %q trùng nhau (byte %d), đã giữ lại cái trước",
 					boundaryLabel(prev), boundaryLabel(p.d), p.byte))
@@ -117,10 +116,10 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 		uniq = append(uniq, p)
 	}
 	points = uniq
-	// 首个边界前的非空文本（书首简介/广告等，模型漏报起始边界）不终局否决：Go 确定性
-	// 补一个 front_matter 兜住 [0, first)，记 Notes 交确认预览人工核对——漏报已进块缓存，
-	// 终局否决会让重跑零调用复现同一失败（与空正文章节吸收同哲学，RFC §8.3.5）。
-	// 语义判断本身在调用期已交还模型（chunkValidator.coverStart 重问），此兜底只治愈旧缓存。
+	// Văn bản không rỗng trước ranh giới đầu tiên (phần giới thiệu đầu sách/quảng cáo v.v., mô hình bỏ sót ranh giới khởi đầu) không bị phủ quyết cuối cùng: Go bổ sung
+	// một front_matter một cách tất định để ôm lấy [0, first), ghi Notes để bản xem trước xác nhận cho người kiểm tra — báo thiếu đã nằm trong bộ nhớ đệm khối,
+	// phủ quyết cuối cùng sẽ khiến lần chạy lại không tốn lời gọi nào mà tái hiện đúng lỗi cũ (cùng triết lý với việc hấp thụ chương nội dung rỗng, RFC §8.3.5).
+	// Bản thân phán đoán ngữ nghĩa đã được trả về mô hình ngay lúc gọi (chunkValidator.coverStart hỏi lại), bước dự phòng này chỉ chữa bộ nhớ đệm cũ.
 	if head := points[0].byte; head != 0 && strings.TrimSpace(string(normalized[:head])) != "" {
 		notes = append(notes, fmt.Sprintf("văn bản đầu %d byte không được mô hình gán (%s…), đã gom vào front_matter, hãy kiểm tra xem có chương nào bị bỏ sót không",
 			head, snippet(string(normalized[:min(head, 48)]), 24)))
@@ -129,7 +128,7 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 
 	seg := &Segmentation{Notes: notes}
 	chapterNo := 0
-	// absorb 把一段并入最近产出的 span（章节或附属区域皆可），无可并入时返回 false。
+	// absorb gộp một đoạn vào span vừa tạo gần nhất (chương hay vùng phụ đều được), trả về false khi không có gì để gộp vào.
 	absorb := func(end int) bool {
 		ci, mi := len(seg.Chapters)-1, len(seg.Matter)-1
 		switch {
@@ -145,7 +144,7 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 	for i, p := range points {
 		start := p.byte
 		if i == 0 {
-			start = 0 // 首段吸收起始处的空白
+			start = 0 // Đoạn đầu hấp thụ khoảng trắng ở đầu văn bản
 		}
 		end := len(normalized)
 		if i+1 < len(points) {
@@ -158,9 +157,9 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 		switch p.d.Kind {
 		case kindChapter:
 			if strings.TrimSpace(bodyAfterTitle(normalized, p.byte, end)) == "" {
-				// 真实网络小说源常见"已锁定/付费章节"占位：标题在、正文缺失。不整体失败——
-				// 终局一票否决会浪费切分阶段的全部模型调用；标题行并入前段（文本一字不丢），
-				// 记入 Notes 由确认预览呈现，人工不认可可用 --guide 裁定（RFC §8.4 的停点正为此存在）。
+				// Nguồn tiểu thuyết mạng thật hay gặp chỗ giữ chỗ "已锁定/付费章节": có tiêu đề nhưng thiếu nội dung. Không làm hỏng toàn bộ —
+				// phủ quyết một lần ở cuối sẽ lãng phí toàn bộ lời gọi mô hình của giai đoạn cắt; dòng tiêu đề được gộp vào đoạn trước (không mất một chữ nào của văn bản),
+				// ghi vào Notes để bản xem trước xác nhận hiển thị, nếu người không đồng ý thì dùng --guide để phán quyết (điểm dừng của RFC §8.4 tồn tại chính là vì việc này).
 				seg.Notes = append(seg.Notes,
 					fmt.Sprintf("tiêu đề chương %q không có nội dung (byte %d..%d), đã gộp vào đoạn trước (thường gặp ở chương đã khóa hoặc trả phí)", title, start, end))
 				if !absorb(end) {
@@ -180,8 +179,8 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 	if chapterNo == 0 {
 		return nil, fmt.Errorf("cắt không tạo ra chương nào (group không tính là chương)")
 	}
-	// 同名章节是"同章被误切"的确定性信号（有标题规约的源里章名不该重复），只记 Notes
-	// 交确认预览人工核对（Notes 非空即阻断 --yes）——是否合并不由 Go 裁定。
+	// Hai chương trùng tên là dấu hiệu tất định của việc "同章被误切" (trong nguồn có quy ước tiêu đề thì tên chương không nên lặp lại), chỉ ghi Notes
+	// để bản xem trước xác nhận cho người kiểm tra (Notes khác rỗng là chặn --yes) — có gộp hay không không do Go phán quyết.
 	titleAt := make(map[string]int, len(seg.Chapters))
 	for _, c := range seg.Chapters {
 		key := squashSpace(c.Title)
@@ -195,7 +194,7 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 	return seg, nil
 }
 
-// squashSpace 去除全部空白，用于标题回显与同名比对——空白/装饰差异不构成语义差异。
+// squashSpace bỏ hết khoảng trắng, dùng cho kiểm tra hồi tiếng tiêu đề và so sánh trùng tên — khác biệt về khoảng trắng/trang trí không phải khác biệt ngữ nghĩa.
 func squashSpace(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsSpace(r) {
@@ -205,7 +204,7 @@ func squashSpace(s string) string {
 	}, s)
 }
 
-// firstLine 返回 [start,end) 内首行去空白后的文本。
+// firstLine trả về dòng đầu tiên trong [start,end) sau khi cắt khoảng trắng.
 func firstLine(normalized []byte, start, end int) string {
 	s := string(normalized[start:end])
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
@@ -214,9 +213,9 @@ func firstLine(normalized []byte, start, end int) string {
 	return strings.TrimSpace(s)
 }
 
-// bodyAfterTitle 返回 [start,end) 去掉首行（标题）后的正文。
-// 多行章节标题独占首行，正文在其后；无换行的单行段（锚点切分场景）整段即正文，
-// 此时返回全段而非空串——否则合法的单行/单行多章小说会被误判"正文为空"拒绝（RFC §8.3）。
+// bodyAfterTitle trả về phần nội dung của [start,end) sau khi bỏ dòng đầu (tiêu đề).
+// Tiêu đề chương nhiều dòng chiếm riêng dòng đầu, nội dung nằm sau đó; đoạn một dòng không có ngắt dòng (kịch bản cắt theo điểm neo) thì cả đoạn là nội dung,
+// lúc này trả về toàn bộ đoạn chứ không phải chuỗi rỗng — nếu không, một tiểu thuyết hợp lệ dạng một dòng/một dòng nhiều chương sẽ bị từ chối nhầm với lý do "正文为空" (RFC §8.3).
 func bodyAfterTitle(normalized []byte, start, end int) string {
 	s := string(normalized[start:end])
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
@@ -225,8 +224,8 @@ func bodyAfterTitle(normalized []byte, start, end int) string {
 	return s
 }
 
-// planChunks 按字节预算把 units 切成互不重叠、完整覆盖的 owned 索引区间 [start,end)。
-// 分块大小由上下文预算计算，不按固定行数或章节数（RFC §8.1）。
+// planChunks chia units theo ngân sách byte thành các khoảng chỉ mục owned không chồng lấn và phủ kín toàn bộ [start,end).
+// Kích thước khối tính từ ngân sách ngữ cảnh, không theo số dòng hay số chương cố định (RFC §8.1).
 func planChunks(units []SourceUnit, budgetBytes int) [][2]int {
 	if len(units) == 0 {
 		return nil
@@ -250,12 +249,11 @@ func planChunks(units []SourceUnit, budgetBytes int) [][2]int {
 	return chunks
 }
 
-// buildProjection 组装一个 owned 区间的结构投影 payload（含少量上下文），模型只为 owned 返回边界。
-// 同时返回投影内全部 unit_id 集合（owned + 上下文区），供输出校验区分幻觉与越界。
+// buildProjection dựng payload phóng chiếu có cấu trúc cho một khoảng owned (kèm ít ngữ cảnh), mô hình chỉ trả về ranh giới cho phần owned.
+// Đồng thời trả về tập hợp mọi unit_id trong phóng chiếu (owned + vùng ngữ cảnh), để kiểm tra đầu ra phân biệt ảo giác với vượt phạm vi.
 func buildProjection(units []SourceUnit, owned [2]int, contextMargin, ctxBudget int, guidance string) (string, map[string]bool) {
-	// 上下文区按单元数与字节双上限收缩（ctxBudget<=0 时只按单元数）：margin 单元通常是
-	// 普通行，但超长行的虚拟分片可达 MaxUnitBytes，数个即可吞掉整个输入预算——上下文
-	// 只是参考信息，不值这个价。
+	// Vùng ngữ cảnh co lại theo cả giới hạn số đơn vị lẫn số byte (khi ctxBudget<=0 thì chỉ theo số đơn vị): các đơn vị margin thường là dòng thường,
+	// nhưng lát ảo của dòng quá dài có thể dài tới MaxUnitBytes, chỉ vài lát đã nuốt hết ngân sách đầu vào — ngữ cảnh chỉ là tham chiếu, không đáng cái giá đó.
 	lo, budget := owned[0], ctxBudget
 	for lo > 0 && owned[0]-lo < contextMargin {
 		if n := len(units[lo-1].Text); ctxBudget > 0 {
@@ -299,13 +297,13 @@ func buildProjection(units []SourceUnit, owned [2]int, contextMargin, ctxBudget 
 	return string(data), ids
 }
 
-// segmentInputDigest 覆盖分段动作实际消费的语义输入：归一化源、用户指导、prompt 版本（RFC §6.3）。
+// segmentInputDigest bao phủ các đầu vào ngữ nghĩa mà hành động phân đoạn thực sự tiêu thụ: nguồn đã chuẩn hoá, hướng dẫn người dùng, phiên bản prompt (RFC §6.3).
 func segmentInputDigest(normalizedDigest, guidance, promptVersion string) string {
 	return Digest([]byte(strings.Join([]string{"segment", promptVersion, normalizedDigest, guidance}, "\x00")))
 }
 
-// segmentChunkPath / segmentChunkDigest：块级边界缓存的工件路径与身份。
-// 身份绑定切分身份（源+指导+prompt 版本）与块的 owned 单元范围——上游任何变化都使缓存自然失配。
+// segmentChunkPath / segmentChunkDigest: đường dẫn và danh tính của sản phẩm cho bộ nhớ đệm ranh giới cấp khối.
+// Danh tính gắn với danh tính của lần cắt (nguồn + hướng dẫn + phiên bản prompt) và vùng đơn vị owned của khối — bất kỳ thay đổi nào ở phía trên đều làm bộ nhớ đệm tự nhiên lệch khớp.
 func segmentChunkPath(owned [2]int) string {
 	return fmt.Sprintf("%s/chunk-%06d-%06d.json", dirSegmentChunks, owned[0], owned[1])
 }
@@ -314,11 +312,11 @@ func segmentChunkDigest(identity, loID, hiID string) string {
 	return Digest([]byte(strings.Join([]string{"segment-chunk", identity, loID, hiID}, "\x00")))
 }
 
-// Segment 对整份归一化文本做语义切分：逐 owned 区间调用模型识别边界，再全文覆盖校验。
-// contextMargin 上下文单元数，chunkBytes owned 区间字节预算，maxTokens 单次输出预算。
-// w 非空时逐块落盘边界缓存（identity = segmentInputDigest）：单块可达数分钟，任何一块失败
-// 不应重付已完成块的调用——与 analyze 逐章、synthesize 逐区间同一哲学，此前切分是
-// 唯一没有阶段内持久化的昂贵阶段，一处失败即全部重来。
+// Segment thực hiện cắt ngữ nghĩa trên toàn bộ văn bản đã chuẩn hoá: gọi mô hình theo từng khoảng owned để nhận diện ranh giới, rồi kiểm tra bao phủ toàn văn.
+// contextMargin là số đơn vị ngữ cảnh, chunkBytes là ngân sách byte của khoảng owned, maxTokens là ngân sách đầu ra cho một lần.
+// Khi w khác nil, ghi bộ nhớ đệm ranh giới xuống đĩa theo từng khối (identity = segmentInputDigest): một khối có thể mất vài phút, bất kỳ khối nào thất bại
+// cũng không nên phải trả lại các lời gọi của những khối đã xong — cùng triết lý với analyze theo từng chương và synthesize theo từng đoạn, trước đây cắt là
+// giai đoạn đắt giá duy nhất không có ghi bền trong giai đoạn, hỏng một chỗ là phải làm lại tất cả.
 func Segment(ctx context.Context, m callModel, systemPrompt string, normalized []byte, units []SourceUnit, guidance string, chunkBytes, contextMargin, maxTokens int, prof callProfile, w *Workspace, identity string) (*Segmentation, error) {
 	chunks := planChunks(units, planningBudget(chunkBytes, systemPrompt, guidance))
 	unitByID := make(map[string]SourceUnit, len(units))
@@ -326,9 +324,9 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 		unitByID[u.ID] = u
 	}
 	var decisions []BoundaryDecision
-	// chunk 处理一个 owned 区间：缓存命中零调用；输出被长度截断且区间可再分时对半缩块
-	// 递归重试（大量短章节的边界 JSON 会超出可见输出，与 analyze 缩批同哲学）——半块有
-	// 独立缓存路径，重试成果不重付；单元级仍截断才是真容量不足。
+	// chunk xử lý một khoảng owned: trúng bộ nhớ đệm thì không tốn lời gọi nào; khi đầu ra bị cắt ngắn theo độ dài và khoảng còn chia được thì thu nhỏ khối một nửa
+	// rồi thử lại đệ quy (JSON ranh giới của nhiều chương ngắn sẽ vượt quá đầu ra nhìn thấy được, cùng triết lý với analyze khi thu nhỏ lô) — nửa khối có
+	// đường dẫn bộ nhớ đệm riêng nên thành quả thử lại không phải trả lại; chỉ khi thu nhỏ tới mức đơn vị mà vẫn bị cắt ngắn thì mới thật sự thiếu dung lượng.
 	var chunk func(owned [2]int, cur, total int) ([]BoundaryDecision, error)
 	chunk = func(owned [2]int, cur, total int) ([]BoundaryDecision, error) {
 		lo, hi := units[owned[0]], units[owned[1]-1]
@@ -338,11 +336,11 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 				return art.Payload.Boundaries, nil
 			}
 		}
-		// 单块模型调用可达数分钟，逐块回显推进 + 累计边界数，面板才不会整段静默像卡死。
+		// Một lời gọi mô hình cho một khối có thể mất vài phút, phản chiếu tiến trình theo từng khối kèm số ranh giới tích luỹ thì bảng điều khiển mới không im lặng trông như bị treo.
 		prof.step(cur, total, "cắt khối %d/%d (%s..%s), đã nhận diện %d ranh giới...",
 			cur, total, lo.ID, hi.ID, len(decisions))
-		// 上下文区字节上限取 chunkBytes/8 但不低于 4096：要拦的是超长行虚拟分片
-		// （单片可达 MaxUnitBytes）吞掉输入预算，普通行的 margin 开销本就无害。
+		// Giới hạn byte của vùng ngữ cảnh lấy chunkBytes/8 nhưng không dưới 4096: cần chặn là các lát ảo của dòng quá dài
+		// (một lát có thể dài tới MaxUnitBytes) nuốt hết ngân sách đầu vào, còn chi phí margin của các dòng thường thì vốn vô hại.
 		payload, projIDs := buildProjection(units, owned, contextMargin, max(chunkBytes/8, 4096), guidance)
 		ownedIDs := make(map[string]bool, owned[1]-owned[0])
 		for i := owned[0]; i < owned[1]; i++ {
@@ -371,9 +369,9 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 			}
 			return nil, fmt.Errorf("đoạn cắt %s..%s: %w", lo.ID, hi.ID, err)
 		}
-		// 上下文区边界归相邻块管辖（它会在自己的 owned 区间再报告一次），Go 直接裁掉：
-		// 坐标纪律由代码执行，语义重试只留给真正的语义失败——旧行为对越界反馈重问，
-		// 弱模型常把 3 次尝试全部耗尽拖垮整块（RFC §8.1「模型管语义，Go 管坐标」）。
+		// Ranh giới nằm trong vùng ngữ cảnh thuộc quyền của khối lân cận (nó sẽ báo lại trong khoảng owned của chính nó), Go cắt thẳng:
+		// kỷ luật toạ độ do mã thực thi, còn lần thử lại ngữ nghĩa chỉ dành cho lỗi ngữ nghĩa thật sự — hành vi cũ hỏi lại khi có phản hồi vượt phạm vi,
+		// mô hình yếu thường dùng hết cả 3 lần thử rồi làm sập luôn cả khối (RFC §8.1「模型管语义，Go 管坐标」).
 		kept := make([]BoundaryDecision, 0, len(batch.Boundaries))
 		for _, bd := range batch.Boundaries {
 			if ownedIDs[bd.UnitID] {
@@ -381,10 +379,10 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 			}
 		}
 		if n := len(batch.Boundaries) - len(kept); n > 0 {
-			// 例行坐标纪律而非异常，用普通进度回显——警示色会让用户误以为出错。
+			// Đây là kỷ luật toạ độ thường lệ chứ không phải sự cố, dùng tiến trình bình thường để phản chiếu — màu cảnh báo sẽ khiến người dùng tưởng đã lỗi.
 			prof.step(0, 0, "đã cắt bỏ %d ranh giới báo thừa trong vùng ngữ cảnh (khối lân cận sẽ tự báo, không phải lỗi)", n)
 		}
-		// 回显模型的语义判断（识别出的标题），让用户看见模型读懂了什么，而非只有机械计数。
+		// Phản chiếu phán đoán ngữ nghĩa của mô hình (các tiêu đề đã nhận diện), để người dùng thấy được mô hình đã hiểu gì, chứ không chỉ có đếm số máy móc.
 		if len(kept) > 0 {
 			prof.step(0, 0, "mô hình nhận diện: %s", previewBoundaries(kept))
 		}
@@ -404,10 +402,10 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 	}
 	seg, err := resolveSegmentation(normalized, units, decisions)
 	if err != nil {
-		// 终局整合失败时块缓存已无价值：digest 恒匹配会让重跑零调用复读同一批边界、
-		// 确定性复现同一失败。清缓存换取下次重新切分的模型机会；决策快照经 errSemantic
-		// 统一落 failures/ 供事后排查。清除失败必须如实报告——谎称已清除会让用户重跑
-		// 时再次复读坏缓存（Debug-First）。
+		// Khi tích hợp cuối cùng thất bại thì bộ nhớ đệm khối đã mất giá trị: digest luôn khớp sẽ khiến lần chạy lại không tốn lời gọi nào mà đọc lại đúng lô ranh giới cũ,
+		// tái hiện một cách tất định cùng lỗi đó. Xoá bộ nhớ đệm để đổi lấy cơ hội gọi mô hình cắt lại ở lần sau; ảnh chụp quyết định đi qua errSemantic
+		// và được ghi thống nhất vào failures/ để truy vết sau này. Thất bại khi xoá phải được báo cáo trung thực — nói dối là đã xoá sẽ khiến người dùng chạy lại
+		// và lại đọc bộ nhớ đệm hỏng (Debug-First).
 		hint := "đã xoá bộ nhớ đệm khối, chạy lại sẽ cắt lại"
 		if w != nil {
 			if cerr := w.clearDir(dirSegmentChunks); cerr != nil {
@@ -420,10 +418,10 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 	return seg, nil
 }
 
-// planningBudget 从输入预算扣除请求的结构性开销：系统提示与指导按实际长度扣除，剩余按
-// 3/4 折算投影 JSON 包装的暴涨（id/引号/转义 ≈ 正文的 1/3）——owned 正文只是请求的一部分，
-// 按满额规划会在长提示或大上下文区时超出真实输入预算。下限 chunkBytes/4 防超长提示把预算
-// 挤成负数；chunkBytes<=0 表示无预算（单块），原样透传。
+// planningBudget trừ các chi phí cấu trúc của yêu cầu khỏi ngân sách đầu vào: system prompt và hướng dẫn bị trừ theo độ dài thực tế, phần còn lại quy đổi
+// theo 3/4 để bù phần bùng nổ của vỏ bọc JSON phóng chiếu (id/dấu nháy/ký tự thoát ≈ 1/3 phần nội dung) — nội dung owned chỉ là một phần của yêu cầu,
+// tính đúng trần sẽ vượt ngân sách đầu vào thật khi prompt dài hoặc vùng ngữ cảnh lớn. Sàn chunkBytes/4 chống prompt quá dài làm ngân sách
+// bị ép xuống số âm; chunkBytes<=0 nghĩa là không có ngân sách (một khối), truyền nguyên vẹn.
 func planningBudget(chunkBytes int, systemPrompt, guidance string) int {
 	if chunkBytes <= 0 {
 		return chunkBytes
@@ -432,7 +430,7 @@ func planningBudget(chunkBytes int, systemPrompt, guidance string) int {
 	return max(b, chunkBytes/4)
 }
 
-// boundaryLabel 给边界决策一个可读标识：标题优先，无标题回落到 kind@unit_id。
+// boundaryLabel tạo cho mỗi phán quyết ranh giới một nhãn đọc được: ưu tiên tiêu đề, không có tiêu đề thì lùi về kind@unit_id.
 func boundaryLabel(d BoundaryDecision) string {
 	if t := strings.TrimSpace(d.Title); t != "" {
 		return t
@@ -440,7 +438,7 @@ func boundaryLabel(d BoundaryDecision) string {
 	return d.Kind + "@" + d.UnitID
 }
 
-// previewBoundaries 把一批边界决策压成一行标题预览（最多 3 个 + 计数），供面板回显。
+// previewBoundaries nén một lô phán quyết ranh giới thành một dòng xem trước tiêu đề (tối đa 3 + số đếm), để bảng điều khiển phản chiếu.
 func previewBoundaries(bs []BoundaryDecision) string {
 	titles := make([]string, 0, 3)
 	for _, b := range bs {
@@ -456,16 +454,16 @@ func previewBoundaries(bs []BoundaryDecision) string {
 	return s
 }
 
-// chunkValidator 承载一次切分调用的调用期校验上下文：投影外 unit_id 是幻觉；owned 区
-// 边界还须 kind 合法、anchor 可解析、同位不语义冲突；首块须有边界兜住文本起点。
-// 这些坏值调用期不拦会随块落进缓存——digest 恒匹配，重跑零调用复读同一份坏数据，
-// 失败确定性复现（RFC §8.3）。语义判断（保留哪个、开头是什么）经重问交还模型，
-// Go 不代答；上下文区边界注定被坐标纪律裁掉，不为其重问。
+// chunkValidator mang bối cảnh kiểm tra lúc gọi cho một lời gọi cắt: unit_id nằm ngoài phóng chiếu là ảo giác; ranh giới trong vùng owned
+// còn phải có kind hợp lệ, anchor phân giải được, không xung đột ngữ nghĩa cùng vị trí; khối đầu phải có ranh giới ôm lấy điểm khởi đầu của văn bản.
+// Nếu không chặn lúc gọi, những giá trị hỏng này sẽ đi kèm khối và nằm trong bộ nhớ đệm — digest luôn khớp, lần chạy lại không tốn lời gọi nào
+// mà đọc lại đúng dữ liệu hỏng, lỗi tái hiện một cách tất định (RFC §8.3). Phán đoán ngữ nghĩa (giữ cái nào, mở đầu là gì) được trả về mô hình qua lần hỏi lại,
+// Go không thay mô hình trả lời; ranh giới trong vùng ngữ cảnh đã định bị cắt bởi kỷ luật toạ độ nên không hỏi lại vì chúng.
 type chunkValidator struct {
 	projIDs, ownedIDs map[string]bool
 	unitByID          map[string]SourceUnit
 	normalized        []byte
-	coverStart        bool // 首块：文本起点前的非空文本必须有边界归属
+	coverStart        bool // Khối đầu: văn bản không rỗng trước điểm khởi đầu phải có ranh giới nào đó ôm lấy
 	// texts là bảng văn bản theo ngôn ngữ tác phẩm: lỗi validate ở đây được
 	// llmcontract gửi lại mô hình để hỏi lại, nên phải theo ngôn ngữ đang viết.
 	texts *importTexts
@@ -494,18 +492,18 @@ func (v chunkValidator) validate(bs []BoundaryDecision) error {
 		if err != nil {
 			return err
 		}
-		// 标题回显：chapter/group 的标题必须真实存在于边界单元原文（忽略空白差异）——
-		// 编造的标题在此被事实拦下（实测某源 157 章里 67 章是模型在章中续文上造的边界+
-		// 编的标题）。语义裁量仍归模型：真无标题规约的源可置 uncertain 保留归纳标题；
-		// front/back matter 的描述性标题低风险，不核对。
+		// Hồi tiếng tiêu đề: tiêu đề của chapter/group phải thực sự tồn tại trong văn bản gốc của đơn vị ranh giới (bỏ qua khác biệt khoảng trắng) —
+		// tiêu đề bịa ra bị chặn ngay tại đây bằng sự thật (thực đo: trong một nguồn có 157 chương thì 67 chương là mô hình tự chế ranh giới trên phần tiếp nội dung giữa chương
+		// và bịa tiêu đề). Quyền cân nhắc ngữ nghĩa vẫn thuộc về mô hình: nguồn thật sự không có quy ước tiêu đề có thể đặt uncertain để giữ tiêu đề đã tổng hợp;
+		// tiêu đề mô tả của front/back matter rủi ro thấp nên không đối chiếu.
 		if (b.Kind == kindChapter || b.Kind == kindGroup) && !b.Uncertain {
 			if title := squashSpace(b.Title); title != "" && !strings.Contains(squashSpace(v.unitByID[b.UnitID].Text), title) {
 				return fmt.Errorf(t.errBoundaryTitleMissing,
 					b.UnitID, snippet(b.Title, 24))
 			}
 		}
-		// 同位冲突（kind/标题不同）是语义问题，保留哪个不由 Go 裁定；完全相同的重复
-		// 是机械冗余，放行后由 resolve 静默去重。
+		// Xung đột cùng vị trí (kind/tiêu đề khác nhau) là vấn đề ngữ nghĩa, giữ lại cái nào không do Go phán quyết; trùng lặp hoàn toàn giống nhau
+		// là dư thừa cơ học, sau khi cho qua sẽ bị resolve khử trùng lặp trong im lặng.
 		if prev, ok := seen[at]; ok {
 			if prev.Kind != b.Kind || boundaryLabel(prev) != boundaryLabel(b) {
 				return fmt.Errorf(t.errBoundaryConflict,
@@ -521,7 +519,7 @@ func (v chunkValidator) validate(bs []BoundaryDecision) error {
 	if v.coverStart {
 		head := first
 		if head < 0 {
-			head = len(v.normalized) // 首块一个 owned 边界都没报：全部起始文本未归属
+			head = len(v.normalized) // Khối đầu không báo ranh giới owned nào: toàn bộ văn bản đầu chưa được quy về
 		}
 		if head > 0 && strings.TrimSpace(string(v.normalized[:head])) != "" {
 			return fmt.Errorf(t.errBoundaryStartUnowned,

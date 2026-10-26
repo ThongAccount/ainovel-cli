@@ -14,12 +14,12 @@ import (
 	"github.com/voocel/litellm"
 )
 
-// callModel 是内核对模型的最小依赖，便于测试注入 mock。
+// callModel là phụ thuộc tối thiểu của lõi đối với mô hình, thuận tiện cho việc tiêm mock trong kiểm thử.
 type callModel interface {
 	Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error)
 }
 
-// errTruncated 表示模型因长度停止（容量错误）。携带原始文本供调用方决定失败或前缀打捞（§9.5）。
+// errTruncated biểu thị mô hình dừng vì giới hạn độ dài (lỗi dung lượng). Nó mang theo văn bản gốc để bên gọi quyết định báo thất bại hay cứu tiền tố (§9.5).
 type errTruncated struct {
 	Raw string
 }
@@ -28,8 +28,8 @@ func (e *errTruncated) Error() string {
 	return "đầu ra của mô hình bị cắt do giới hạn độ dài (stop=length)"
 }
 
-// errSemantic 表示无法通过重问修复的输出层失败，携带原始响应，
-// 供 runner 统一落 failures/ 失败工件（§14.2），所有语义函数共用。
+// errSemantic biểu thị lỗi ở tầng đầu ra không thể khắc phục bằng cách hỏi lại, mang theo phản hồi gốc,
+// để runner ghi tập trung vào sản phẩm thất bại trong failures/ (§14.2); mọi hàm ngữ nghĩa đều dùng chung.
 type errSemantic struct {
 	Raw string
 	Err error
@@ -38,20 +38,20 @@ type errSemantic struct {
 func (e *errSemantic) Error() string { return e.Err.Error() }
 func (e *errSemantic) Unwrap() error { return e.Err }
 
-// callProfile 承载 thinking 与可观测性选项，由 Host 探测的 ModelRuntime 派生。
-// 结构化协议由 callStructured 依据模型事实和静态 Contract 独立选择。
+// callProfile mang các tuỳ chọn thinking và khả năng quan sát, được suy ra từ ModelRuntime mà Host dò ra.
+// Giao thức có cấu trúc do callStructured chọn độc lập, dựa trên sự thật của mô hình và Contract tĩnh.
 type callProfile struct {
 	thinking agentcore.ThinkingLevel
 	// texts là bảng văn bản mô hình đọc (mô tả hợp đồng, lệnh trong payload) theo
 	// ngôn ngữ tác phẩm; nil thì dùng bản tiếng Việt mặc định.
 	texts *importTexts
-	// notify 可选：把请求退避重试/校验重问回显给界面；nil 时静默（§14.1）。
-	// retryAt 非零 = 下次重试的截止时刻，UI 据此渲染逐秒倒计时（事件只带截止点，剩余时间渲染时算）。
+	// notify tùy chọn: hiển thị lại cho giao diện việc thử lại theo backoff của yêu cầu / hỏi lại do kiểm tra hợp lệ; nil thì im lặng (§14.1).
+	// retryAt khác 0 = thời điểm hết hạn của lần thử lại kế tiếp, UI dựa vào đó để vẽ đồng hồ đếm ngược từng giây (sự kiện chỉ mang mốc hết hạn, thời gian còn lại được tính lúc vẽ).
 	notify func(msg string, retryAt time.Time)
-	// progress 可选：回显长时阶段的内部推进（切分第 N/M 块、区间摘要 N/M）；nil 时静默。
-	// 切分/综合在函数内部逐块/逐区间调用模型，单块可达数分钟，没有它面板整段静默像卡死（§14.1）。
+	// progress tùy chọn: hiển thị lại tiến trình nội bộ của các giai đoạn dài (khối cắt thứ N/M, tóm tắt đoạn N/M); nil thì im lặng.
+	// Quá trình cắt/tổng hợp gọi mô hình từng khối/từng đoạn bên trong hàm, một khối có thể mất vài phút; không có nó thì cả bảng điều khiển im lặng như bị treo (§14.1).
 	progress func(current, total int, msg string)
-	// log 可选：导入专属日志（logs/import.log）；nil 回退默认 logger。
+	// log tùy chọn: nhật ký riêng của quá trình nhập (logs/import.log); nil thì lùi về logger mặc định.
 	log *slog.Logger
 }
 
@@ -62,27 +62,27 @@ func (p callProfile) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// step 回显一条普通进度（长时阶段的内部推进）。
+// step hiển thị lại một dòng tiến độ thường (tiến trình nội bộ của các giai đoạn dài).
 func (p callProfile) step(current, total int, format string, args ...any) {
 	if p.progress != nil {
 		p.progress(current, total, fmt.Sprintf(format, args...))
 	}
 }
 
-// say 回显一条长时调用状态。重试可能静默数分钟（指数退避累计 2 分钟以上），
-// 不回显用户会误以为卡死。
+// say hiển thị lại một trạng thái của lời gọi dài. Lần thử lại có thể im lặng vài phút (backoff luỹ tiến cộng dồn hơn 2 phút),
+// không hiển thị lại thì người dùng tưởng bị treo.
 func (p callProfile) say(format string, args ...any) {
 	p.sayRetry(time.Time{}, format, args...)
 }
 
-// sayRetry 回显一条带重试截止时刻的状态，供 UI 倒计时。
+// sayRetry hiển thị lại một trạng thái kèm thời điểm hết hạn của lần thử lại, để UI đếm ngược.
 func (p callProfile) sayRetry(retryAt time.Time, format string, args ...any) {
 	if p.notify != nil {
 		p.notify(fmt.Sprintf(format, args...), retryAt)
 	}
 }
 
-// snippet 把多行文本压成单行短摘要供界面回显：合并空白、截到 max 个 rune。
+// snippet nén văn bản nhiều dòng thành tóm tắt ngắn một dòng để hiển thị lại trên giao diện: gộp khoảng trắng, cắt còn tối đa max rune.
 func snippet(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if r := []rune(s); len(r) > max {
@@ -91,8 +91,8 @@ func snippet(s string, max int) string {
 	return s
 }
 
-// briefErr 把错误压成单行短文本供界面回显（完整错误链仍走日志与失败工件）。
-// 适配器结构化事实放前面：截断时优先保住"哪类错、什么状态码"，网关 message 可牺牲。
+// briefErr nén lỗi thành văn bản ngắn một dòng để hiển thị lại trên giao diện (chuỗi lỗi đầy đủ vẫn đi qua nhật ký và sản phẩm thất bại).
+// Sự thật có cấu trúc của adapter đặt trước: khi bị cắt, ưu tiên giữ "哪类错、什么状态码", message của gateway có thể hy sinh.
 func briefErr(err error) string {
 	s := err.Error()
 	if d := modelErrDetail(err); d != "" {
@@ -101,7 +101,7 @@ func briefErr(err error) string {
 	return snippet(s, 100)
 }
 
-// errTypeLabels 把 litellm 错误分类翻成一眼可读的中文短标签。
+// errTypeLabels dịch phân loại lỗi của litellm thành nhãn ngắn dễ đọc bằng tiếng Việt.
 var errTypeLabels = map[litellm.ErrorType]string{
 	litellm.ErrorTypeAuth:            "lỗi xác thực",
 	litellm.ErrorTypeRateLimit:       "bị giới hạn tần suất",
@@ -117,10 +117,10 @@ var errTypeLabels = map[litellm.ErrorType]string{
 	litellm.ErrorTypeContentFilter:   "bị bộ lọc nội dung chặn",
 }
 
-// modelErrDetail 从错误链提取适配器的结构化事实（错误分类、HTTP 状态、provider、模型）。
-// 网关的 message 常常只有一句空泛的 "Provider returned error"，单靠它无法判断是配置错、
-// 上游故障还是限流；这些事实 litellm 一直带着，只是不进 Error() 文案。agentcore 适配器的
-// Unwrap 明确允许知道 litellm 的调用方 errors.As 取原始错误。非模型调用错误返回空串。
+// modelErrDetail trích từ chuỗi lỗi các sự thật có cấu trúc của adapter (phân loại lỗi, trạng thái HTTP, provider, mô hình).
+// Message của gateway thường chỉ có một câu chung chung "Provider returned error", chỉ riêng nó không thể phân biệt là sai cấu hình,
+// lỗi phía trên hay bị giới hạn tần suất; litellm luôn mang sẵn những sự thật này, chỉ là chúng không nằm trong văn bản Error(). Unwrap của
+// adapter agentcore cho phép rõ ràng bên gọi của litellm dùng errors.As để lấy lỗi gốc. Lỗi không phải lỗi gọi mô hình trả về chuỗi rỗng.
 func modelErrDetail(err error) string {
 	var le *litellm.LiteLLMError
 	if !errors.As(err, &le) {
@@ -142,8 +142,8 @@ func modelErrDetail(err error) string {
 	return strings.Join(parts, ", ")
 }
 
-// callOptions 组装本次调用的 CallOption：始终带输出上限；按能力可选 thinking。
-// thinking 仅在非 Auto 时发送——对不支持 thinking 的模型发任何等级（含 off）都是非法参数（与 arbiter 同策略）。
+// callOptions lắp ráp các CallOption của lần gọi này: luôn kèm trần đầu ra; thinking tuỳ theo năng lực.
+// thinking chỉ được gửi khi khác Auto — gửi bất kỳ mức nào (kể cả off) cho mô hình không hỗ trợ thinking là tham số không hợp lệ (cùng chiến lược với arbiter).
 func (p callProfile) callOptions(maxTokens int) []agentcore.CallOption {
 	opts := []agentcore.CallOption{agentcore.WithMaxTokens(maxTokens)}
 	if p.thinking != agentcore.ThinkingAuto {
@@ -152,7 +152,7 @@ func (p callProfile) callOptions(maxTokens int) []agentcore.CallOption {
 	return opts
 }
 
-// callStructured 为导入层适配统一结构化执行器，并把通用失败映射为导入工件语义。
+// callStructured thích ứng bộ thực thi có cấu trúc thống nhất cho tầng nhập, và ánh xạ lỗi chung thành ngữ nghĩa sản phẩm của nhập.
 func callStructured[T any](ctx context.Context, m callModel, contract llmcontract.Contract, systemPrompt, payload string, maxTokens int, prof callProfile, validate func(*T) error) (T, error) {
 	out, err := llmcontract.Execute(ctx, m, llmcontract.Request[T]{
 		Contract:     contract,

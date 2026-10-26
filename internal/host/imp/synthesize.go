@@ -9,22 +9,24 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain"
 )
 
-// 故事状态闭集（RFC §10.4）。
+// Tập đóng các trạng thái câu chuyện (RFC §10.4).
 const (
 	storyOpen      = "open"
 	storyClosed    = "closed"
 	storyUncertain = "uncertain"
 )
 
-// synthesisSchemaVersion 纳入 RangeDigest / synthesis InputDigest，升级综合契约时递增以失效已落盘工件。
-// synthesizePromptVersion 纳入 synthesis InputDigest，改综合 prompt 时递增，否则旧 synthesis 仍被误判有效。
+// synthesisSchemaVersion được đưa vào InputDigest của RangeDigest / synthesis; tăng lên khi nâng
+// hợp đồng tổng hợp để vô hiệu hoá các sản phẩm đã ghi xuống đĩa.
+// synthesizePromptVersion được đưa vào InputDigest của synthesis; tăng lên khi đổi prompt tổng
+// hợp, nếu không synthesis cũ vẫn bị nhận nhầm là còn hiệu lực.
 const (
 	synthesisSchemaVersion  = 3
 	synthesizePromptVersion = "synthesize-v3"
-	rangePromptVersion      = "range-v2" // 纳入 rangeInputDigest，改 Range prompt 时递增，否则旧区间摘要仍被误判有效
+	rangePromptVersion      = "range-v2" // được đưa vào rangeInputDigest; tăng lên khi đổi prompt Range, nếu không tóm tắt đoạn cũ vẫn bị nhận nhầm là còn hiệu lực
 )
 
-// ImportedArcRange / ImportedVolumeRange：综合只返回卷弧范围，不重复输出所有章节（RFC §10.3）。
+// ImportedArcRange / ImportedVolumeRange: tổng hợp chỉ trả về phạm vi tập–cung, không lặp lại toàn bộ các chương (RFC §10.3).
 type ImportedArcRange struct {
 	Title        string `json:"title"`
 	Goal         string `json:"goal"`
@@ -38,7 +40,7 @@ type ImportedVolumeRange struct {
 	Arcs  []ImportedArcRange `json:"arcs"`
 }
 
-// BookSynthesis 是最终综合结果：全局事实 + 卷弧范围（RFC §10.3）。
+// BookSynthesis là kết quả tổng hợp cuối cùng: sự thật toàn cục + phạm vi tập–cung (RFC §10.3).
 type BookSynthesis struct {
 	Title        *string               `json:"title"`
 	Synopsis     string                `json:"synopsis"`
@@ -52,7 +54,7 @@ type BookSynthesis struct {
 	StatusReason string                `json:"status_reason,omitempty"`
 }
 
-// RangeDigest 是长书 Map 阶段的连续区间摘要，输出受单区间约束（RFC §10.2）。
+// RangeDigest là tóm tắt đoạn liên tục ở giai đoạn Map của sách dài; đầu ra bị ràng buộc trong một đoạn duy nhất (RFC §10.2).
 type RangeDigest struct {
 	StartChapter    int      `json:"start_chapter"`
 	EndChapter      int      `json:"end_chapter"`
@@ -69,7 +71,7 @@ var validPlanningTiers = map[domain.PlanningTier]bool{
 	domain.PlanningTierLong:  true,
 }
 
-// planFactRanges 按字节预算把逐章事实分连续区间；短书一次容纳则单区间直接综合（RFC §10.2）。
+// planFactRanges chia sự thật từng chương thành các đoạn liên tục theo ngân sách byte; sách ngắn mà chứa được trong một lần thì tổng hợp thẳng trong một đoạn (RFC §10.2).
 func planFactRanges(facts []ImportedChapterFacts, budgetBytes int) [][2]int {
 	if len(facts) == 0 {
 		return nil
@@ -91,9 +93,12 @@ func planFactRanges(facts []ImportedChapterFacts, budgetBytes int) [][2]int {
 	return ranges
 }
 
-// compactView 是送入综合的紧凑视图：保留跨章归纳需要的字段，不含全文。
-// character/world evidence 是逐章反推时专为全书综合提取的观察，必须带进来——
-// 否则综合器只能从摘要臆造正式角色与世界规则，白白浪费已提取的证据（RFC §9.1/§10）。
+// compactView là bản nhìn gọn đưa vào bước tổng hợp: giữ các trường cần cho việc khái quát xuyên
+// chương, không chứa toàn văn.
+// character/world evidence là những quan sát được trích riêng cho tổng hợp toàn tác phẩm trong
+// lúc suy ngược từng chương, bắt buộc phải mang theo—nếu không, bộ tổng hợp chỉ có thể bịa nhân
+// vật chính thức và quy tắc thế giới từ phần tóm tắt, lãng phí vô ích những bằng chứng đã trích
+// xuất (RFC §9.1/§10).
 type compactView struct {
 	Chapter           int                     `json:"chapter"`
 	Title             string                  `json:"title"`
@@ -130,9 +135,11 @@ func compactFacts(facts []ImportedChapterFacts) string {
 	return string(data)
 }
 
-// Synthesize 分层综合：短书直接出 BookSynthesis；长书先出 RangeDigest 再归并（RFC §10）。
-// bookPrompt 描述 BookSynthesis 契约，rangePrompt 描述 RangeDigest 契约——两阶段输出结构不同，
-// 必须各用对应系统提示词，否则模型收到 BookSynthesis 指令却被要求 RangeDigest，指令自相矛盾。
+// Synthesize tổng hợp theo tầng: sách ngắn cho ra BookSynthesis trực tiếp; sách dài cho ra
+// RangeDigest trước rồi mới gộp (RFC §10).
+// bookPrompt mô tả hợp đồng BookSynthesis, rangePrompt mô tả hợp đồng RangeDigest—hai giai đoạn
+// có cấu trúc đầu ra khác nhau, phải dùng đúng system prompt tương ứng, nếu không mô hình nhận
+// chỉ dẫn BookSynthesis lại bị yêu cầu tạo RangeDigest, chỉ dẫn tự mâu thuẫn.
 func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string, w *Workspace, facts []ImportedChapterFacts, budgetBytes, maxTokens int, prof callProfile) (*BookSynthesis, error) {
 	t := importTextsOrDefault(prof.texts)
 	ranges := planFactRanges(facts, budgetBytes)
@@ -145,7 +152,7 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 		startCh, endCh := rangeFacts[0].Chapter, rangeFacts[len(rangeFacts)-1].Chapter
 		want := rangeInputDigest(rangeFacts)
 		rel := rangeDigestPath(startCh, endCh)
-		// InputDigest 匹配的已落盘区间摘要直接复用，长书任一区间崩溃后不重复收费（RFC §6/§10.2）。
+		// Tóm tắt đoạn đã ghi xuống đĩa mà khớp InputDigest được tái sử dụng thẳng, để khi một đoạn của sách dài làm hỏng thì không phải trả tiền lại (RFC §6/§10.2).
 		if art, err := readArtifact[RangeDigest](w, rel); err == nil && art.InputDigest == want {
 			digests = append(digests, art.Payload)
 			continue
@@ -162,8 +169,9 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 		}
 		digests = append(digests, rd)
 	}
-	// 递归 Reduce：区间摘要总量仍可能超过最终综合输入预算（把 #83 从"全部章节"推迟到"全部区间摘要"）。
-	// 逐层归并到可容纳，才真正无界扩展（RFC §10.2）。
+	// Reduce đệ quy: tổng khối lượng tóm tắt đoạn vẫn có thể vượt ngân sách đầu vào của bước tổng
+	// hợp cuối cùng (đẩy #83 từ "全部章节" sang "全部区间摘要").
+	// Gộp từng tầng cho tới khi vừa chứa thì mới thực sự mở rộng không giới hạn (RFC §10.2).
 	digests, err := reduceToFit(ctx, m, rangePrompt, digests, budgetBytes, maxTokens, prof)
 	if err != nil {
 		return nil, err
@@ -172,9 +180,11 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 	return synthesizeBook(ctx, m, bookPrompt, string(data), len(facts), maxTokens, prof)
 }
 
-// reduceToFit 反复把连续区间摘要按预算分组归并，直到序列化后可容纳最终 BookSynthesis 输入预算。
-// 每轮严格减少摘要数量，故必然收敛；单个摘要即便超预算也不再拆（下层已是最小语义单元），
-// 交最终调用，若因此截断由 callStructured 显式报错而非静默溢出。
+// reduceToFit liên tục gộp các tóm tắt đoạn liên tục theo nhóm ứng với ngân sách, cho tới khi chuỗi
+// đã tuần tự hoá vừa chứa trong ngân sách đầu vào của BookSynthesis cuối cùng.
+// Mỗi vòng giảm chặt số lượng tóm tắt nên chắc chắn hội tụ; một tóm tắt đơn lẻ dù vượt ngân sách
+// cũng không tách thêm (tầng dưới đã là đơn vị ngữ nghĩa nhỏ nhất), giao cho lượt gọi cuối; nếu vì
+// thế bị cắt ngắn thì callStructured báo lỗi tường minh thay vì tràn ngầm.
 func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests []RangeDigest, budgetBytes, maxTokens int, prof callProfile) ([]RangeDigest, error) {
 	t := importTextsOrDefault(prof.texts)
 	round := 0
@@ -188,7 +198,7 @@ func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests [
 		}
 		groups := groupDigestsByBudget(digests, budgetBytes)
 		if len(groups) >= len(digests) {
-			return digests, nil // 无法再合并（每组仅一个摘要）
+			return digests, nil // không thể gộp thêm nữa (mỗi nhóm chỉ có một tóm tắt)
 		}
 		round++
 		merged := make([]RangeDigest, 0, len(groups))
@@ -222,7 +232,7 @@ func validateRangeDigest(d *RangeDigest, startChapter, endChapter int, label str
 	return nil
 }
 
-// groupDigestsByBudget 把连续区间摘要按字节预算分成连续分组；单个摘要即便超预算也单独成组。
+// groupDigestsByBudget chia các tóm tắt đoạn liên tục thành nhóm liên tục theo ngân sách byte; một tóm tắt đơn lẻ dù vượt ngân sách vẫn thành một nhóm riêng.
 func groupDigestsByBudget(digests []RangeDigest, budgetBytes int) [][]RangeDigest {
 	var groups [][]RangeDigest
 	var cur []RangeDigest
@@ -242,20 +252,20 @@ func groupDigestsByBudget(digests []RangeDigest, budgetBytes int) [][]RangeDiges
 	return groups
 }
 
-// buildDigestReducePayload 组装"把若干下层区间摘要合并为一个 RangeDigest"的输入。
-// payload 是模型可见内容，指令随作品语种走（t）。
+// buildDigestReducePayload lắp ráp đầu vào cho "把若干下层区间摘要合并为一个 RangeDigest".
+// payload là nội dung mô hình nhìn thấy, câu lệnh đi theo ngôn ngữ tác phẩm (t).
 func buildDigestReducePayload(digests []RangeDigest, t *importTexts) string {
 	data, _ := json.Marshal(digests)
 	return fmt.Sprintf(t.reduceInstruction,
 		digests[0].StartChapter, digests[len(digests)-1].EndChapter, string(data))
 }
 
-// rangeDigestPath 返回连续区间摘要工件相对路径。
+// rangeDigestPath trả về đường dẫn tương đối của sản phẩm tóm tắt đoạn liên tục.
 func rangeDigestPath(startChapter, endChapter int) string {
 	return fmt.Sprintf("%s/%06d-%06d.json", dirRangeDigests, startChapter, endChapter)
 }
 
-// rangeInputDigest 绑定该连续区间的紧凑事实与 Range prompt/schema 版本（RFC §6.3）。
+// rangeInputDigest gắn tóm tắt gọn của đoạn liên tục đó với phiên bản prompt/schema của Range (RFC §6.3).
 func rangeInputDigest(facts []ImportedChapterFacts) string {
 	return Digest([]byte(fmt.Sprintf("range\x00%s\x00v%d\x00%s", rangePromptVersion, synthesisSchemaVersion, compactFacts(facts))))
 }
@@ -269,24 +279,25 @@ func synthesizeBook(ctx context.Context, m callModel, systemPrompt, payload stri
 	if err != nil {
 		return nil, err
 	}
-	// 回显模型的全书理解：这是导入最核心的语义产出，值得让用户第一时间看见。
+	// Hiện lại cách mô hình hiểu toàn tác phẩm: đây là sản phẩm ngữ nghĩa cốt lõi nhất của việc nhập, xứng đáng để người dùng nhìn thấy ngay lập tức.
 	prof.step(0, 0, "mô hình tóm tắt toàn tác phẩm: %s", snippet(s.Premise, 80))
 	return &s, nil
 }
 
-// buildRangePayload 组装"为一个连续章节区间生成 RangeDigest"的输入。
-// payload 是模型可见内容，指令随作品语种走（t）。
+// buildRangePayload lắp ráp đầu vào cho "为一个连续章节区间生成 RangeDigest".
+// payload là nội dung mô hình nhìn thấy, câu lệnh đi theo ngôn ngữ tác phẩm (t).
 func buildRangePayload(facts []ImportedChapterFacts, t *importTexts) string {
 	return fmt.Sprintf(t.rangeInstruction,
 		facts[0].Chapter, facts[len(facts)-1].Chapter, compactFacts(facts))
 }
 
-// buildBookPayload 组装全书综合的输入；payload 是模型可见内容，指令随作品语种走（t）。
+// buildBookPayload lắp ráp đầu vào cho bước tổng hợp toàn tác phẩm; payload là nội dung mô hình nhìn thấy, câu lệnh đi theo ngôn ngữ tác phẩm (t).
 func buildBookPayload(inner string, n int, t *importTexts) string {
 	return fmt.Sprintf(t.bookInstruction, n, inner)
 }
 
-// validateSynthesis 校验综合结果的结构约束（值域/闭集/范围），不复判文学质量。
+// validateSynthesis kiểm tra các ràng buộc cấu trúc của kết quả tổng hợp (miền giá trị / tập
+// đóng / phạm vi), không phán xét lại chất lượng văn chương.
 // t là bảng văn bản theo ngôn ngữ tác phẩm: lỗi ở đây được llmcontract gửi lại
 // mô hình để hỏi lại, nên phải theo ngôn ngữ đang viết.
 func validateSynthesis(s *BookSynthesis, n int, t *importTexts) error {
@@ -314,7 +325,7 @@ func validateSynthesis(s *BookSynthesis, n int, t *importTexts) error {
 	return validateStructure(s.Structure, n, t)
 }
 
-// validateStructure 校验卷弧范围连续、无重叠、完整覆盖 1..N（RFC §11 / 不变量 5）。
+// validateStructure kiểm tra phạm vi tập–cung liên tục, không chồng lấn, phủ đầy đủ 1..N (RFC §11 / bất biến 5).
 func validateStructure(structure []ImportedVolumeRange, n int, t *importTexts) error {
 	t = importTextsOrDefault(t)
 	if len(structure) == 0 {
@@ -341,8 +352,10 @@ func validateStructure(structure []ImportedVolumeRange, n int, t *importTexts) e
 	return nil
 }
 
-// synthesisInputDigest 绑定有序逐章分析集合的紧凑事实 + 综合 prompt/schema 版本（RFC §6.3 / 不变量 6）。
-// 纳入版本，改综合契约后旧 synthesis 自然失效重做。
+// synthesisInputDigest gắn tóm tắt gọn của tập phân tích từng chương có thứ tự + phiên bản
+// prompt/schema của bước tổng hợp (RFC §6.3 / bất biến 6).
+// Đưa phiên bản vào, nên khi hợp đồng tổng hợp thay đổi thì synthesis cũ tự nhiên mất hiệu lực
+// và phải làm lại.
 func synthesisInputDigest(facts []ImportedChapterFacts) string {
 	var b strings.Builder
 	b.WriteString("synthesize\x00")
@@ -355,7 +368,7 @@ func synthesisInputDigest(facts []ImportedChapterFacts) string {
 	return Digest([]byte(b.String()))
 }
 
-// Foundation 是从 BookSynthesis + 逐章事实组装出的正式领域对象集（发布前完整校验，RFC §11）。
+// Foundation là tập đối tượng miền chính thức lắp ráp từ BookSynthesis + sự thật từng chương (kiểm tra đầy đủ trước khi phát hành, RFC §11).
 type Foundation struct {
 	Book         domain.BookMetadata
 	PlanningTier domain.PlanningTier
@@ -367,8 +380,10 @@ type Foundation struct {
 	Closed       bool
 }
 
-// AssembleFoundation 用综合语义 + 逐章事实组装正式 Foundation 并完整校验。
-// closed 是 story_status 裁定后的收束事实；fallbackName 用于正文无法确认书名时的推断标题。
+// AssembleFoundation dùng ngữ nghĩa tổng hợp + sự thật từng chương để lắp ráp Foundation chính thức
+// và kiểm tra đầy đủ.
+// closed là sự thật về việc khép lại sau khi story_status được phán quyết; fallbackName là tiêu đề
+// suy đoán dùng khi nội dung truyện không xác nhận được tên sách.
 func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed bool, fallbackName string) (*Foundation, error) {
 	n := len(facts)
 	// Ở đường vận hành (sau khi mô hình đã vượt qua validate) lỗi này đi ra cho
@@ -403,7 +418,7 @@ func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed b
 		volumes[len(volumes)-1].Final = true
 	}
 
-	// FlattenOutline 后章数为 N，且标题与逐章事实一致（RFC §11.5）。
+	// Sau FlattenOutline số chương là N và tiêu đề khớp với sự thật từng chương (RFC §11.5).
 	flat := domain.FlattenOutline(volumes)
 	if len(flat) != n {
 		return nil, fmt.Errorf("số chương FlattenOutline %d != %d", len(flat), n)
@@ -433,7 +448,7 @@ func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed b
 	}, nil
 }
 
-// importedBookTitle 在正文无法确认书名时使用源文件名，保证作品信息仍有明确标题。
+// importedBookTitle dùng tên tệp nguồn khi nội dung truyện không xác nhận được tên sách, bảo đảm thông tin tác phẩm vẫn có một tiêu đề rõ ràng.
 func importedBookTitle(fallbackName string) string {
 	name := strings.TrimSuffix(fallbackName, ".txt")
 	name = strings.TrimSuffix(name, ".md")

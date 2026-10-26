@@ -10,17 +10,17 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// ChapterCommitter 是发布章节所需的最小接口，由 tools.CommitChapterTool 满足。
-// 复用其 PendingCommit saga、checkpoint 与完成章节幂等检查，不复制第二套提交逻辑（RFC §12.3）。
+// ChapterCommitter là giao diện tối thiểu cần cho việc phát hành chương, do tools.CommitChapterTool thỏa mãn.
+// Tái sử dụng saga PendingCommit, checkpoint và kiểm tra idempotent của chương đã hoàn thành, không nhân bản thêm một bộ logic phát hành (RFC §12.3).
 type ChapterCommitter interface {
 	Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 }
 
-// publishFoundation 按正式依赖顺序发布 Foundation，与 Architect 长篇落盘顺序一致（RFC §12.2）。
-// 重复发布相同内容是幂等的（Store 覆盖同内容 + checkpoint 去重）。
+// publishFoundation phát hành Foundation theo thứ tự phụ thuộc chính thức, khớp với thứ tự ghi xuống đĩa của Architect cho tiểu thuyết dài (RFC §12.2).
+// Phát hành lại cùng nội dung là idempotent (Store ghi đè cùng nội dung + checkpoint khử trùng lặp).
 func publishFoundation(st *store.Store, f *Foundation) error {
-	// 发布前冲突对账：已存在且不同的正式工件拒绝覆盖（§12.2 / 不变量 6）。
-	// 相同内容按幂等继续写（Store 覆盖同内容 + checkpoint 去重）。
+	// Đối chiếu xung đột trước khi phát hành: sản phẩm chính thức đã tồn tại và khác nội dung thì từ chối ghi đè (§12.2 / bất biến 6).
+	// Nội dung giống nhau thì tiếp tục ghi theo nguyên tắc idempotent (Store ghi đè cùng nội dung + checkpoint khử trùng lặp).
 	if err := checkFoundationConflicts(st, f); err != nil {
 		return err
 	}
@@ -57,12 +57,12 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 	if _, err := st.Checkpoints.AppendArtifact(domain.GlobalScope(), "world_rules", "world_rules.json"); err != nil {
 		return fmt.Errorf("checkpoint world_rules: %w", err)
 	}
-	// layered outline 是唯一来源，Store 同步重建 flat outline。
+	// layered outline là nguồn duy nhất, Store dựng lại đồng bộ flat outline.
 	if err := st.Outline.SaveLayeredOutline(f.Volumes); err != nil {
 		return fmt.Errorf("layered outline: %w", err)
 	}
-	// 大纲阶段的进度是引擎重算路由的依据（章节容量/分层/当前卷弧），写入失败会留下不一致的
-	// 已发布状态，必须暴露而非吞掉（RFC §12.2）。
+	// Tiến độ ở giai đoạn quy hoạch là căn cứ để engine tính lại định tuyến (dung lượng chương/phân lớp/cung của tập hiện tại);
+	// ghi thất bại sẽ để lại trạng thái đã phát hành không nhất quán, phải lộ ra chứ không nuốt đi (RFC §12.2).
 	if err := st.Progress.UpdatePhase(domain.PhaseOutline); err != nil {
 		return fmt.Errorf("phase outline: %w", err)
 	}
@@ -87,9 +87,9 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 	if _, err := st.Checkpoints.AppendArtifact(domain.GlobalScope(), "compass", "meta/compass.json"); err != nil {
 		return fmt.Errorf("checkpoint compass: %w", err)
 	}
-	// 导入 Foundation 的全部正式写入均已成功，可以显式进入 writing。
-	// 不能复用普通创作流程的 FoundationMissing：导入允许 world_rules 为空，
-	// 把“合法空值”当成缺失会令进度永远停在 outline，随后 StartChapter 被阶段门禁拒绝。
+	// Toàn bộ ghi chính thức của Foundation trong quá trình nhập đã thành công, có thể chuyển tường minh sang writing.
+	// Không được tái sử dụng FoundationMissing của quy trình sáng tác thường: nhập cho phép world_rules rỗng,
+	// coi “giá trị rỗng hợp lệ” là thiếu sẽ khiến tiến độ đứng vĩnh ở outline, rồi StartChapter bị cổng giai đoạn từ chối.
 	p, err := st.Progress.Load()
 	if err != nil {
 		return fmt.Errorf("load progress: %w", err)
@@ -105,11 +105,11 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 	return nil
 }
 
-// checkFoundationConflicts 校验待发布 Foundation 与既有正式工件的一致性：
-// 既有为空视为首次发布；相同视为幂等；不同则报冲突不覆盖（RFC §12.2 / 不变量 6）。
-// compass 与扁平大纲由分层大纲派生，分层一致即派生一致，故不单独检查派生工件。
-// 读错误不得吞成"文件不存在"：store 加载器对缺失返回 (零值, nil)，故任何非 nil 都是真实错误
-// （损坏/权限/JSON 非法），若当作空值继续会覆盖无法读取的正式工件（RFC §12.2）。
+// checkFoundationConflicts kiểm tra hợp lệ sự nhất quán giữa Foundation chờ phát hành và các sản phẩm chính thức đã có:
+// hiện có rỗng thì coi là lần phát hành đầu tiên; giống nhau thì coi là idempotent; khác nhau thì báo xung đột và không ghi đè (RFC §12.2 / bất biến 6).
+// compass và dàn ý phẳng đều suy ra từ dàn ý phân lớp, dàn ý phân lớp nhất quán thì phần suy ra cũng nhất quán, nên không kiểm tra riêng các sản phẩm suy ra.
+// Lỗi đọc không được bị nuốt thành "文件不存在": bộ nạp của store trả về (giá trị 0, nil) khi thiếu, nên bất kỳ giá trị khác nil nào cũng là lỗi thật
+// (hỏng dữ liệu/sai quyền/JSON không hợp lệ); coi như giá trị rỗng rồi đi tiếp sẽ ghi đè sản phẩm chính thức không đọc được (RFC §12.2).
 func checkFoundationConflicts(st *store.Store, f *Foundation) error {
 	wantBook := f.Book.Normalized()
 	book, err := st.Book.Load()
@@ -150,24 +150,25 @@ func checkFoundationConflicts(st *store.Store, f *Foundation) error {
 	return nil
 }
 
-// jsonEqual 按规范化 JSON 字节比较两个值是否等价。
+// jsonEqual so sánh hai giá trị có tương đương hay không theo byte JSON đã chuẩn hoá.
 func jsonEqual(a, b any) bool {
 	ab, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)
 	return bytes.Equal(ab, bb)
 }
 
-// publishChapter 复用 commit_chapter 发布单章；已完成章节由其幂等检查跳过（RFC §12.3）。
+// publishChapter tái sử dụng commit_chapter để phát hành một chương; chương đã hoàn thành bị bỏ qua nhờ kiểm tra idempotent của nó (RFC §12.3).
 func publishChapter(ctx context.Context, st *store.Store, commit ChapterCommitter, chapter int, content string, f ImportedChapterFacts) error {
 	completed, err := st.Progress.IsChapterCompleted(chapter)
 	if err != nil {
 		return fmt.Errorf("load progress ch%d: %w", chapter, err)
 	}
 	if completed {
-		// 崩溃可能落在 MarkChapterComplete 与 ClearPendingCommit 之间：pending_commit 残留
-		// 指向本章。直接跳过会绕开 commit 工具专为此窗口准备的清理分支（补 checkpoint+清残留），
-		// 下一章 Execute 将以「存在未恢复的章节提交」拒绝，导入每次重跑都死在同一处且
-		// 需手工删 meta/pending_commit.json 才能解锁。命中残留时仍走工具幂等路径完成清理。
+		// Sự cố có thể xảy ra giữa MarkChapterComplete và ClearPendingCommit: pending_commit còn sót
+		// và trỏ về chương này. Bỏ qua thẳng sẽ né nhánh dọn dẹp mà công cụ commit chuẩn bị riêng cho khoảng cửa sổ này
+		// (bổ sung checkpoint + dọn phần sót), và Execute của chương sau sẽ từ chối với lý do «tồn tại chương phát hành chưa khôi phục»,
+		// khiến mỗi lần chạy lại quá trình nhập chết ở cùng một chỗ và phải xoá tay meta/pending_commit.json mới mở khoá được.
+		// Khi trúng phần sót thì vẫn đi qua đường idempotent của công cụ để hoàn tất dọn dẹp.
 		pending, err := st.Signals.LoadPendingCommit()
 		if err != nil {
 			return fmt.Errorf("load pending commit ch%d: %w", chapter, err)
@@ -199,11 +200,11 @@ func publishChapter(ctx context.Context, st *store.Store, commit ChapterCommitte
 	return nil
 }
 
-// commitArgs 把逐章事实映射为 commit_chapter 入参。
+// commitArgs ánh xạ sự thật theo từng chương thành tham số đầu vào của commit_chapter.
 func commitArgs(chapter int, f ImportedChapterFacts) map[string]any {
 	keyEvents := f.KeyEvents
 	if len(keyEvents) == 0 {
-		keyEvents = []string{f.CoreEvent} // core_event 已校验非空
+		keyEvents = []string{f.CoreEvent} // core_event đã được kiểm tra là không rỗng
 	}
 	args := map[string]any{
 		"chapter":         chapter,
@@ -229,10 +230,10 @@ func commitArgs(chapter int, f ImportedChapterFacts) map[string]any {
 	return args
 }
 
-// isPublished 判断正式状态是否已反映完整导入：Foundation 已落盘且已完成章节达到预期。
-// 只对账导入真正产出的工件——book、premise、覆盖全章的扁平大纲、完成章节——而不复用
-// FoundationMissing()：后者是普通创作流程的“可写作”门禁，会把合法为空的 world_rules
-// 误判为未完成，导致发布对账永不收敛（RFC §12.3）。
+// isPublished kiểm tra trạng thái chính thức đã phản ánh toàn bộ quá trình nhập chưa: Foundation đã ghi xuống đĩa và số chương đã hoàn thành đạt kỳ vọng.
+// Chỉ đối chiếu những sản phẩm mà quá trình nhập thực sự tạo ra — book, premise, dàn ý phẳng phủ toàn bộ chương, các chương đã hoàn thành — chứ không tái sử dụng
+// FoundationMissing(): hàm sau là cổng “có thể viết” của quy trình sáng tác thường, sẽ nhầm world_rules rỗng hợp lệ
+// là chưa hoàn thành, khiến đối chiếu phát hành không bao giờ hội tụ (RFC §12.3).
 func isPublished(st *store.Store, expected int) (bool, error) {
 	if expected == 0 {
 		return false, nil
