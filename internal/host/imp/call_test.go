@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/voocel/agentcore"
+	"github.com/voocel/ainovel-cli/internal/llmcontract"
 	"github.com/voocel/litellm"
 )
 
@@ -95,17 +96,27 @@ func TestCallStructuredCancelIsNotSemanticFailure(t *testing.T) {
 	}
 }
 
-// TestCallStructuredCarriesRawOnSemanticFailure 守护 §14.2：输出层契约违约时，
-// 错误必须携带原始响应，供 runner 统一落 failures/ 失败工件。
+// TestCallStructuredCarriesRawOnSemanticFailure ghi §14.2: khi đầu ra vi phạm hợp
+// đồng, lỗi phải mang theo phản hồi gốc để runner gom về đúng thư mục failures/.
 func TestCallStructuredCarriesRawOnSemanticFailure(t *testing.T) {
-	m := &nativeImportModel{mockModel: &mockModel{responses: []string{"垃圾输出 not json"}}}
+	const rawOut = "rác đầu ra không phải json"
+	m := &nativeImportModel{mockModel: &mockModel{responses: []string{rawOut}}}
 	_, err := callStructured[boundaryBatch](context.Background(), m, segmentContract(importTextsVI), "sys", "payload", 100, callProfile{}, nil)
 	var se *errSemantic
 	if !errors.As(err, &se) {
-		t.Fatalf("应返回 errSemantic，得 %T：%v", err, err)
+		t.Fatalf("phải trả errSemantic, được %T: %v", err, err)
 	}
-	if se.Raw != "垃圾输出 not json" || !strings.Contains(se.Error(), "契约违约") {
-		t.Fatalf("Raw 应携带最后一次原始响应，得 %q", se.Raw)
+	if se.Raw != rawOut {
+		t.Fatalf("Raw phải mang lại phản hồi gốc lần cuối, được %q", se.Raw)
+	}
+	// Loại lỗi là khoá ổn định (không phụ thuộc câu chữ hiển thị), nên khẳng định
+	// theo kind thay vì theo thông báo đã dịch.
+	var failure *llmcontract.Failure
+	if !errors.As(err, &failure) || failure.Kind != llmcontract.FailureContract {
+		t.Fatalf("lỗi phải là vi phạm hợp đồng, được %T: %v", err, err)
+	}
+	if !strings.Contains(se.Error(), "vi phạm hợp đồng schema gốc") {
+		t.Fatalf("thông báo phải nêu rõ vi phạm hợp đồng, được %q", se.Error())
 	}
 }
 

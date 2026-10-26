@@ -544,38 +544,39 @@ func seedStuckRewrite(t *testing.T, st *storepkg.Store) {
 	}
 }
 
-// TestEngine_DeadlockAbortDropsStuckRewrite 锁死 issue #110 的死锁面：僵局熔断时
-// 卡死的返工章必须出队。PendingRewrites 是持久化事实，只暂停不出队的话重启会立刻
-// 重放同一条死指令，把整本书永久锁死。
+// TestEngine_DeadlockAbortDropsStuckRewrite ghim mặt bế tắc của issue #110: khi
+// ngắt mạch bế tắc, chương làm lại bị kẹt phải ra khỏi hàng đợi. PendingRewrites là
+// sự thật đã lưu — chỉ tạm dừng mà không ra khỏi hàng đợi thì lần khởi động sau sẽ
+// phát lại ngay chỉ dẫn chết đó, khóa vĩnh viễn cả tác phẩm.
 func TestEngine_DeadlockAbortDropsStuckRewrite(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	seedStuckRewrite(t, st)
 	e, events, _ := newTestEngine(t, st, subagent.NewRunner(), nil)
 
-	inst := &flow.Instruction{Agent: "writer", Task: "重写第 2 章", Chapter: 2}
+	inst := &flow.Instruction{Agent: "writer", Task: "Viết lại chương 2", Chapter: 2}
 	e.lastKey, e.repeats = instructionKey(inst), deadlockAbortAt-1
 
 	if stop := e.trackDeadlock(context.Background(), &inst); !stop {
-		t.Fatal("僵局熔断仍应停机等待人工介入")
+		t.Fatal("ngắt mạch bế tắc vẫn phải dừng chờ người vận hành can thiệp")
 	}
 	p, err := st.Progress.Load()
 	if err != nil {
 		t.Fatalf("progress: %v", err)
 	}
 	if len(p.PendingRewrites) != 0 {
-		t.Fatalf("熔断时卡死的返工章必须出队: %v", p.PendingRewrites)
+		t.Fatalf("chương làm lại bị kẹt phải ra khỏi hàng đợi khi ngắt mạch: %v", p.PendingRewrites)
 	}
 	if p.Flow != domain.FlowWriting {
-		t.Fatalf("队列排空后 flow 应回到 writing，实际 %s", p.Flow)
+		t.Fatalf("hàng đợi rỗng thì flow phải về writing, thực tế %s", p.Flow)
 	}
 	var notified bool
 	for _, ev := range *events {
-		if strings.Contains(ev.Summary, "移出返工队列") {
+		if strings.Contains(ev.Summary, "đã bị chuyển khỏi hàng đợi làm lại") {
 			notified = true
 		}
 	}
 	if !notified {
-		t.Fatalf("跳过返工必须显式告知用户: %+v", *events)
+		t.Fatalf("bỏ qua làm lại phải nói rõ với người dùng: %+v", *events)
 	}
 }
 
@@ -687,9 +688,11 @@ func failNTimesGuard() agentcore.StopGuard {
 	}
 }
 
-// TestEngine_RetriesUnfinishedPlanStart 启动裁定失败后的自愈路径:StartPrompt 已落盘、
-// PlanStart 缺位(启动时模型故障)→ 引擎起动时现场补裁 → 固化 PlanStartRecord → 派发规划师。
-// 规划师不落盘 → 走既有僵局路径停机,证明补裁后引擎回到正常轨道。
+// TestEngine_RetriesUnfinishedPlanStart đường tự lành sau khi phán quyết khởi động
+// thất bại: StartPrompt đã lưu, PlanStart thiếu (lỗi mô hình lúc khởi động) → engine
+// bổ sung phán quyết tại chỗ khi vận hành → ghim PlanStartRecord → phái nhà quy hoạch.
+// Nhà quy hoạch không ghi xuống đĩa → đi đường bế tắc sẵn có để dừng, chứng minh sau khi
+// bổ sung phán quyết engine đã về đúng đường.
 func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -751,17 +754,18 @@ func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 		if ev.Category == "DISPATCH" {
 			dispatched = true
 		}
-		if strings.Contains(ev.Summary, "启动裁定已补齐") {
+		if strings.Contains(ev.Summary, "đã bổ sung phán quyết khởi động") {
 			healed = true
 		}
 	}
 	if !dispatched || !healed {
-		t.Fatalf("补裁后应派发规划师并回显补齐事件, dispatched=%v healed=%v", dispatched, healed)
+		t.Fatalf("sau khi bổ sung phán quyết phải phái nhà quy hoạch và phát sự kiện bổ sung, dispatched=%v healed=%v", dispatched, healed)
 	}
 }
 
-// TestEngine_PlanStartRetryFailurePauses 补裁失败不允许无声停机:
-// Arbiter 持续不可用 → 显式暂停回显 + plan_start 审计带 error + 零派发。
+// TestEngine_PlanStartRetryFailurePauses bổ sung phán quyết thất bại không được dừng
+// im lặng: Arbiter liên tục không dùng được → phải có thông báo tạm dừng tường minh +
+// kiểm toán plan_start mang error + không phái worker nào.
 func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -793,12 +797,12 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 	}
 	var paused bool
 	for _, ev := range *events {
-		if strings.Contains(ev.Summary, "启动裁定失败") {
+		if strings.Contains(ev.Summary, "phán quyết khởi động thất bại") {
 			paused = true
 		}
 	}
 	if !paused {
-		t.Fatalf("补裁失败必须显式回显暂停原因, events=%+v", *events)
+		t.Fatalf("bổ sung phán quyết thất bại phải phát lại rõ lý do tạm dừng, events=%+v", *events)
 	}
 	recs, err := st.Decisions.Recent(5)
 	if err != nil {
