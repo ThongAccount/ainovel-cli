@@ -26,41 +26,41 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		t.Fatalf("renderEPUB: %v", err)
 	}
 	if len(data) == 0 {
-		t.Fatal("empty data")
+		t.Fatal("dữ liệu rỗng")
 	}
 
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		t.Fatalf("not a valid zip: %v", err)
+		t.Fatalf("không phải zip hợp lệ: %v", err)
 	}
 
 	if len(zr.File) == 0 {
-		t.Fatal("zip has no files")
+		t.Fatal("zip không có tệp nào")
 	}
 	first := zr.File[0]
 	if first.Name != "mimetype" {
-		t.Errorf("first entry should be mimetype, got %q", first.Name)
+		t.Errorf("mục đầu tiên phải là mimetype, nhận %q", first.Name)
 	}
 	if first.Method != zip.Store {
-		t.Errorf("mimetype must be uncompressed (Method=Store), got %d", first.Method)
+		t.Errorf("mimetype phải không nén (Method=Store), nhận %d", first.Method)
 	}
 
 	files := map[string]string{}
 	for _, f := range zr.File {
 		rc, err := f.Open()
 		if err != nil {
-			t.Fatalf("open %s: %v", f.Name, err)
+			t.Fatalf("mở %s: %v", f.Name, err)
 		}
 		buf, err := io.ReadAll(rc)
 		_ = rc.Close()
 		if err != nil {
-			t.Fatalf("read %s: %v", f.Name, err)
+			t.Fatalf("đọc %s: %v", f.Name, err)
 		}
 		files[f.Name] = string(buf)
 	}
 
 	if files["mimetype"] != "application/epub+zip" {
-		t.Errorf("mimetype content = %q", files["mimetype"])
+		t.Errorf("nội dung mimetype = %q", files["mimetype"])
 	}
 
 	for _, want := range []string{
@@ -73,13 +73,13 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		"OEBPS/chapter002.xhtml",
 	} {
 		if _, ok := files[want]; !ok {
-			t.Errorf("missing required file %q", want)
+			t.Errorf("thiếu tệp bắt buộc %q", want)
 		}
 	}
 
 	// container.xml trỏ tới OEBPS/content.opf
 	if !strings.Contains(files["META-INF/container.xml"], `full-path="OEBPS/content.opf"`) {
-		t.Errorf("container.xml does not point to content.opf")
+		t.Errorf("container.xml không trỏ tới content.opf")
 	}
 
 	// content.opf bắt buộc có ba khối metadata + manifest + spine; thứ tự spine = thứ tự chương
@@ -97,35 +97,35 @@ func TestRenderEPUB_StructuralInvariants(t *testing.T) {
 		`idref="ch002"`,
 	} {
 		if !strings.Contains(opf, want) {
-			t.Errorf("OPF missing %q", want)
+			t.Errorf("OPF thiếu %q", want)
 		}
 	}
 	if idx1, idx2 := strings.Index(opf, `idref="ch001"`), strings.Index(opf, `idref="ch002"`); idx1 < 0 || idx1 > idx2 {
-		t.Errorf("spine order wrong: ch001=%d ch002=%d", idx1, idx2)
+		t.Errorf("thứ tự spine sai: ch001=%d ch002=%d", idx1, idx2)
 	}
 
 	// XHTML chương chứa tiêu đề + đoạn văn đã escape; tiêu đề Markdown ở dòng đầu đã bị bỏ
 	ch1 := files["OEBPS/chapter001.xhtml"]
 	if !strings.Contains(ch1, "第 1 章 雨夜归人") {
-		t.Errorf("chapter1 missing display title")
+		t.Errorf("chapter1 thiếu tiêu đề hiển thị")
 	}
 	if !strings.Contains(ch1, "<p>他望着窗外。</p>") {
-		t.Errorf("chapter1 missing paragraph 1: %s", ch1)
+		t.Errorf("chapter1 thiếu đoạn 1: %s", ch1)
 	}
 	if !strings.Contains(ch1, "<p>第二段。</p>") {
-		t.Errorf("chapter1 missing paragraph 2: %s", ch1)
+		t.Errorf("chapter1 thiếu đoạn 2: %s", ch1)
 	}
 	if strings.Contains(ch1, "# 第 1 章") {
-		t.Errorf("chapter1 should have stripped markdown header: %s", ch1)
+		t.Errorf("chapter1 phải đã bỏ tiêu đề Markdown: %s", ch1)
 	}
 
 	// nav.xhtml liệt kê mọi chương
 	nav := files["OEBPS/nav.xhtml"]
 	if !strings.Contains(nav, `epub:type="toc"`) {
-		t.Errorf("nav missing epub:type=toc")
+		t.Errorf("nav thiếu epub:type=toc")
 	}
 	if !strings.Contains(nav, `href="chapter001.xhtml"`) || !strings.Contains(nav, `href="chapter002.xhtml"`) {
-		t.Errorf("nav missing chapter links")
+		t.Errorf("nav thiếu liên kết chương")
 	}
 }
 
@@ -151,16 +151,16 @@ func TestRenderEPUB_HTMLEscape(t *testing.T) {
 	}
 
 	if !strings.Contains(files["OEBPS/cover.xhtml"], "A &amp; B") {
-		t.Errorf("cover should escape &: %s", files["OEBPS/cover.xhtml"])
+		t.Errorf("cover phải escape &: %s", files["OEBPS/cover.xhtml"])
 	}
 	if !strings.Contains(files["OEBPS/chapter001.xhtml"], "正文 &lt; &amp; &gt; 内容。") {
-		t.Errorf("chapter body should escape entities")
+		t.Errorf("nội dung chương phải escape entity")
 	}
 	if !strings.Contains(files["OEBPS/content.opf"], "<dc:title>A &amp; B</dc:title>") {
-		t.Errorf("opf should escape & in title")
+		t.Errorf("opf phải escape & trong tiêu đề")
 	}
 	if !strings.Contains(files["OEBPS/content.opf"], "<dc:description>E &lt; F &amp; G</dc:description>") {
-		t.Errorf("opf should escape synopsis")
+		t.Errorf("opf phải escape phần tóm tắt")
 	}
 }
 
@@ -193,15 +193,15 @@ func TestRenderEPUB_LayeredVolume(t *testing.T) {
 
 	ch1 := files["OEBPS/chapter001.xhtml"]
 	if !strings.Contains(ch1, `class="volume-divider"`) || !strings.Contains(ch1, "第 1 卷 起源") {
-		t.Errorf("ch1 should have volume divider: %s", ch1)
+		t.Errorf("ch1 phải có dấu phân tách tập: %s", ch1)
 	}
 	if strings.Contains(ch1, `class="arc-divider"`) {
-		t.Errorf("arc divider should never appear: %s", ch1)
+		t.Errorf("dấu phân tách cung không được xuất hiện: %s", ch1)
 	}
 
 	ch2 := files["OEBPS/chapter002.xhtml"]
 	if strings.Contains(ch2, `class="volume-divider"`) {
-		t.Errorf("ch2 should NOT have volume divider (same volume)")
+		t.Errorf("ch2 không được có dấu phân tách tập (cùng tập)")
 	}
 }
 
@@ -219,7 +219,7 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	for _, f := range zr.File {
 		if f.Name == "OEBPS/cover.xhtml" {
-			t.Errorf("cover.xhtml should not exist when title is empty")
+			t.Errorf("cover.xhtml không được tồn tại khi tên sách rỗng")
 		}
 	}
 	// content.opf không được tham chiếu cover
@@ -231,7 +231,7 @@ func TestRenderEPUB_NoCoverWhenNoTitle(t *testing.T) {
 		buf, _ := io.ReadAll(rc)
 		_ = rc.Close()
 		if strings.Contains(string(buf), "cover.xhtml") || strings.Contains(string(buf), `idref="cover"`) {
-			t.Errorf("OPF should not reference cover when there is none: %s", buf)
+			t.Errorf("OPF không được tham chiếu cover khi không có bìa: %s", buf)
 		}
 	}
 }
@@ -262,35 +262,35 @@ func TestRenderEPUB_VietnameseLanguage(t *testing.T) {
 
 	ch1 := files["OEBPS/chapter001.xhtml"]
 	if !strings.Contains(ch1, `xml:lang="vi"`) {
-		t.Errorf("chapter xhtml should declare vi: %s", ch1)
+		t.Errorf("xhtml chương phải khai báo vi: %s", ch1)
 	}
 	if !strings.Contains(ch1, "Chương 1 Người trở về") {
-		t.Errorf("chapter should use Vietnamese heading: %s", ch1)
+		t.Errorf("chương phải dùng tiêu đề tiếng Việt: %s", ch1)
 	}
 	if strings.Contains(ch1, "第") {
-		t.Errorf("Vietnamian export must not contain Chinese chapter marker: %s", ch1)
+		t.Errorf("bản xuất tiếng Việt không được chứa dấu hiệu chương tiếng Trung: %s", ch1)
 	}
 	if strings.Contains(ch1, "# Chương 1") {
-		t.Errorf("markdown chapter header should be stripped: %s", ch1)
+		t.Errorf("tiêu đề chương Markdown phải được bỏ: %s", ch1)
 	}
 
 	opf := files["OEBPS/content.opf"]
 	if !strings.Contains(opf, "<dc:language>vi</dc:language>") {
-		t.Errorf("OPF should declare vi: %s", opf)
+		t.Errorf("OPF phải khai báo vi: %s", opf)
 	}
 	if !strings.Contains(opf, `xml:lang="vi"`) {
-		t.Errorf("OPF should declare vi: %s", opf)
+		t.Errorf("OPF phải khai báo vi: %s", opf)
 	}
 
 	nav := files["OEBPS/nav.xhtml"]
 	if !strings.Contains(nav, "Mục lục") {
-		t.Errorf("nav should use Vietnamese TOC title: %s", nav)
+		t.Errorf("nav phải dùng tiêu đề mục lục tiếng Việt: %s", nav)
 	}
 	if !strings.Contains(nav, "Bìa") {
-		t.Errorf("nav should use Vietnamese cover label: %s", nav)
+		t.Errorf("nav phải dùng nhãn bìa tiếng Việt: %s", nav)
 	}
 	if !strings.Contains(files["OEBPS/cover.xhtml"], "Bìa") {
-		t.Errorf("cover should use Vietnamese label: %s", files["OEBPS/cover.xhtml"])
+		t.Errorf("cover phải dùng nhãn tiếng Việt: %s", files["OEBPS/cover.xhtml"])
 	}
 }
 
@@ -317,16 +317,16 @@ func TestRenderEPUB_ZHLanguage(t *testing.T) {
 		files[f.Name] = string(buf)
 	}
 	if !strings.Contains(files["OEBPS/content.opf"], "<dc:language>zh-CN</dc:language>") {
-		t.Errorf("OPF should declare zh-CN: %s", files["OEBPS/content.opf"])
+		t.Errorf("OPF phải khai báo zh-CN: %s", files["OEBPS/content.opf"])
 	}
 	if !strings.Contains(files["OEBPS/content.opf"], `xml:lang="zh-CN"`) {
-		t.Errorf("OPF should declare xml:lang zh-CN: %s", files["OEBPS/content.opf"])
+		t.Errorf("OPF phải khai báo xml:lang zh-CN: %s", files["OEBPS/content.opf"])
 	}
 	if !strings.Contains(files["OEBPS/chapter001.xhtml"], `xml:lang="zh-CN"`) {
-		t.Errorf("chapter should declare xml:lang zh-CN: %s", files["OEBPS/chapter001.xhtml"])
+		t.Errorf("chương phải khai báo xml:lang zh-CN: %s", files["OEBPS/chapter001.xhtml"])
 	}
 	if !strings.Contains(files["OEBPS/chapter001.xhtml"], "第 1 章 雨夜归人") {
-		t.Errorf("chapter should use Chinese heading: %s", files["OEBPS/chapter001.xhtml"])
+		t.Errorf("chương phải dùng tiêu đề tiếng Trung: %s", files["OEBPS/chapter001.xhtml"])
 	}
 }
 
@@ -344,7 +344,7 @@ func TestSplitParagraphs(t *testing.T) {
 	for _, c := range cases {
 		got := splitParagraphs(c.in)
 		if !equalStrings(got, c.want) {
-			t.Errorf("splitParagraphs(%q) = %v want %v", c.in, got, c.want)
+			t.Errorf("splitParagraphs(%q) = %v, cần %v", c.in, got, c.want)
 		}
 	}
 }
@@ -355,13 +355,13 @@ func TestBookIdentifier_StableAcrossChapterRanges(t *testing.T) {
 	idFull := bookIdentifier("光斑")
 	idAgain := bookIdentifier("光斑")
 	if idFull != idAgain {
-		t.Errorf("identifier not stable across calls: %s vs %s", idFull, idAgain)
+		t.Errorf("định danh không ổn định giữa các lần gọi: %s vs %s", idFull, idAgain)
 	}
 	if id := bookIdentifier("月相"); id == idFull {
-		t.Errorf("different titles must yield different identifiers")
+		t.Errorf("hai tên khác nhau phải tạo ra định danh khác nhau")
 	}
 	if !strings.HasPrefix(idFull, "urn:uuid:") {
-		t.Errorf("identifier should be urn:uuid: prefixed, got %s", idFull)
+		t.Errorf("định danh phải có tiền tố urn:uuid:, nhận %s", idFull)
 	}
 }
 

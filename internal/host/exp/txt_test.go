@@ -32,7 +32,7 @@ func TestStripChapterTitleHeader(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			got := stripChapterTitleHeader(c.in, c.title)
 			if got != c.want {
-				t.Fatalf("stripChapterTitleHeader\nin   = %q\ntitle= %q\nwant = %q\ngot  = %q", c.in, c.title, c.want, got)
+				t.Fatalf("stripChapterTitleHeader\nđầu vào = %q\ntiêu đề = %q\ncần     = %q\nnhận    = %q", c.in, c.title, c.want, got)
 			}
 		})
 	}
@@ -46,13 +46,13 @@ func TestBuildTitleIndex(t *testing.T) {
 	}
 	idx := buildTitleIndex(outline)
 	if got := idx[1]; got != "Người trở về trong đêm mưa" {
-		t.Errorf("ch1 title: got %q want Người trở về trong đêm mưa", got)
+		t.Errorf("tiêu đề ch1: nhận %q, cần Người trở về trong đêm mưa", got)
 	}
 	if _, ok := idx[2]; ok {
-		t.Errorf("ch2 should be absent (empty title)")
+		t.Errorf("ch2 phải không có mặt (tiêu đề rỗng)")
 	}
 	if got := idx[3]; got != "Bình minh" {
-		t.Errorf("ch3 title: got %q want Bình minh", got)
+		t.Errorf("tiêu đề ch3: nhận %q, cần Bình minh", got)
 	}
 }
 
@@ -71,17 +71,17 @@ func TestBuildLocations(t *testing.T) {
 	// Chỉ kiểm tra thuộc tính tập: cung không còn nằm trong location, nhưng lớp cung
 	// vẫn tham gia việc cộng dồn số chương toàn cục.
 	if loc := locs[1]; !loc.IsFirstOfVolume || loc.VolumeIdx != 1 {
-		t.Errorf("ch1 should be first of volume 1: %+v", loc)
+		t.Errorf("ch1 phải là chương đầu của tập 1: %+v", loc)
 	}
 	if loc := locs[2]; loc.IsFirstOfVolume || loc.VolumeIdx != 1 {
-		t.Errorf("ch2 should be volume 1, not first: %+v", loc)
+		t.Errorf("ch2 phải thuộc tập 1, không phải chương đầu: %+v", loc)
 	}
 	// ch3 là chương đầu của cung 2 nhưng vẫn nằm trong tập 1 → không phải đầu tập.
 	if loc := locs[3]; loc.IsFirstOfVolume || loc.VolumeIdx != 1 {
-		t.Errorf("ch3 (arc 2, same volume) should not be first of volume: %+v", loc)
+		t.Errorf("ch3 (cung 2, cùng tập) không được là chương đầu tập: %+v", loc)
 	}
 	if loc := locs[4]; !loc.IsFirstOfVolume || loc.VolumeIdx != 2 {
-		t.Errorf("ch4 should start volume 2: %+v", loc)
+		t.Errorf("ch4 phải mở đầu tập 2: %+v", loc)
 	}
 }
 
@@ -98,21 +98,21 @@ func TestRenderTXT_TitleAndChapter(t *testing.T) {
 		expTextsZH,
 	)
 	if !strings.HasPrefix(got, "《光斑》\n\n") {
-		t.Errorf("missing book title at start:\n%s", got)
+		t.Errorf("thiếu tên sách ở đầu bản xuất:\n%s", got)
 	}
 	// premise không đưa vào bản xuất: sau tên sách phải đến thẳng chương, không có
 	// phần tóm tắt dẫn dắt nào
 	if !strings.Contains(got, "第 1 章  雨夜归人") {
-		t.Errorf("missing ch1 header")
+		t.Errorf("thiếu tiêu đề chương 1")
 	}
 	if !strings.Contains(got, "他望着窗外。") {
-		t.Errorf("missing ch1 body")
+		t.Errorf("thiếu nội dung chương 1")
 	}
 	if strings.Contains(got, "# 第 1 章") {
-		t.Errorf("body markdown header not stripped:\n%s", got)
+		t.Errorf("tiêu đề Markdown trong nội dung chưa được bỏ:\n%s", got)
 	}
 	if !strings.Contains(got, "第 2 章  破晓") {
-		t.Errorf("missing ch2 header")
+		t.Errorf("thiếu tiêu đề chương 2")
 	}
 }
 
@@ -126,10 +126,10 @@ func TestRenderTXT_EmptyBookTitleNoTitleLine(t *testing.T) {
 		expTextsZH,
 	)
 	if strings.Contains(got, "《") {
-		t.Errorf("should not contain book title brackets: %s", got)
+		t.Errorf("không được chứa dấu ngoặc kép quanh tên sách: %s", got)
 	}
 	if !strings.HasPrefix(got, "第 1 章  雨夜归人") {
-		t.Errorf("expect chapter header at very start: %s", got)
+		t.Errorf("chờ tiêu đề chương ngay ở đầu: %s", got)
 	}
 }
 
@@ -149,14 +149,14 @@ func TestRenderTXT_LayeredVolume(t *testing.T) {
 		expTextsZH,
 	)
 	if !strings.Contains(got, "第 1 卷  起源") {
-		t.Errorf("missing volume header: %s", got)
+		t.Errorf("thiếu tiêu đề tập: %s", got)
 	}
 	if strings.Contains(got, "弧") {
-		t.Errorf("arc divider should never appear: %s", got)
+		t.Errorf("dấu phân tách cung không được xuất hiện: %s", got)
 	}
 	// Tiêu đề tập chỉ xuất hiện một lần trước chương đầu tiên
 	if strings.Count(got, "第 1 卷") != 1 {
-		t.Errorf("volume header should appear exactly once: %s", got)
+		t.Errorf("tiêu đề tập phải xuất hiện đúng một lần: %s", got)
 	}
 }
 
@@ -176,16 +176,16 @@ func TestRenderTXT_VietnameseLanguage(t *testing.T) {
 		expTextsVI,
 	)
 	if !strings.HasPrefix(got, "Quang vệ\n\n") {
-		t.Errorf("Vietnamese book title should not use 《》: %s", got)
+		t.Errorf("tên sách tiếng Việt không được dùng 《》: %s", got)
 	}
 	if !strings.Contains(got, "Chương 1  Người trở về") {
-		t.Errorf("missing Vietnamese chapter header: %s", got)
+		t.Errorf("thiếu tiêu đề chương tiếng Việt: %s", got)
 	}
 	if !strings.Contains(got, "Tập 1  Khởi nguồn") {
-		t.Errorf("missing Vietnamese volume header: %s", got)
+		t.Errorf("thiếu tiêu đề tập tiếng Việt: %s", got)
 	}
 	if strings.Contains(got, "第") || strings.Contains(got, "卷") {
-		t.Errorf("Vietnamese export must not contain Chinese markers: %s", got)
+		t.Errorf("bản xuất tiếng Việt không được chứa dấu hiệu tiếng Trung: %s", got)
 	}
 }
 
@@ -198,6 +198,6 @@ func TestRenderTXT_ChapterWithoutTitleFallsBackToNumberOnly(t *testing.T) {
 		expTextsZH,
 	)
 	if !strings.Contains(got, "第 5 章\n\n") {
-		t.Errorf("expect 'first 5 章' fallback header: %s", got)
+		t.Errorf("chờ tiêu đề dự phòng dạng 'chương 5': %s", got)
 	}
 }

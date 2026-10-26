@@ -20,28 +20,28 @@ func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
-		t.Fatalf("init store: %v", err)
+		t.Fatalf("khởi tạo store: %v", err)
 	}
 	if err := s.Progress.Init(len(completed)); err != nil {
-		t.Fatalf("init progress: %v", err)
+		t.Fatalf("khởi tạo progress: %v", err)
 	}
 	if novelName != "" {
 		if err := s.Book.Save(domain.BookMetadata{Title: novelName, Synopsis: "Đoạn giới thiệu thử nghiệm dành cho người đọc."}); err != nil {
-			t.Fatalf("save book: %v", err)
+			t.Fatalf("lưu book: %v", err)
 		}
 	}
 	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
-		t.Fatalf("phase writing: %v", err)
+		t.Fatalf("đặt phase writing: %v", err)
 	}
 	for _, ch := range completed {
 		if err := s.Drafts.SaveFinalChapter(ch, fmt.Sprintf("Nội dung chương %d.", ch)); err != nil {
-			t.Fatalf("save chapter %d: %v", ch, err)
+			t.Fatalf("lưu chương %d: %v", ch, err)
 		}
 		if err := s.Progress.StartChapter(ch); err != nil {
-			t.Fatalf("start chapter %d: %v", ch, err)
+			t.Fatalf("bắt đầu chương %d: %v", ch, err)
 		}
 		if err := s.Progress.MarkChapterComplete(ch, 5, "cliff", "main"); err != nil {
-			t.Fatalf("mark complete %d: %v", ch, err)
+			t.Fatalf("đánh dấu hoàn thành %d: %v", ch, err)
 		}
 	}
 	return s, dir
@@ -50,14 +50,14 @@ func newTestStore(t *testing.T, novelName string, completed []int) (*store.Store
 func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
 	s, dir := newTestStore(t, "Quang vệ", []int{1, 2, 3})
 	if err := s.Outline.SavePremise("Câu chuyện về ánh sáng và bóng tối."); err != nil {
-		t.Fatalf("save premise: %v", err)
+		t.Fatalf("lưu premise: %v", err)
 	}
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{
 		{Chapter: 1, Title: "Người trở về trong đêm mưa"},
 		{Chapter: 2, Title: "Bình minh"},
 		{Chapter: 3, Title: "Tro tàn"},
 	}); err != nil {
-		t.Fatalf("save outline: %v", err)
+		t.Fatalf("lưu outline: %v", err)
 	}
 
 	res, err := Run(context.Background(), Deps{Store: s}, Options{})
@@ -65,29 +65,29 @@ func TestRun_HappyPath_DefaultsToNovelDir(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if res.Chapters != 3 {
-		t.Errorf("Chapters = %d, want 3", res.Chapters)
+		t.Errorf("Chapters = %d, cần 3", res.Chapters)
 	}
 	if res.Path != filepath.Join(dir, "Quang vệ.txt") {
-		t.Errorf("Path = %q, want default {dir}/Quang vệ.txt", res.Path)
+		t.Errorf("Path = %q, cần mặc định {dir}/Quang vệ.txt", res.Path)
 	}
 	data, err := os.ReadFile(res.Path)
 	if err != nil {
-		t.Fatalf("read output: %v", err)
+		t.Fatalf("đọc bản xuất: %v", err)
 	}
 	text := string(data)
 	// Store chưa đặt ngôn ngữ rõ ràng → bản port này mặc định tiếng Việt: tên sách
 	// không dùng «», tiêu đề chương dùng "Chương N".
 	if !strings.HasPrefix(text, "Quang vệ\n\n") {
-		t.Errorf("missing Vietnamese book title at start:\n%s", text)
+		t.Errorf("thiếu tên sách tiếng Việt ở đầu:\n%s", text)
 	}
 	for _, want := range []string{"Chương 1  Người trở về trong đêm mưa", "Chương 3  Tro tàn"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("output missing %q\nfull:\n%s", want, text)
+			t.Errorf("bản xuất thiếu %q\ntoàn bộ:\n%s", want, text)
 		}
 	}
 	// premise không đưa vào bản xuất (bản thiết kế sáng táo, không phải nội dung cho người đọc)
 	if strings.Contains(text, "Câu chuyện về ánh sáng và bóng tối.") {
-		t.Errorf("premise must not appear in export:\n%s", text)
+		t.Errorf("premise không được xuất hiện trong bản xuất:\n%s", text)
 	}
 }
 
@@ -112,10 +112,10 @@ func TestRun_ZHLanguageUsesChineseLayout(t *testing.T) {
 	}
 	text := string(data)
 	if !strings.HasPrefix(text, "《光斑》\n\n") {
-		t.Errorf("Chinese book title should use 《》: %s", text)
+		t.Errorf("tên sách tiếng Trung phải dùng 《》: %s", text)
 	}
 	if !strings.Contains(text, "第 1 章  雨夜归人") {
-		t.Errorf("Chinese chapter header missing: %s", text)
+		t.Errorf("thiếu tiêu đề chương tiếng Trung: %s", text)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestRun_UsesCommittedTitleForCompletedChapter(t *testing.T) {
 	}
 	text := string(data)
 	if !strings.Contains(text, "Chương 1  Tiêu đề bản chính") || strings.Contains(text, "Tiêu đề dự kiến") {
-		t.Fatalf("export title projection is wrong:\n%s", text)
+		t.Fatalf("tiêu đề được xuất ra không đúng:\n%s", text)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestRun_UsesCommittedTitleForCompletedChapter(t *testing.T) {
 func TestRun_PremiseNotExported(t *testing.T) {
 	s, _ := newTestStore(t, "Quang vệ", []int{1})
 	if err := s.Outline.SavePremise("# Quang vệ\n## Đối tượng đọc\nBản thiết kế sáng táo không được xuất."); err != nil {
-		t.Fatalf("save premise: %v", err)
+		t.Fatalf("lưu premise: %v", err)
 	}
 	res, err := Run(context.Background(), Deps{Store: s}, Options{})
 	if err != nil {
@@ -157,14 +157,14 @@ func TestRun_PremiseNotExported(t *testing.T) {
 	}
 	data, err := os.ReadFile(res.Path)
 	if err != nil {
-		t.Fatalf("read output: %v", err)
+		t.Fatalf("đọc bản xuất: %v", err)
 	}
 	text := string(data)
 	if strings.Contains(text, "Bản thiết kế sáng táo không được xuất.") || strings.Contains(text, "Đối tượng đọc") {
-		t.Errorf("premise must not be exported, got:\n%s", text)
+		t.Errorf("premise không được xuất ra, nhận:\n%s", text)
 	}
 	if !strings.HasPrefix(text, "Quang vệ\n\n") {
-		t.Errorf("book title should remain: %s", text)
+		t.Errorf("tên sách phải được giữ lại: %s", text)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestRun_NoCompletedChapters(t *testing.T) {
 	s, _ := newTestStore(t, "X", nil)
 	_, err := Run(context.Background(), Deps{Store: s}, Options{})
 	if err == nil {
-		t.Fatal("expect error when no completed chapters")
+		t.Fatal("chờ lỗi khi không có chương hoàn thành")
 	}
 }
 
@@ -180,14 +180,14 @@ func TestRun_ExistingFile_NoOverwrite(t *testing.T) {
 	s, dir := newTestStore(t, "X", []int{1})
 	target := filepath.Join(dir, "out.txt")
 	if err := os.WriteFile(target, []byte("preexisting"), 0o644); err != nil {
-		t.Fatalf("seed file: %v", err)
+		t.Fatalf("tạo tệp nền: %v", err)
 	}
 	_, err := Run(context.Background(), Deps{Store: s}, Options{OutPath: target})
 	if err == nil {
-		t.Fatal("expect error when target exists and !Overwrite")
+		t.Fatal("chờ lỗi khi tệp đích đã tồn tại và !Overwrite")
 	}
 	if !strings.Contains(err.Error(), "đã tồn tại") {
-		t.Errorf("unexpected error: %v", err)
+		t.Errorf("lỗi không mong đợi: %v", err)
 	}
 
 	// Thêm Overwrite phải thành công
@@ -196,11 +196,11 @@ func TestRun_ExistingFile_NoOverwrite(t *testing.T) {
 		t.Fatalf("Overwrite Run: %v", err)
 	}
 	if res.Path != target {
-		t.Errorf("Path = %q want %q", res.Path, target)
+		t.Errorf("Path = %q, cần %q", res.Path, target)
 	}
 	data, _ := os.ReadFile(target)
 	if string(data) == "preexisting" {
-		t.Error("file not overwritten")
+		t.Error("tệp chưa được ghi đè")
 	}
 }
 
@@ -211,10 +211,10 @@ func TestRun_RangeWithSkipped(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if res.Chapters != 2 {
-		t.Errorf("Chapters = %d want 2 (only 2,3 completed in range 2..5)", res.Chapters)
+		t.Errorf("Chapters = %d, cần 2 (chỉ 2,3 hoàn thành trong khoảng 2..5)", res.Chapters)
 	}
 	if got := res.Skipped; len(got) != 2 || got[0] != 4 || got[1] != 5 {
-		t.Errorf("Skipped = %v want [4 5]", got)
+		t.Errorf("Skipped = %v, cần [4 5]", got)
 	}
 }
 
@@ -222,7 +222,7 @@ func TestRun_FromGreaterThanTo(t *testing.T) {
 	s, _ := newTestStore(t, "X", []int{1, 2})
 	_, err := Run(context.Background(), Deps{Store: s}, Options{From: 5, To: 2})
 	if err == nil {
-		t.Fatal("expect error for invalid range")
+		t.Fatal("chờ lỗi với khoảng không hợp lệ")
 	}
 }
 
@@ -230,7 +230,7 @@ func TestRun_UnsupportedFormat(t *testing.T) {
 	s, _ := newTestStore(t, "X", []int{1})
 	_, err := Run(context.Background(), Deps{Store: s}, Options{Format: Format("pdf")})
 	if err == nil {
-		t.Fatal("expect error for unsupported format")
+		t.Fatal("chờ lỗi với định dạng không được hỗ trợ")
 	}
 }
 
@@ -261,16 +261,16 @@ func TestInferFormat(t *testing.T) {
 		got, err := inferFormat(c.in)
 		if c.wantErr {
 			if err == nil {
-				t.Errorf("inferFormat(%q) want error", c.in)
+				t.Errorf("inferFormat(%q) cần lỗi", c.in)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("inferFormat(%q): unexpected err: %v", c.in, err)
+			t.Errorf("inferFormat(%q): lỗi không mong đợi: %v", c.in, err)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("inferFormat(%q) = %q want %q", c.in, got, c.want)
+			t.Errorf("inferFormat(%q) = %q, cần %q", c.in, got, c.want)
 		}
 	}
 }
@@ -278,10 +278,10 @@ func TestInferFormat(t *testing.T) {
 func TestRun_EPUB_FromExtension(t *testing.T) {
 	s, dir := newTestStore(t, "Quang vệ", []int{1})
 	if err := s.Outline.SavePremise("Ánh sáng và bóng tối."); err != nil {
-		t.Fatalf("save premise: %v", err)
+		t.Fatalf("lưu premise: %v", err)
 	}
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Đêm mưa"}}); err != nil {
-		t.Fatalf("save outline: %v", err)
+		t.Fatalf("lưu outline: %v", err)
 	}
 
 	target := filepath.Join(dir, "out.epub")
@@ -290,15 +290,15 @@ func TestRun_EPUB_FromExtension(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if res.Path != target {
-		t.Errorf("Path = %q want %q", res.Path, target)
+		t.Errorf("Path = %q, cần %q", res.Path, target)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("đọc: %v", err)
 	}
 	// EPUB là zip, có chữ PK ở 4 byte đầu
 	if len(data) < 4 || string(data[:2]) != "PK" {
-		t.Errorf("output does not look like a zip: %x", data[:min(8, len(data))])
+		t.Errorf("bản xuất không giống file zip: %x", data[:min(8, len(data))])
 	}
 }
 
@@ -310,7 +310,7 @@ func TestRun_DefaultPathFollowsFormat(t *testing.T) {
 	}
 	want := filepath.Join(dir, "Quang vệ.epub")
 	if res.Path != want {
-		t.Errorf("Path = %q want %q", res.Path, want)
+		t.Errorf("Path = %q, cần %q", res.Path, want)
 	}
 }
 
@@ -318,10 +318,10 @@ func TestRun_UnknownExtension(t *testing.T) {
 	s, _ := newTestStore(t, "X", []int{1})
 	_, err := Run(context.Background(), Deps{Store: s}, Options{OutPath: "/tmp/foo.dat"})
 	if err == nil {
-		t.Fatal("expect error for unknown extension")
+		t.Fatal("chờ lỗi với phần mở rộng lạ")
 	}
 	if !strings.Contains(err.Error(), "phần mở rộng") {
-		t.Errorf("error should mention extension: %v", err)
+		t.Errorf("lỗi phải nhắc phần mở rộng: %v", err)
 	}
 }
 
@@ -336,7 +336,7 @@ func TestSanitizeFileName(t *testing.T) {
 	}
 	for in, want := range cases {
 		if got := sanitizeFileName(in); got != want {
-			t.Errorf("sanitizeFileName(%q) = %q want %q", in, got, want)
+			t.Errorf("sanitizeFileName(%q) = %q, cần %q", in, got, want)
 		}
 	}
 }

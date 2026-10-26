@@ -45,14 +45,14 @@ func TestAnalyzeSourceContractFollowsActiveLanguage(t *testing.T) {
 			}
 			format := model.config.ResponseFormat
 			if format == nil || format.JSONSchema == nil {
-				t.Fatalf("response format = %#v", format)
+				t.Fatalf("định dạng phản hồi = %#v", format)
 			}
 			description := format.JSONSchema.Description
 			if !strings.Contains(description, tc.want) {
-				t.Fatalf("contract description %q does not contain %q", description, tc.want)
+				t.Fatalf("mô tả contract %q không chứa %q", description, tc.want)
 			}
 			if strings.Contains(description, tc.doNotWant) {
-				t.Fatalf("contract description %q contains text from the other language", description)
+				t.Fatalf("mô tả contract %q chứa văn bản của ngôn ngữ kia", description)
 			}
 		})
 	}
@@ -93,7 +93,7 @@ func TestAnalyzeSourceUsesNativeSchema(t *testing.T) {
 	}
 	format := model.config.ResponseFormat
 	if format == nil || format.JSONSchema == nil || format.JSONSchema.Name != sourceReportContract(simTextsFor(string(i18n.Active()))).Name {
-		t.Fatalf("response format = %#v", format)
+		t.Fatalf("định dạng phản hồi = %#v", format)
 	}
 	if strings.Contains(model.messages[0].TextContent(), "<output-json-schema>") {
 		t.Fatalf("prompt native không được chèn schema: %s", model.messages[0].TextContent())
@@ -128,7 +128,7 @@ func TestCompactSourceContentUsesLanguageMarker(t *testing.T) {
 			texts := simTextsFor(tc.lang)
 			got := compactSourceContent(content, texts.truncatedMarker)
 			if !strings.Contains(got, tc.marker) {
-				t.Fatalf("compact content does not contain %q", tc.marker)
+				t.Fatalf("nội dung rút gọn không chứa %q", tc.marker)
 			}
 		})
 	}
