@@ -96,7 +96,7 @@ Câu trả lời tự nhiên bằng tiếng Việt dành cho người dùng: tr�
 </reply>
 
 <draft>
-"brief hướng đi tiếp theo" hiện tại đầy đủ, dùng Markdown: bắt đầu thẳng từ tiêu đề cấp hai, ví dụ "## Hướng đi tiếp theo", "## Bước ngoặt then chốt", "## Manh mối cần thu", "## Nhịp điệu và độ dài"; liệt kê các ý bằng gạch đầu dòng. Mỗi lượt phải **cộng dồn cập nhật** dựa trên các kết luận đã có, hấp thụ ý định mới nhất của người dùng; kể cả khi lượt này không có gì mới thì vẫn phải viết lại nguyên vẹn bản brief — đừng bỏ sót, đừng viết "(giữ nguyên lượt trước)" hay các chỗ trống tương tự.
+"brief hướng đi tiếp theo" hiện tại đầy đủ, dùng Markdown: bắt đầu thẳng từ tiêu đề cấp hai, ví dụ "## Hướng đi tiếp theo", "## Bước ngoặt then chốt", "## Phục bút cần thu", "## Nhịp điệu và độ dài"; liệt kê các ý bằng gạch đầu dòng. Mỗi lượt phải **cộng dồn cập nhật** dựa trên các kết luận đã có, hấp thụ ý định mới nhất của người dùng; kể cả khi lượt này không có gì mới thì vẫn phải viết lại nguyên vẹn bản brief — đừng bỏ sót, đừng viết "(giữ nguyên lượt trước)" hay các chỗ trống tương tự.
 </draft>
 ` + coCreateProtocolTailVI
 

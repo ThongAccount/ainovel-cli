@@ -97,7 +97,7 @@ var hostTextsVI = &hostTexts{
 	stateOpenThreads: "- Mạch dài đang hoạt động: %s\n",
 	stateLastVolume:  "- Tập gần nhất «%s»: %s\n",
 	stateMainChars:   "- Nhân vật chính: %s\n",
-	stateForeshadow:  "- Manh mối chưa thu: %s\n",
+	stateForeshadow:  "- Phục bút chưa thu: %s\n",
 	stateWarnings:    "- Cảnh báo dữ liệu: %s\n",
 	stateReadFailed:  "%s đọc thất bại: %v",
 	stateRoleParen:   " (%s)",

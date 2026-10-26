@@ -90,8 +90,8 @@ func TestBuildLedgerIsBilingual(t *testing.T) {
 	if !strings.Contains(vi, "Nhân vật đã biết") {
 		t.Fatalf("ledger tiếng Việt thiếu nhãn: %q", vi)
 	}
-	if !strings.Contains(vi, "Manh mối đang hoạt động") {
-		t.Fatalf("ledger tiếng Việt thiếu nhãn manh mối: %q", vi)
+	if !strings.Contains(vi, "Phục bút đang hoạt động") {
+		t.Fatalf("ledger tiếng Việt thiếu nhãn phục bút: %q", vi)
 	}
 
 	zh := buildLedger(prior, importTextsZH)
@@ -99,7 +99,7 @@ func TestBuildLedgerIsBilingual(t *testing.T) {
 		t.Fatalf("ledger tiếng Trung thiếu nhãn gốc: %q", zh)
 	}
 	if !strings.Contains(zh, "活跃伏笔") {
-		t.Fatalf("ledger tiếng Trung thiếu nhãn manh mối gốc: %q", zh)
+		t.Fatalf("ledger tiếng Trung thiếu nhãn phục bút gốc: %q", zh)
 	}
 }
 

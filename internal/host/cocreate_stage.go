@@ -97,7 +97,7 @@ func buildStoryStateSummary(s *store.Store, t *hostTexts) string {
 		warn("characters", err)
 	}
 
-	// Manh mối chưa thu, tối đa 6 mục
+	// Phục bút chưa thu, tối đa 6 mục
 	if fs, err := s.World.LoadActiveForeshadow(); len(fs) > 0 {
 		var items []string
 		for _, f := range fs {

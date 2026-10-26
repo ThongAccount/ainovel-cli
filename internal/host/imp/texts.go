@@ -191,7 +191,7 @@ var importTextsVI = &importTexts{
 	characterEvidenceDesc: "bằng chứng về nhân vật",
 	worldEvidenceDesc:     "bằng chứng sự thật thế giới",
 	timelineEventsDesc:    "sự kiện dòng thời gian",
-	foreshadowUpdatesDesc: "cập nhật manh mối",
+	foreshadowUpdatesDesc: "cập nhật phục bút",
 	stateChangesDesc:      "thay đổi trạng thái",
 	hookTypeDesc:          "loại điểm móc cuối chương",
 	dominantStrandDesc:    "dòng tường thuật chính",
@@ -237,7 +237,7 @@ var importTextsVI = &importTexts{
 	statusReasonDesc:    "lý do đánh giá trạng thái",
 
 	ledgerKnownCharsDesc:   "Nhân vật đã biết: ",
-	ledgerActiveForeshadow: "Manh mối đang hoạt động (tái dùng ID, không tự tạo mới):\n",
+	ledgerActiveForeshadow: "Phục bút đang hoạt động (tái dùng ID, không tự tạo mới):\n",
 	ledgerRecentStateDesc:  "Trạng thái gần nhất: ",
 	ledgerListSep:          ", ",
 	ledgerItemSep:          "; ",
