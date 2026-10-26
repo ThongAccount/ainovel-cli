@@ -151,3 +151,59 @@ func TestBuildRangeAndBookPayloadsAreBilingual(t *testing.T) {
 		t.Fatalf("payload book tiếng Trung thiếu lệnh gốc: %q", zhBook)
 	}
 }
+
+// TestValidationErrorsAreBilingual bảo vệ nhánh [L]: các thông báo lỗi kiểm tra
+// nghiệp vụ mà llmcontract gửi LẠI mô hình phải theo ngôn ngữ tác phẩm.
+// Nếu chỉ có tiếng Việt thì mô hình viết truyện tiếng Trung sẽ nhận lỗi lệch
+// giọng; nếu chỉ có tiếng Trung thì mô hình viết truyện tiếng Việt bị kéo lệch.
+func TestValidationErrorsAreBilingual(t *testing.T) {
+	check := func(name string, vi, zh error) {
+		t.Helper()
+		if vi == nil || zh == nil {
+			t.Fatalf("%s: cả hai nhánh ngôn ngữ đều phải trả lỗi", name)
+		}
+		if cjkRe.MatchString(vi.Error()) {
+			t.Fatalf("%s: lỗi tiếng Việt còn ký tự Trung: %q", name, vi.Error())
+		}
+		if !cjkRe.MatchString(zh.Error()) {
+			t.Fatalf("%s: lỗi tiếng Trung phải giữ ký tự Trung: %q", name, zh.Error())
+		}
+	}
+
+	seg := &Segmentation{Chapters: []ChapterSpan{{Number: 1, Title: "Mở đầu"}}}
+	shortBatch := &AnalysisBatchResult{Chapters: []ImportedChapterFacts{{Chapter: 1}}}
+	check("validateBatch",
+		validateBatch(shortBatch, seg, 0, 2, importTextsVI),
+		validateBatch(shortBatch, seg, 0, 2, importTextsZH))
+
+	badKind := []ImportedVolumeRange{{Title: "Tập một", Arcs: []ImportedArcRange{{StartChapter: 1, EndChapter: 2}}}}
+	check("validateStructure",
+		validateStructure(badKind, 3, importTextsVI),
+		validateStructure(badKind, 3, importTextsZH))
+
+	digest := &RangeDigest{StartChapter: 1, EndChapter: 5, Plot: "truyện"}
+	check("validateRangeDigest",
+		validateRangeDigest(digest, 1, 2, "range digest", importTextsVI),
+		validateRangeDigest(digest, 1, 2, "range digest", importTextsZH))
+
+	unit := SourceUnit{ID: "L1", Line: 1, Text: "风起云涌"}
+	units := map[string]SourceUnit{"L1": unit}
+	check("resolveBoundaryByte",
+		resolveBoundaryByteErr(units, "L9", "", importTextsVI),
+		resolveBoundaryByteErr(units, "L9", "", importTextsZH))
+
+	vVI := chunkValidator{projIDs: map[string]bool{"L1": true}, ownedIDs: map[string]bool{"L1": true},
+		unitByID: units, texts: importTextsVI}
+	vZH := chunkValidator{projIDs: map[string]bool{"L1": true}, ownedIDs: map[string]bool{"L1": true},
+		unitByID: units, texts: importTextsZH}
+	check("chunkValidator.validate",
+		vVI.validate([]BoundaryDecision{{UnitID: "", Kind: kindChapter}}),
+		vZH.validate([]BoundaryDecision{{UnitID: "", Kind: kindChapter}}))
+}
+
+// resolveBoundaryByteErr bọc lỗi của resolveBoundaryByte để test dùng chung
+// kiểu error với các nhánh kiểm tra khác.
+func resolveBoundaryByteErr(units map[string]SourceUnit, unitID, anchor string, t *importTexts) error {
+	_, err := resolveBoundaryByte(units, unitID, anchor, t)
+	return err
+}

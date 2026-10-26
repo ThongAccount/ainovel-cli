@@ -112,6 +112,40 @@ type importTexts struct {
 	rangeInstruction       string
 	reduceInstruction      string
 	bookInstruction        string
+
+	// Thông báo lỗi kiểm tra nghiệp vụ mà llmcontract gửi LẠI mô hình khi hỏi
+	// lại. Nội dung này đi thẳng vào ngữ cảnh LLM (execute.go nối cause.Error()
+	// vào messages), nên bắt buộc song ngữ: mô hình viết tiếng Việt mà nhận lỗi
+	// tiếng Trung sẽ bị kéo lệch giọng.
+	errBatchChapterCount     string
+	errBatchChapterNo        string
+	errChapterCoreEmpty      string
+	errChapterHookType       string
+	errChapterDominantStrand string
+	errChapterForeshadowDesc string
+	errBoundaryMissingUnit   string
+	errBoundaryUnknownUnit   string
+	errBoundaryBadKind       string
+	errBoundaryTitleMissing  string
+	errBoundaryConflict      string
+	errBoundaryStartUnowned  string
+	errBoundaryNoUnit        string
+	errAnchorNotFound        string
+	errAnchorNotUnique       string
+	errRangeLabelMerged      string
+	errRangePlotEmpty        string
+	errRangeMismatch         string
+	errSynopsisEmpty         string
+	errPremiseEmpty          string
+	errCharactersEmpty       string
+	errPlanningTierInvalid   string
+	errStoryStatusInvalid    string
+	errEndingDirectionEmpty  string
+	errStructureEmpty        string
+	errVolumeNoArc           string
+	errArcStartMismatch      string
+	errArcRangeInverted      string
+	errArcCoverageMismatch   string
 }
 
 // importTextsVI là bản tiếng Việt — ngôn ngữ mặc định của bản port.
@@ -214,6 +248,36 @@ var importTextsVI = &importTexts{
 	rangeInstruction:       "Hãy tạo một RangeDigest (tóm tắt đoạn liên tục) cho chương %d-%d. Sự thật theo từng chương:\n%s",
 	reduceInstruction:      "Hãy gộp nhiều tóm tắt đoạn cấp dưới của chương %d-%d thành một RangeDigest (tóm tắt đoạn liên tục). Các tóm tắt cấp dưới:\n%s",
 	bookInstruction:        "Dưới đây là sự thật/tóm tắt đoạn rút gọn của toàn bộ %d chương. Hãy tạo BookSynthesis: title, synopsis, premise, characters, world_rules, structure (phạm vi tập/cung), compass, planning_tier, story_status.\n\n%s",
+
+	errBatchChapterCount:     "số chương trong lô %d != dự kiến %d",
+	errBatchChapterNo:        "mục %d của lô có số chương %d != %d",
+	errChapterCoreEmpty:      "chương %d summary/core_event không được để trống",
+	errChapterHookType:       "chương %d hook_type không hợp lệ: %q",
+	errChapterDominantStrand: "chương %d dominant_strand không hợp lệ: %q",
+	errChapterForeshadowDesc: "chương %d foreshadow[%d] plant cần có description",
+	errBoundaryMissingUnit:   "ranh giới thiếu unit_id",
+	errBoundaryUnknownUnit:   "ranh giới có unit_id %q không tồn tại trong phép chiếu lần này",
+	errBoundaryBadKind:       "ranh giới %s có kind không hợp lệ: %q (chỉ được chapter/group/front_matter/back_matter)",
+	errBoundaryTitleMissing:  "ranh giới %s có tiêu đề %q không tìm thấy trong nguyên văn của unit này: nếu đây là phần nội dung tiếp nối của chương trước, đừng đặt ranh giới cho nó (ranh giới thuộc về đoạn trước, boundaries có thể rỗng); nếu nguyên văn tại đây thật sự không có dòng tiêu đề và tiêu đề là do bạn tổng hợp, hãy đặt uncertain=true",
+	errBoundaryConflict:      "ranh giới %q và %q nằm cùng một vị trí (%s), xung đột ngữ nghĩa, hãy chỉ giữ lại cái đúng",
+	errBoundaryStartUnowned:  "đoạn văn bản %d byte đầu tiên (%s…) không thuộc ranh giới nào, hãy bổ sung ranh giới cho đầu văn bản (front_matter/chapter/group)",
+	errBoundaryNoUnit:        "ranh giới tham chiếu unit không tồn tại: %s",
+	errAnchorNotFound:        "điểm neo %q không nằm trong unit %s",
+	errAnchorNotUnique:       "điểm neo %q không duy nhất trong unit %s",
+	errRangeLabelMerged:      "lô đã gộp",
+	errRangePlotEmpty:        "%s plot rỗng",
+	errRangeMismatch:         "%s có phạm vi chương %d-%d không khớp với yêu cầu %d-%d",
+	errSynopsisEmpty:         "synopsis rỗng",
+	errPremiseEmpty:          "premise rỗng",
+	errCharactersEmpty:       "characters rỗng",
+	errPlanningTierInvalid:   "planning_tier không hợp lệ: %q",
+	errStoryStatusInvalid:    "story_status không hợp lệ: %q",
+	errEndingDirectionEmpty:  "compass.ending_direction rỗng",
+	errStructureEmpty:        "structure rỗng",
+	errVolumeNoArc:           "tập[%d] %q không có cung",
+	errArcStartMismatch:      "tập[%d] cung[%d] có chương bắt đầu %d, cần là %d (phải liên tục không lỗ hổng)",
+	errArcRangeInverted:      "tập[%d] cung[%d] có phạm vi đảo ngược %d..%d",
+	errArcCoverageMismatch:   "phạm vi cung trong tập phủ %d chương, cần là %d chương",
 }
 
 // importTextsZH là bản tiếng Trung — giữ nguyên văn bản gốc của dự án.
@@ -316,6 +380,36 @@ var importTextsZH = &importTexts{
 	rangeInstruction:       "请为第 %d-%d 章生成一个 RangeDigest（连续区间摘要）。逐章事实：\n%s",
 	reduceInstruction:      "请把第 %d-%d 章的多个下层区间摘要合并为一个 RangeDigest（连续区间摘要）。下层摘要：\n%s",
 	bookInstruction:        "以下是全书 %d 章的紧凑事实/区间摘要。请生成 BookSynthesis：title、synopsis、premise、characters、world_rules、卷弧范围 structure、compass、planning_tier、story_status。\n\n%s",
+
+	errBatchChapterCount:     "批次章节数 %d != 预期 %d",
+	errBatchChapterNo:        "批次第 %d 项章号 %d != %d",
+	errChapterCoreEmpty:      "章 %d summary/core_event 不能为空",
+	errChapterHookType:       "章 %d hook_type 非法：%q",
+	errChapterDominantStrand: "章 %d dominant_strand 非法：%q",
+	errChapterForeshadowDesc: "章 %d foreshadow[%d] plant 需 description",
+	errBoundaryMissingUnit:   "边界缺 unit_id",
+	errBoundaryUnknownUnit:   "边界 unit_id %q 不存在于本次投影中",
+	errBoundaryBadKind:       "边界 %s kind 非法：%q（只能是 chapter/group/front_matter/back_matter）",
+	errBoundaryTitleMissing:  "边界 %s 的标题 %q 在该单元原文中找不到：若这里是上一章的延续正文，请不要为它设边界（由前文边界归属，boundaries 可为空）；若源文此处确实没有标题行、标题是你归纳的，请置 uncertain=true",
+	errBoundaryConflict:      "边界 %q 与 %q 落在同一位置（%s），语义冲突，请只保留正确的一个",
+	errBoundaryStartUnowned:  "起始 %d 字节文本（%s…）未归属任何边界，请为文本开头补充边界（front_matter/chapter/group）",
+	errBoundaryNoUnit:        "边界引用不存在的 unit：%s",
+	errAnchorNotFound:        "锚点 %q 不在 unit %s 内",
+	errAnchorNotUnique:       "锚点 %q 在 unit %s 内不唯一",
+	errRangeLabelMerged:      "合并区间",
+	errRangePlotEmpty:        "%s plot 为空",
+	errRangeMismatch:         "%s 章范围 %d-%d 与请求 %d-%d 不符",
+	errSynopsisEmpty:         "synopsis 为空",
+	errPremiseEmpty:          "premise 为空",
+	errCharactersEmpty:       "characters 为空",
+	errPlanningTierInvalid:   "planning_tier 非法：%q",
+	errStoryStatusInvalid:    "story_status 非法：%q",
+	errEndingDirectionEmpty:  "compass.ending_direction 为空",
+	errStructureEmpty:        "structure 为空",
+	errVolumeNoArc:           "卷[%d] %q 无弧",
+	errArcStartMismatch:      "卷[%d]弧[%d] 起点 %d 应为 %d（须连续无缺口）",
+	errArcRangeInverted:      "卷[%d]弧[%d] 范围倒置 %d..%d",
+	errArcCoverageMismatch:   "卷弧范围覆盖 %d 章，应为 %d 章",
 }
 
 // importTextsFor chọn bảng văn bản theo ngôn ngữ tác phẩm.

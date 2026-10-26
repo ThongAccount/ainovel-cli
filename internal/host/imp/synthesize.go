@@ -150,15 +150,15 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 			digests = append(digests, art.Payload)
 			continue
 		}
-		prof.step(ri+1, len(ranges), "区间摘要 %d/%d（第 %d-%d 章）...", ri+1, len(ranges), startCh, endCh)
+		prof.step(ri+1, len(ranges), "tóm tắt đoạn %d/%d (chương %d-%d)...", ri+1, len(ranges), startCh, endCh)
 		rd, err := callStructured[RangeDigest](ctx, m, rangeContract(t), rangePrompt, buildRangePayload(rangeFacts, t), maxTokens, prof, func(d *RangeDigest) error {
-			return validateRangeDigest(d, startCh, endCh, "range digest")
+			return validateRangeDigest(d, startCh, endCh, "range digest", t)
 		})
 		if err != nil {
-			return nil, fmt.Errorf("range %d-%d 综合：%w", startCh, endCh, err)
+			return nil, fmt.Errorf("tổng hợp range %d-%d: %w", startCh, endCh, err)
 		}
 		if err := writeArtifact(w, rel, want, rd); err != nil {
-			return nil, fmt.Errorf("落盘 range digest：%w", err)
+			return nil, fmt.Errorf("ghi range digest xuống đĩa: %w", err)
 		}
 		digests = append(digests, rd)
 	}
@@ -194,13 +194,13 @@ func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests [
 		merged := make([]RangeDigest, 0, len(groups))
 		for gi, g := range groups {
 			startCh, endCh := g[0].StartChapter, g[len(g)-1].EndChapter
-			prof.step(gi+1, len(groups), "归并区间摘要（第 %d 轮 %d/%d，第 %d-%d 章）...",
+			prof.step(gi+1, len(groups), "gộp tóm tắt đoạn (vòng %d, %d/%d, chương %d-%d)...",
 				round, gi+1, len(groups), startCh, endCh)
 			rd, err := callStructured[RangeDigest](ctx, m, rangeContract(t), rangePrompt, buildDigestReducePayload(g, t), maxTokens, prof, func(d *RangeDigest) error {
-				return validateRangeDigest(d, startCh, endCh, "合并区间")
+				return validateRangeDigest(d, startCh, endCh, t.errRangeLabelMerged, t)
 			})
 			if err != nil {
-				return nil, fmt.Errorf("合并区间 %d-%d：%w", startCh, endCh, err)
+				return nil, fmt.Errorf("gộp đoạn %d-%d: %w", startCh, endCh, err)
 			}
 			merged = append(merged, rd)
 		}
@@ -209,12 +209,15 @@ func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests [
 	return digests, nil
 }
 
-func validateRangeDigest(d *RangeDigest, startChapter, endChapter int, label string) error {
+// validateRangeDigest là hàm kiểm tra nghiệp vụ mà llmcontract gửi lại mô hình để
+// hỏi lại, nên thông báo lỗi phải theo ngôn ngữ tác phẩm (t).
+func validateRangeDigest(d *RangeDigest, startChapter, endChapter int, label string, t *importTexts) error {
+	t = importTextsOrDefault(t)
 	if strings.TrimSpace(d.Plot) == "" {
-		return fmt.Errorf("%s plot 为空", label)
+		return fmt.Errorf(t.errRangePlotEmpty, label)
 	}
 	if d.StartChapter != startChapter || d.EndChapter != endChapter {
-		return fmt.Errorf("%s 章范围 %d-%d 与请求 %d-%d 不符", label, d.StartChapter, d.EndChapter, startChapter, endChapter)
+		return fmt.Errorf(t.errRangeMismatch, label, d.StartChapter, d.EndChapter, startChapter, endChapter)
 	}
 	return nil
 }
@@ -259,15 +262,15 @@ func rangeInputDigest(facts []ImportedChapterFacts) string {
 
 func synthesizeBook(ctx context.Context, m callModel, systemPrompt, payload string, n, maxTokens int, prof callProfile) (*BookSynthesis, error) {
 	t := importTextsOrDefault(prof.texts)
-	prof.step(0, 0, "生成全书综合（作品信息/premise/characters/大纲结构）...")
+	prof.step(0, 0, "tạo tổng hợp toàn tác phẩm (thông tin tác phẩm/premise/characters/cấu trúc đề cương)...")
 	s, err := callStructured[BookSynthesis](ctx, m, synthesisContract(t), systemPrompt, buildBookPayload(payload, n, t), maxTokens, prof, func(s *BookSynthesis) error {
-		return validateSynthesis(s, n)
+		return validateSynthesis(s, n, t)
 	})
 	if err != nil {
 		return nil, err
 	}
 	// 回显模型的全书理解：这是导入最核心的语义产出，值得让用户第一时间看见。
-	prof.step(0, 0, "模型概括全书：%s", snippet(s.Premise, 80))
+	prof.step(0, 0, "mô hình tóm tắt toàn tác phẩm: %s", snippet(s.Premise, 80))
 	return &s, nil
 }
 
@@ -284,52 +287,56 @@ func buildBookPayload(inner string, n int, t *importTexts) string {
 }
 
 // validateSynthesis 校验综合结果的结构约束（值域/闭集/范围），不复判文学质量。
-func validateSynthesis(s *BookSynthesis, n int) error {
+// t là bảng văn bản theo ngôn ngữ tác phẩm: lỗi ở đây được llmcontract gửi lại
+// mô hình để hỏi lại, nên phải theo ngôn ngữ đang viết.
+func validateSynthesis(s *BookSynthesis, n int, t *importTexts) error {
+	t = importTextsOrDefault(t)
 	if strings.TrimSpace(s.Synopsis) == "" {
-		return fmt.Errorf("synopsis 为空")
+		return fmt.Errorf("%s", t.errSynopsisEmpty)
 	}
 	if strings.TrimSpace(s.Premise) == "" {
-		return fmt.Errorf("premise 为空")
+		return fmt.Errorf("%s", t.errPremiseEmpty)
 	}
 	if len(s.Characters) == 0 {
-		return fmt.Errorf("characters 为空")
+		return fmt.Errorf("%s", t.errCharactersEmpty)
 	}
 	if !validPlanningTiers[s.PlanningTier] {
-		return fmt.Errorf("planning_tier 非法：%q", s.PlanningTier)
+		return fmt.Errorf(t.errPlanningTierInvalid, s.PlanningTier)
 	}
 	switch s.StoryStatus {
 	case storyOpen, storyClosed, storyUncertain:
 	default:
-		return fmt.Errorf("story_status 非法：%q", s.StoryStatus)
+		return fmt.Errorf(t.errStoryStatusInvalid, s.StoryStatus)
 	}
 	if strings.TrimSpace(s.Compass.EndingDirection) == "" {
-		return fmt.Errorf("compass.ending_direction 为空")
+		return fmt.Errorf("%s", t.errEndingDirectionEmpty)
 	}
-	return validateStructure(s.Structure, n)
+	return validateStructure(s.Structure, n, t)
 }
 
 // validateStructure 校验卷弧范围连续、无重叠、完整覆盖 1..N（RFC §11 / 不变量 5）。
-func validateStructure(structure []ImportedVolumeRange, n int) error {
+func validateStructure(structure []ImportedVolumeRange, n int, t *importTexts) error {
+	t = importTextsOrDefault(t)
 	if len(structure) == 0 {
-		return fmt.Errorf("structure 为空")
+		return fmt.Errorf("%s", t.errStructureEmpty)
 	}
 	next := 1
 	for vi, v := range structure {
 		if len(v.Arcs) == 0 {
-			return fmt.Errorf("卷[%d] %q 无弧", vi, v.Title)
+			return fmt.Errorf(t.errVolumeNoArc, vi, v.Title)
 		}
 		for ai, a := range v.Arcs {
 			if a.StartChapter != next {
-				return fmt.Errorf("卷[%d]弧[%d] 起点 %d 应为 %d（须连续无缺口）", vi, ai, a.StartChapter, next)
+				return fmt.Errorf(t.errArcStartMismatch, vi, ai, a.StartChapter, next)
 			}
 			if a.EndChapter < a.StartChapter {
-				return fmt.Errorf("卷[%d]弧[%d] 范围倒置 %d..%d", vi, ai, a.StartChapter, a.EndChapter)
+				return fmt.Errorf(t.errArcRangeInverted, vi, ai, a.StartChapter, a.EndChapter)
 			}
 			next = a.EndChapter + 1
 		}
 	}
 	if next-1 != n {
-		return fmt.Errorf("卷弧范围覆盖 %d 章，应为 %d 章", next-1, n)
+		return fmt.Errorf(t.errArcCoverageMismatch, next-1, n)
 	}
 	return nil
 }
@@ -364,7 +371,9 @@ type Foundation struct {
 // closed 是 story_status 裁定后的收束事实；fallbackName 用于正文无法确认书名时的推断标题。
 func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed bool, fallbackName string) (*Foundation, error) {
 	n := len(facts)
-	if err := validateSynthesis(s, n); err != nil {
+	// Ở đường vận hành (sau khi mô hình đã vượt qua validate) lỗi này đi ra cho
+	// người vận hành nên dùng tiếng Việt cố định, không theo ngôn ngữ tác phẩm.
+	if err := validateSynthesis(s, n, importTextsVI); err != nil {
 		return nil, err
 	}
 	byChapter := make(map[int]ImportedChapterFacts, n)
@@ -380,7 +389,7 @@ func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed b
 			for ch := a.StartChapter; ch <= a.EndChapter; ch++ {
 				f, ok := byChapter[ch]
 				if !ok {
-					return nil, fmt.Errorf("弧范围引用不存在的章 %d", ch)
+					return nil, fmt.Errorf("phạm vi cung tham chiếu chương không tồn tại: %d", ch)
 				}
 				arc.Chapters = append(arc.Chapters, domain.OutlineEntry{
 					Chapter: ch, Title: f.Title, CoreEvent: f.CoreEvent, Hook: f.Hook, Scenes: f.Scenes,
@@ -397,11 +406,11 @@ func AssembleFoundation(s *BookSynthesis, facts []ImportedChapterFacts, closed b
 	// FlattenOutline 后章数为 N，且标题与逐章事实一致（RFC §11.5）。
 	flat := domain.FlattenOutline(volumes)
 	if len(flat) != n {
-		return nil, fmt.Errorf("FlattenOutline 章数 %d != %d", len(flat), n)
+		return nil, fmt.Errorf("số chương FlattenOutline %d != %d", len(flat), n)
 	}
 	for _, e := range flat {
 		if e.Title != byChapter[e.Chapter].Title {
-			return nil, fmt.Errorf("章 %d 标题与逐章事实不一致", e.Chapter)
+			return nil, fmt.Errorf("tiêu đề chương %d không khớp với sự thật theo từng chương", e.Chapter)
 		}
 	}
 
@@ -429,7 +438,7 @@ func importedBookTitle(fallbackName string) string {
 	name := strings.TrimSuffix(fallbackName, ".txt")
 	name = strings.TrimSuffix(name, ".md")
 	if name == "" {
-		name = "未命名导入"
+		name = "Bản nhập chưa đặt tên"
 	}
 	return name
 }

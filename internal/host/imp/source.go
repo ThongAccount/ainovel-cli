@@ -170,20 +170,24 @@ func buildSourceUnits(normalized []byte, maxUnitBytes int) []SourceUnit {
 
 // resolveBoundaryByte 把一条边界决策映射为精确字节位置：
 // 无 anchor 取 unit 起点；有 anchor 要求在该 unit 内唯一逐字命中，再映射为字节偏移（RFC §8.3）。
-func resolveBoundaryByte(unitByID map[string]SourceUnit, unitID, anchor string) (int, error) {
+// t là bảng văn bản theo ngôn ngữ tác phẩm: gọi từ validate của mô hình thì lỗi
+// đi vào ngữ cảnh LLM nên phải theo ngôn ngữ đang viết; gọi từ đường vận hành
+// thì truyền bản tiếng Việt cố định.
+func resolveBoundaryByte(unitByID map[string]SourceUnit, unitID, anchor string, t *importTexts) (int, error) {
+	t = importTextsOrDefault(t)
 	u, ok := unitByID[unitID]
 	if !ok {
-		return 0, fmt.Errorf("ranh giới tham chiếu unit không tồn tại: %s", unitID)
+		return 0, fmt.Errorf(t.errBoundaryNoUnit, unitID)
 	}
 	if anchor == "" {
 		return u.StartByte, nil
 	}
 	switch strings.Count(u.Text, anchor) {
 	case 0:
-		return 0, fmt.Errorf("điểm neo %q không nằm trong unit %s", anchor, unitID)
+		return 0, fmt.Errorf(t.errAnchorNotFound, anchor, unitID)
 	case 1:
 		return u.StartByte + strings.Index(u.Text, anchor), nil
 	default:
-		return 0, fmt.Errorf("điểm neo %q không duy nhất trong unit %s", anchor, unitID)
+		return 0, fmt.Errorf(t.errAnchorNotUnique, anchor, unitID)
 	}
 }

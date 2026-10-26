@@ -246,28 +246,31 @@ func chapterInputDigest(segIdentity, promptVersion string, seg *Segmentation, no
 }
 
 // validateBatch 分两层校验：批次级连续无缺无重，逐章级值域与引用（RFC §9.4）。
-func validateBatch(r *AnalysisBatchResult, seg *Segmentation, start, end int) error {
+// t là bảng văn bản theo ngôn ngữ tác phẩm: lỗi ở đây được llmcontract gửi lại
+// mô hình để hỏi lại, nên phải theo ngôn ngữ đang viết.
+func validateBatch(r *AnalysisBatchResult, seg *Segmentation, start, end int, t *importTexts) error {
+	t = importTextsOrDefault(t)
 	want := end - start
 	if len(r.Chapters) != want {
-		return fmt.Errorf("số chương trong lô %d != dự kiến %d", len(r.Chapters), want)
+		return fmt.Errorf(t.errBatchChapterCount, len(r.Chapters), want)
 	}
 	for i, f := range r.Chapters {
 		want := seg.Chapters[start+i]
 		if f.Chapter != want.Number {
-			return fmt.Errorf("mục %d của lô có số chương %d != %d", i, f.Chapter, want.Number)
+			return fmt.Errorf(t.errBatchChapterNo, i, f.Chapter, want.Number)
 		}
 		if strings.TrimSpace(f.Summary) == "" || strings.TrimSpace(f.CoreEvent) == "" {
-			return fmt.Errorf("chương %d summary/core_event không được để trống", f.Chapter)
+			return fmt.Errorf(t.errChapterCoreEmpty, f.Chapter)
 		}
 		if !domain.ValidHookType(strings.ToLower(f.HookType)) {
-			return fmt.Errorf("chương %d hook_type không hợp lệ: %q", f.Chapter, f.HookType)
+			return fmt.Errorf(t.errChapterHookType, f.Chapter, f.HookType)
 		}
 		if !domain.ValidDominantStrand(strings.ToLower(f.DominantStrand)) {
-			return fmt.Errorf("chương %d dominant_strand không hợp lệ: %q", f.Chapter, f.DominantStrand)
+			return fmt.Errorf(t.errChapterDominantStrand, f.Chapter, f.DominantStrand)
 		}
 		for j, fu := range f.ForeshadowUpdates {
 			if fu.Action == "plant" && strings.TrimSpace(fu.Description) == "" {
-				return fmt.Errorf("chương %d foreshadow[%d] plant cần có description", f.Chapter, j)
+				return fmt.Errorf(t.errChapterForeshadowDesc, f.Chapter, j)
 			}
 		}
 		// 枚举按小写校验就按小写落盘：commit_chapter 不复验枚举，大小写变体会直通正式状态
@@ -288,17 +291,18 @@ func AnalyzeNext(ctx context.Context, m callModel, systemPrompt string, w *Works
 	}
 	ledger := buildLedger(loadPriorFacts(w, start), importTextsOrDefault(prof.texts))
 	end := planBatch(seg.Chapters, start, len(ledger), budget)
+	texts := importTextsOrDefault(prof.texts)
 
 	for {
-		payload := buildAnalyzePayload(normalized, seg, ledger, start, end, importTextsOrDefault(prof.texts))
-		res, err := callStructured[AnalysisBatchResult](ctx, m, analysisContract(importTextsOrDefault(prof.texts)), systemPrompt, payload, budget.MaxOutputTokens, prof, func(r *AnalysisBatchResult) error {
-			return validateBatch(r, seg, start, end)
+		payload := buildAnalyzePayload(normalized, seg, ledger, start, end, texts)
+		res, err := callStructured[AnalysisBatchResult](ctx, m, analysisContract(texts), systemPrompt, payload, budget.MaxOutputTokens, prof, func(r *AnalysisBatchResult) error {
+			return validateBatch(r, seg, start, end, texts)
 		})
 		if err != nil {
 			var tr *errTruncated
 			if errors.As(err, &tr) {
 				// 截断优先打捞从批次首章起的最大连续合法前缀，已提交部分不重做（§9.5）。
-				if salvaged := salvagePrefix(tr.Raw, seg, start); len(salvaged) > 0 {
+				if salvaged := salvagePrefix(tr.Raw, seg, start, texts); len(salvaged) > 0 {
 					for i, f := range salvaged {
 						ch := start + i + 1
 						digest := chapterInputDigest(segIdentity, promptVersion, seg, normalized, start+i)
@@ -371,7 +375,7 @@ func buildAnalyzePayload(normalized []byte, seg *Segmentation, ledger string, st
 // salvagePrefix 从长度截断的批次响应中解析最大连续合法前缀（RFC §9.5）。
 // 只保存从批次首章起连续、逐章校验通过的对象；遇首个不完整/非法/跳号即停，之后字节不解释。
 // 纯函数，由 AnalyzeNext 在容量截断时优先调用，避免丢弃已完整生成的前缀章节。
-func salvagePrefix(raw string, seg *Segmentation, start int) []ImportedChapterFacts {
+func salvagePrefix(raw string, seg *Segmentation, start int, t *importTexts) []ImportedChapterFacts {
 	arr := extractChaptersArray(raw)
 	if arr == "" {
 		return nil
@@ -391,7 +395,7 @@ func salvagePrefix(raw string, seg *Segmentation, start int) []ImportedChapterFa
 			break // 跳号/越界
 		}
 		one := AnalysisBatchResult{Chapters: []ImportedChapterFacts{f}}
-		if err := validateBatch(&one, seg, idx, idx+1); err != nil {
+		if err := validateBatch(&one, seg, idx, idx+1, t); err != nil {
 			break
 		}
 		out = append(out, one.Chapters[0]) // validateBatch 已就地归一化枚举，取校验后的值

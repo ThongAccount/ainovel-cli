@@ -35,15 +35,15 @@ func itoa(n int) string {
 
 func TestValidateStructure(t *testing.T) {
 	ok := []ImportedVolumeRange{{Title: "卷一", Arcs: []ImportedArcRange{{StartChapter: 1, EndChapter: 3}}}}
-	if err := validateStructure(ok, 3); err != nil {
+	if err := validateStructure(ok, 3, importTextsVI); err != nil {
 		t.Fatalf("合法结构应通过：%v", err)
 	}
 	gap := []ImportedVolumeRange{{Arcs: []ImportedArcRange{{StartChapter: 1, EndChapter: 2}, {StartChapter: 4, EndChapter: 5}}}}
-	if err := validateStructure(gap, 5); err == nil {
+	if err := validateStructure(gap, 5, importTextsVI); err == nil {
 		t.Fatal("缺口应拒绝")
 	}
 	short := []ImportedVolumeRange{{Arcs: []ImportedArcRange{{StartChapter: 1, EndChapter: 2}}}}
-	if err := validateStructure(short, 3); err == nil {
+	if err := validateStructure(short, 3, importTextsVI); err == nil {
 		t.Fatal("未覆盖 N 应拒绝")
 	}
 }
@@ -127,11 +127,11 @@ func TestToCompactCarriesEvidence(t *testing.T) {
 // TestSynthesizeRejectsRangeMismatch 守护 #4：长书 Map 阶段区间摘要的起止章必须与请求一致，
 // 否则归并时会把错位区间当作本区间摘要。
 func TestSynthesizeRejectsRangeMismatch(t *testing.T) {
-	err := validateRangeDigest(&RangeDigest{StartChapter: 1, EndChapter: 5, Plot: "错位区间"}, 1, 2, "range digest")
+	err := validateRangeDigest(&RangeDigest{StartChapter: 1, EndChapter: 5, Plot: "错位区间"}, 1, 2, "range digest", importTextsVI)
 	if err == nil {
 		t.Fatal("区间起止章与请求不符应拒绝")
 	}
-	if !strings.Contains(err.Error(), "章范围") {
+	if !strings.Contains(err.Error(), "phạm vi chương") {
 		t.Fatalf("错误应指出区间范围不符，得：%v", err)
 	}
 }
