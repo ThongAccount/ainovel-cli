@@ -442,16 +442,6 @@
     "\"校验初始 manifest：%w\"",
     "\"校验初始源快照：%w\""
    ]
-  },
-  "internal/tools/novel_context_builders.go": {
-   "literals": [
-    "\"本卷为全书收官卷：不再新开长线或埋新伏笔，优先回收既有伏笔、收拢关系线，按大纲把故事推向终局。\""
-   ]
-  },
-  "internal/tools/save_review.go": {
-   "literals": [
-    "\"章节号\""
-   ]
   }
  },
  "note": "Baseline cổng Việt hóa: các literal CJK còn sót đã biết. CI chỉ đỏ khi có literal MỚI chưa có trong danh sách này. Sinh lại bằng: bash scripts/check-vi-port.sh --update-baseline <file>",

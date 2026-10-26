@@ -44,7 +44,7 @@ func (t *SaveReviewTool) Schema() map[string]any {
 		schema.Property("description", schema.String(t.texts().saveReviewIssueDescription)).Required(),
 		schema.Property("evidence", schema.String(t.texts().saveReviewIssueEvidence)).Required(),
 		schema.Property("suggestion", llmcontract.Nullable(schema.String(t.texts().saveReviewIssueSuggestion))).Required(),
-		schema.Property("chapters", schema.Array(t.texts().saveReviewIssueChapters, schema.Int("章节号"))).Required(),
+		schema.Property("chapters", schema.Array(t.texts().saveReviewIssueChapters, schema.Int(t.texts().saveReviewIssueChapterNo))).Required(),
 		schema.Property("requires_change", schema.Bool(t.texts().saveReviewIssueRequiresChg)).Required(),
 	)
 	dimensionSchema := schema.Object(

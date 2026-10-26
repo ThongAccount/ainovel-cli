@@ -19,6 +19,9 @@ type toolTexts struct {
 	novelContextDesc       string
 	novelContextLabel      string
 	novelContextArgChapter string
+	// novelContextFinale — chỉ dẫn kỷ luật tập kết, tiêm vào ngữ cảnh sáng
+	// tác của chương thuộc tập kết. Chạm tới ngữ cảnh LLM nên phải song ngữ.
+	novelContextFinale string
 
 	// Nhóm save_foundation.
 	saveFoundationDesc       string
@@ -41,6 +44,7 @@ type toolTexts struct {
 	saveReviewIssueEvidence    string
 	saveReviewIssueSuggestion  string
 	saveReviewIssueChapters    string
+	saveReviewIssueChapterNo   string
 	saveReviewIssueRequiresChg string
 	saveReviewDimension        string
 	saveReviewDimensionScore   string
@@ -101,6 +105,7 @@ var toolTextsVI = &toolTexts{
 	novelContextDesc:       "Lấy trạng thái hiện tại và ngữ cảnh sáng tác của tác phẩm. Không truyền chapter: trả về progress_status (phase/flow/next_chapter/pending_rewrites và các trường tiến độ) + cơ sở thiết lập, dùng để biết bước tiếp theo nên làm gì. Truyền chapter=N: thêm trả về tóm tắt bối cảnh chương trước, phục bút, trạng thái nhân vật, quy tắc phong cách và ngữ cảnh sáng tác",
 	novelContextLabel:      "Tải ngữ cảnh",
 	novelContextArgChapter: "Số chương. Không truyền thì trả về trạng thái tiến độ và cơ sở thiết lập (Kiến trúc sư dùng); truyền vào thì thêm trả về ngữ cảnh sáng tác của chương đó (Người viết/Biên tập viên dùng)",
+	novelContextFinale:     "Tập này là tập kết của toàn bộ tác phẩm: không mở thêm tuyến dài hay gieo phục bút mới; ưu tiên thu hồi các phục bút đã có, gom lại các tuyến quan hệ, dẫn câu chuyện về kết cục theo dàn ý.",
 
 	saveFoundationDesc:       "Lưu cơ sở thiết lập tiểu thuyết (premise/outline/characters/world_rules/compass và các thiết lập khác). Đây là duy nhất là điểm bền hóa: nội dung chưa được lưu qua công cụ này chỉ xuất ra Markdown/JSON trong tin nhắn là đã mất. Tham số cố định là {type, content, scale?, volume?, arc?}. type có thể premise / outline / layered_outline / characters / world_rules / expand_arc / append_volume / update_compass / complete_book. premise thì content phải là chuỗi Markdown; các kiểu khác ưu tiên truyền trực tiếp mảng hoặc đối tượng JSON. expand_arc điều chỉnh và mở rộng một cung xương chưa viết (chi tiết chương đơn cung không quá 8 chương — đánh giá cuối cung cần đọc hết cung, quá dài không đánh giá được; vượt giới hạn hãy tách thành nhiều cung, cần volume + arc, content là {title, goal, chapters}, có thể điều chỉnh mục tiêu cung gốc dựa trên nội dung đã viết); append_volume thêm tập mới (content là JSON VolumeOutline đầy đủ, chứa cấu trúc cung; cấp cao nhất mang \"final\": true là tuyên bố tập thu thanh — toàn bộ truyện kết thúc ở tập đó, mọi chương viết xong sau đó tự động hoàn thành, không cần gọi complete_book); update_compass cập nhật hướng kết cục (content là JSON StoryCompass, trường chỉ {ending_direction: string bắt buộc, open_threads?: string[], estimated_scale?: string}, các trường khác đều không nhận); complete_book tuyên bố toàn bộ truyện hoàn thành (content truyền đối tượng rỗng {}, trực tiếp đẩy Phase=Complete; công cụ sẽ kiểm tra: các chương trong đề cương đều đã viết xong, không còn hàng chờ làm lại, compass không còn open_threads chưa thu hồi — xác nhận mọi đường hạch đã thu hồi trước khi update_compass xóa open_threads và bền vào đĩa, muốn thu thanh sớm dùng append_volume với tập thu thanh final). append_volume / complete_book phải mang reason (một câu lý do phán quyết, đối chiếu danh sách kiểm tra hoàn thành, ghi vào kiểm tra phán quyết). scale tùy chọn, chỉ cho phép short / mid / long.",
 	saveFoundationLabel:      "Lưu thiết lập",
@@ -120,6 +125,7 @@ var toolTextsVI = &toolTexts{
 	saveReviewIssueEvidence:    "Bằng chứng: đoạn gốc, sự kiện cụ thể hoặc dữ liệu trạng thái",
 	saveReviewIssueSuggestion:  "Đề xuất sửa đổi; không cần đề xuất thì null",
 	saveReviewIssueChapters:    "Chương mà bằng chứng của vấn đề nằm ở; đánh giá cung phải nằm trong khoảng nhiệm vụ",
+	saveReviewIssueChapterNo:   "Số chương",
 	saveReviewIssueRequiresChg: "Vấn đề có phải khắc phục ngay các chương liệt kê không, Biên tập viên phán quyết",
 	saveReviewDimension:        "Chỉ số đánh giá; do nhiệm vụ đánh giá và rubric quyết định",
 	saveReviewDimensionScore:   "Điểm (0-100)",
@@ -174,6 +180,7 @@ var toolTextsZH = &toolTexts{
 	novelContextDesc:       "获取小说当前状态和创作上下文。不传 chapter：返回 progress_status（phase/flow/next_chapter/pending_rewrites 等进度字段）+ 基础设定，用于判断下一步该做什么。传 chapter=N：额外返回该章的前情摘要、伏笔、角色状态、风格规则等写作上下文",
 	novelContextLabel:      "加载上下文",
 	novelContextArgChapter: "章节号。不传则返回进度状态和基础设定（Architect 用）；传入则额外返回该章的写作上下文（Writer/Editor 用）",
+	novelContextFinale:     "本卷为全书收官卷：不再新开长线或埋新伏笔，优先回收既有伏笔、收拢关系线，按大纲把故事推向终局。",
 
 	saveFoundationDesc:       "保存小说基础设定（premise/outline/characters/world_rules/compass 等）。**这是唯一持久化入口**：未经此工具调用保存的内容不会进入 store，只在消息里输出 Markdown/JSON 等于丢失。参数固定为 {type, content, scale?, volume?, arc?}。type 可选 premise / outline / layered_outline / characters / world_rules / expand_arc / append_volume / update_compass / complete_book。premise 时 content 必须是 Markdown 字符串；其他类型 content 优先直接传 JSON 数组或对象。expand_arc 校准并展开一个未写骨架弧（单弧详细章节不得超过 8 章——弧末评审需一次读完整弧，过长无法审阅；超限请拆成多个弧，需 volume + arc，content 为 {title, goal, chapters}，可依据已完成正文修订原骨架目标）；append_volume 追加新卷（content 为完整 VolumeOutline JSON，含弧结构；顶层带 \"final\": true 即宣告收官卷——全书在该卷收束，所有章节写完后自动完结，无需再调 complete_book）；update_compass 更新终局方向（content 为 StoryCompass JSON，字段仅 {ending_direction: string 必填, open_threads?: string[], estimated_scale?: string}，其余字段一律不认）；complete_book 宣告全书完结（content 传空对象 {}，直接推 Phase=Complete；工具会校验：大纲内章节已全部写完、无返工队列、compass 无未收束 open_threads——确认长线已收束须先 update_compass 清空 open_threads 落盘，想提前收束用 append_volume 的 final 收官卷）。append_volume / complete_book 必须带 reason 参数（一句话判定理由，对照完结判定清单，记入裁定审计）。scale 可选，仅允许 short / mid / long。",
 	saveFoundationLabel:      "保存设定",
@@ -193,6 +200,7 @@ var toolTextsZH = &toolTexts{
 	saveReviewIssueEvidence:    "证据：原文片段、具体情节或状态数据",
 	saveReviewIssueSuggestion:  "修改建议；无需建议时为 null",
 	saveReviewIssueChapters:    "该问题证据实际所在的章节；弧评审必须落在任务给定区间",
+	saveReviewIssueChapterNo:   "章节号",
 	saveReviewIssueRequiresChg: "该问题是否应立即触发所列章节返工，由 Editor 结合整体阅读体验判断",
 	saveReviewDimension:        "评价维度；由当前评审任务和 rubric 决定",
 	saveReviewDimensionScore:   "评分（0-100）",
