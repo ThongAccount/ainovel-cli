@@ -9,36 +9,47 @@
 #   dùng python3 + git, không cần mạng. Nếu máy không có `python3` thì
 #   fallback sang `python` (runner Windows của GitHub Actions).
 #
+# MẶC ĐỊNH (sau khi các track A–F đã merge)
+#   * quét TẤT CẢ các track
+#   * chỉ quét mã production (bỏ qua file _test.go)
+#   * dùng baseline `scripts/vi-port-baseline.json`: literal CJK đã biết
+#     được ghi nhận, chỉ literal MỚI mới làm cổng đỏ.
+#   Nhờ vậy CI luôn xanh với backlog hiện có, và đỏ ngay khi có chuỗi
+#   tiếng Trung mới xuất hiện trong mã production.
+#
+#   Muốn thu hẹp phạm vi: `--none --track-e` (chỉ Track E).
+#
 # TÙY CHỌN
-#   --track-e            phạm vi Track E — CLI/TUI, bootstrap, logger, notify,
-#                        version, models, utils, cmd                       [BẬT]
-#   --track-a            phạm vi Track A — internal/tools                 [TẮT]
+#   --track-a            phạm vi Track A — internal/tools
 #   --track-b            phạm vi Track B — agents, arbiter, llmcontract,
-#                        userrules, chapterfacts, stylestat                [TẮT]
-#   --track-c            phạm vi Track C — internal/host                   [TẮT]
+#                        userrules, chapterfacts, stylestat
+#   --track-c            phạm vi Track C — internal/host
 #   --track-d            phạm vi Track D — store, revision, flow, diag,
-#                        eval, domain, rules                              [TẮT]
-#   --all                bật tất cả các cờ track ở trên
+#                        eval, domain, rules
+#   --track-e            phạm vi Track E — CLI/TUI, bootstrap, logger, notify,
+#                        version, models, utils, cmd
+#   --all                bật tất cả các cờ track ở trên                 [BẬT]
 #   --none               tắt tất cả các cờ track (chỉ in báo cáo cờ)
-#   --production         chỉ quét mã production, bỏ qua file _test.go      [TẮT]
-#   --strict-comments    coi ký tự CJK trong comment Go cũng là vi phạm     [TẮT]
-#   --baseline <file>    literal CJK đã biết được xem là "đã biết", chỉ
-#                        literal MỚI mới làm cổng đỏ
-#   --update-baseline <file>
-#                        ghi lại baseline hiện tại (dùng để ratchet backlog)
+#   --production         chỉ quét mã production, bỏ qua file _test.go    [BẬT]
+#   --all-files          quét cả file _test.go (kèm backlog fixture/comment)
+#   --strict-comments    coi ký tự CJK trong comment Go cũng là vi phạm   [TẮT]
+#   --baseline <file>    file baseline dùng để grandfather literal đã biết
+#   --no-baseline        không dùng baseline — mọi literal sót đều là vi phạm
+#   --update-baseline [<file>]
+#                        ghi lại baseline hiện tại (mặc định: file baseline
+#                        đang dùng), dùng để ratchet backlog
 #   --list-flags         in danh sách cờ + đường dẫn được bảo vệ rồi thoát
 #   -h, --help           in phần trợ giúp này rồi thoát
 #
 # MÃ THOÁT
 #   0  không có vi phạm trong phạm vi đang bật
 #   1  có chuỗi literal CJK (hoặc comment CJK khi --strict-comments) còn sót
+#   2  lỗi tham số / môi trường
 #
 # GHI CHÚ
 #   * Track F (docs, assets/README.md, assets/testdata, evals/cases) không có
 #     mã Go nên không có cổng kiểm tra literal CJK — tài liệu còn trích dẫn
 #     ví dụ tiếng Trung hợp lệ.
-#   * Các package chưa có track nào phụ trách (internal/errs, internal/i18n,
-#     internal/llmretry) chỉ được kiểm tra khi Chief gán track.
 #   * Bộ quét nằm trong `scripts/vi_port_scan.py`: nó tự nhận diện các hình
 #     thức ngữ zh hợp lệ (bảng song ngữ `xxxZH`, trường `VI:`/`ZH:`, regex bắt
 #     mã Trung, nhánh so khớp song ngữ, nhãn Việt nhúng mẫu Trung, hằng dữ
@@ -51,21 +62,26 @@ usage() {
 CÁCH DÙNG
   bash scripts/check-vi-port.sh [tùy chọn]
 
+MẶC ĐỊNH
+  quét tất cả track + mã production + baseline scripts/vi-port-baseline.json.
+  Muốn thu hẹp: --none --track-e
+
 TÙY CHỌN
-  --track-e            Track E (CLI/TUI + bootstrap/logger/notify/version/
-                      models/utils/cmd)                         [BẬT]
-  --track-a            Track A (internal/tools)                 [TẮT]
+  --track-a            Track A (internal/tools)
   --track-b            Track B (agents/arbiter/llmcontract/userrules/
-                      chapterfacts/stylestat)                   [TẮT]
-  --track-c            Track C (internal/host)                  [TẮT]
-  --track-d            Track D (store/revision/flow/diag/eval/
-                      domain/rules)                             [TẮT]
-  --all                bật tất cả cờ track
+                      chapterfacts/stylestat)
+  --track-c            Track C (internal/host)
+  --track-d            Track D (store/revision/flow/diag/eval/domain/rules)
+  --track-e            Track E (CLI/TUI + bootstrap/logger/notify/version/
+                      models/utils/cmd)
+  --all                bật tất cả cờ track                          [BẬT]
   --none               tắt tất cả cờ track
-  --production         chỉ quét mã production (bỏ qua _test.go) [TẮT]
-  --strict-comments    ký tự CJK trong comment Go cũng là vi phạm [TẮT]
-  --baseline <file>    literal đã biết không tính là vi phạm mới
-  --update-baseline <file>
+  --production         chỉ quét mã production (bỏ qua _test.go)      [BẬT]
+  --all-files          quét cả file _test.go
+  --strict-comments    ký tự CJK trong comment Go cũng là vi phạm     [TẮT]
+  --baseline <file>    file baseline dùng để grandfather literal đã biết
+  --no-baseline        không dùng baseline
+  --update-baseline [<file>]
                       ghi lại baseline hiện tại
   --list-flags         in danh sách cờ + đường dẫn được bảo vệ
   -h, --help           in phần trợ giúp
@@ -91,15 +107,20 @@ SCOPES_TRACK_E="internal/entry internal/bootstrap internal/logger internal/notif
 # trường hợp không nhận diện được bằng hình thức câu lệnh.
 PATHS_DENYLIST="assets/prompts/zh/|assets/references/zh/|assets/styles/zh/|assets/voice_zh.md|internal/store/labels.go|internal/rules/snapshot.go|internal/rules/lint.go|internal/tools/premise_structure.go|internal/host/exp/texts.go|internal/entry/tui/panels_test.go|internal/bootstrap/configfile_test.go"
 
-enable_a=0
-enable_b=0
-enable_c=0
-enable_d=0
+# Mặc định: mọi track bật, chỉ quét mã production, dùng baseline đã commit.
+enable_a=1
+enable_b=1
+enable_c=1
+enable_d=1
 enable_e=1
 strict=0
-production=0
+production=1
 baseline=""
+baseline_set=0
 update_baseline=""
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_BASELINE="$SCRIPT_DIR/vi-port-baseline.json"
 
 list_flags() {
 	printf 'Cờ hiện tại:\n'
@@ -140,16 +161,24 @@ while [[ $# -gt 0 ]]; do
 		enable_e=0
 		;;
 	--production) production=1 ;;
+	--all-files) production=0 ;;
 	--strict-comments) strict=1 ;;
 	--baseline)
 		[[ $# -ge 2 ]] || { printf 'Thiếu đường dẫn file sau --baseline.\n' >&2; exit 2; }
 		baseline="$2"
+		baseline_set=1
 		shift
 		;;
+	--no-baseline)
+		baseline=""
+		baseline_set=1
+		;;
 	--update-baseline)
-		[[ $# -ge 2 ]] || { printf 'Thiếu đường dẫn file sau --update-baseline.\n' >&2; exit 2; }
-		update_baseline="$2"
-		shift
+		update_baseline="${DEFAULT_BASELINE}"
+		if [[ $# -ge 2 && "$2" != --* ]]; then
+			update_baseline="$2"
+			shift
+		fi
 		;;
 	--list-flags)
 		list_flags
@@ -167,6 +196,11 @@ while [[ $# -gt 0 ]]; do
 	esac
 	shift
 done
+
+# Baseline mặc định: file đã commit cạnh script, nếu có.
+if [[ $baseline_set -eq 0 && -f "$DEFAULT_BASELINE" ]]; then
+	baseline="$DEFAULT_BASELINE"
+fi
 
 scopes=""
 add_scopes() {
@@ -195,7 +229,6 @@ else
 	exit 2
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCANNER="$SCRIPT_DIR/vi_port_scan.py"
 if [[ ! -f "$SCANNER" ]]; then
 	printf 'Không tìm thấy bộ quét: %s\n' "$SCANNER" >&2
