@@ -98,9 +98,9 @@ func TestAcquireExclusive(t *testing.T) {
 		exclusive  string
 		wantErr    string // 空=期望放行
 	}{
-		{"running", lifecycleRunning, false, "", "运行中"},
-		{"cocreating", lifecyclePaused, true, "", "阶段共创"},
-		{"busy", lifecycleIdle, false, "导入", "进行中"},
+		{"running", lifecycleRunning, false, "", "đang chạy hoặc đang dừng"},
+		{"cocreating", lifecyclePaused, true, "", "đồng sáng tác theo giai đoạn"},
+		{"busy", lifecycleIdle, false, "nhập", "Tác vụ nhập đang chạy"},
 		{"idle free", lifecycleIdle, false, "", ""},
 		{"paused free", lifecyclePaused, false, "", ""},
 	}
@@ -108,19 +108,19 @@ func TestAcquireExclusive(t *testing.T) {
 	// 否则导入会与引擎收尾并发写同一 store。
 	drain := newFlagTestHost(lifecyclePaused, false)
 	drain.engine.running = true
-	if err := drain.acquireExclusive("导入"); err == nil {
+	if err := drain.acquireExclusive("nhập"); err == nil {
 		t.Fatal("引擎排水期应拒绝独占作业")
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			h := newFlagTestHost(c.lc, c.cocreating)
 			h.exclusive = c.exclusive
-			err := h.acquireExclusive("导入")
+			err := h.acquireExclusive("nhập")
 			if c.wantErr == "" {
 				if err != nil {
 					t.Fatalf("应放行，得 %v", err)
 				}
-				if h.exclusive != "导入" {
+				if h.exclusive != "nhập" {
 					t.Fatalf("放行后应登记占用，得 %q", h.exclusive)
 				}
 				h.releaseExclusive()
@@ -132,8 +132,8 @@ func TestAcquireExclusive(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("应含 %q，得 %v", c.wantErr, err)
 			}
-			if !strings.Contains(err.Error(), "导入") {
-				t.Errorf("错误文案应带 action %q，得 %v", "导入", err)
+			if !strings.Contains(err.Error(), "nhập") {
+				t.Errorf("错误文案应带 action %q，得 %v", "nhập", err)
 			}
 		})
 	}
@@ -144,7 +144,7 @@ func TestAcquireExclusive(t *testing.T) {
 // 否则 Continue 会在引擎被门禁拦下前就让 Arbiter 改状态、Resume/next 期间引擎可抢跑。
 func TestExclusiveBlocksCreationEntries(t *testing.T) {
 	h := newFlagTestHost(lifecycleIdle, false)
-	h.exclusive = "导入"
+	h.exclusive = "nhập"
 	if _, err := h.ImportFrom(context.Background(), imp.Options{}); err == nil {
 		t.Error("独占作业期间 ImportFrom 应被拒")
 	}
