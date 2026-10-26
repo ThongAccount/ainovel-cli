@@ -260,7 +260,7 @@ func (r *runner) facts() (Facts, error) {
 
 // profileFor suy ra các tuỳ chọn gọi của một mức và phản chiếu việc lùi yêu cầu / hỏi lại khi kiểm tra về luồng sự kiện của giai đoạn tương ứng——
 // lùi thử lại có thể cộng dồn im lặng hơn 2 phút, không phản chiếu thì người dùng tưởng bị treo (§14.1).
-// Key chỉ dành cho lùi yêu cầu (kèm mốc thời hạn): đó là trạng thái tức thời trong cùng một lời gọi, UI cập nhật tại chỗ một dòng ("第 N 次" nhảy số).
+// Key chỉ dành cho lùi yêu cầu (kèm mốc thời hạn): đó là trạng thái tức thời trong cùng một lời gọi, UI cập nhật tại chỗ một dòng ("lần N" nhảy số).
 // Hỏi lại khi kiểm tra là sự kiện ngữ nghĩa xuyên suốt các lời gọi — cắt gọi theo từng khối, mỗi khối hỏi lại riêng, dùng chung Key sẽ khiến khối sau ghi đè khối trước,
 // nuốt mất dấu vết truy vết (thực đo cho thấy bảng điều khiển chỉ còn một dòng unit_id liên tục đổi), nên mỗi cái giữ một dòng riêng để lưu lịch sử.
 func (r *runner) profileFor(c Caller, stage Stage) callProfile {
@@ -549,7 +549,7 @@ func (r *runner) analyze(ctx context.Context) error {
 	total := len(seg.Chapters)
 	// Digest từng chương chỉ gắn với nội dung của chính chương đó, không chứa ngữ cảnh lô hay ledger của các chương trước. Nếu chương thứ K bị thiếu/lệch khớp nên phải phân tích lại,
 	// các sản phẩm cũ còn nằm sau đó với digest vừa khớp sẽ bị tái sử dụng kèm ledger đã mất hiệu lực. Trước khi bắt đầu phân tích, dọn phần đuôi vượt quá tiền tố còn tươi,
-	// ép "重分析某章即失效其后全部分析", để các lượt phân tích tiếp theo không tạo ra đuôi dữ liệu cũ nữa (RFC §9.6 / #4a).
+	// ép "phân tích lại một chương thì mất hiệu lực mọi phân tích sau đó", để các lượt phân tích tiếp theo không tạo ra đuôi dữ liệu cũ nữa (RFC §9.6 / #4a).
 	if err := discardAnalysesAfter(r.ws, analyzedChapters(r.ws, seg, src, segArt.InputDigest, analyzePromptVersion), total); err != nil {
 		return err
 	}
@@ -634,7 +634,7 @@ func (r *runner) publish(ctx context.Context) error {
 	if err := publishFoundation(r.deps.Store, f); err != nil {
 		return err
 	}
-	// Hold hoàn tất nhập phải được ghi bền sớm hơn mọi lần ghi chương: nếu sập giữa "最后一章提交" và "设置 Hold",
+	// Hold hoàn tất nhập phải được ghi bền sớm hơn mọi lần ghi chương: nếu sập giữa "ghi chương cuối" và "đặt Hold",
 	// sau khi khởi động lại isPublished=true → nhập bị coi là đã hoàn tất nhưng lại quên đặt Hold, Engine sẽ tưởng là cuốn sách nhập rồi viết tiếp như một lần dừng bình thường.
 	// Đặt nó sau publishFoundation (đã khởi tạo RunMeta) và trước khi ghi chương, đóng hẳn khoảng cửa này; khi chạy lại phát hành thì đặt lại một cách idempotent
 	// (--continue không đặt Hold, để cơ chế tiếp sức tự động lo, RFC §12.4).
@@ -726,7 +726,7 @@ func (r *runner) resolveStory(syn *BookSynthesis) (bool, error) {
 }
 
 // setCompletionHold đặt Hold cho một lần nhập đã hoàn tất; chỉ --continue mới bỏ qua (RFC §12.4).
-// Lỗi phải được truyền ra — Hold là biện pháp bảo vệ duy nhất cho "导入后不误续写", thất bại trong im lặng đồng nghĩa với lớp bảo vệ mất hiệu lực.
+// Lỗi phải được truyền ra — Hold là biện pháp bảo vệ duy nhất cho "sau khi nhập không được viết tiếp nhầm", thất bại trong im lặng đồng nghĩa với lớp bảo vệ mất hiệu lực.
 func (r *runner) setCompletionHold() error {
 	in, err := r.ws.LoadIntent()
 	if err != nil {

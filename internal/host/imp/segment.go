@@ -63,7 +63,7 @@ func (s *Segmentation) Content(normalized []byte, i int) string {
 }
 
 // resolveSegmentation ánh xạ các phán quyết ranh giới đã sắp xếp thành Segmentation đã qua kiểm tra bao phủ toàn văn (RFC §8.3).
-// Hàm thuần: tách đầu ra của mô hình khỏi kiểm tra của mã, "某行是不是章标题" không do Go phán xử lại, nhưng bất biến bao phủ vẫn phải đúng.
+// Hàm thuần: tách đầu ra của mô hình khỏi kiểm tra của mã, "dòng nào là tiêu đề chương" không do Go phán xử lại, nhưng bất biến bao phủ vẫn phải đúng.
 func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []BoundaryDecision) (*Segmentation, error) {
 	if len(decisions) == 0 {
 		return nil, fmt.Errorf("không nhận diện được ranh giới nào")
@@ -179,7 +179,7 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 	if chapterNo == 0 {
 		return nil, fmt.Errorf("cắt không tạo ra chương nào (group không tính là chương)")
 	}
-	// Hai chương trùng tên là dấu hiệu tất định của việc "同章被误切" (trong nguồn có quy ước tiêu đề thì tên chương không nên lặp lại), chỉ ghi Notes
+	// Hai chương trùng tên là dấu hiệu tất định của việc "một chương bị cắt nhầm" (trong nguồn có quy ước tiêu đề thì tên chương không nên lặp lại), chỉ ghi Notes
 	// để bản xem trước xác nhận cho người kiểm tra (Notes khác rỗng là chặn --yes) — có gộp hay không không do Go phán quyết.
 	titleAt := make(map[string]int, len(seg.Chapters))
 	for _, c := range seg.Chapters {
@@ -215,7 +215,7 @@ func firstLine(normalized []byte, start, end int) string {
 
 // bodyAfterTitle trả về phần nội dung của [start,end) sau khi bỏ dòng đầu (tiêu đề).
 // Tiêu đề chương nhiều dòng chiếm riêng dòng đầu, nội dung nằm sau đó; đoạn một dòng không có ngắt dòng (kịch bản cắt theo điểm neo) thì cả đoạn là nội dung,
-// lúc này trả về toàn bộ đoạn chứ không phải chuỗi rỗng — nếu không, một tiểu thuyết hợp lệ dạng một dòng/một dòng nhiều chương sẽ bị từ chối nhầm với lý do "正文为空" (RFC §8.3).
+// lúc này trả về toàn bộ đoạn chứ không phải chuỗi rỗng — nếu không, một tiểu thuyết hợp lệ dạng một dòng/một dòng nhiều chương sẽ bị từ chối nhầm với lý do "nội dung truyện rỗng" (RFC §8.3).
 func bodyAfterTitle(normalized []byte, start, end int) string {
 	s := string(normalized[start:end])
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
@@ -371,7 +371,7 @@ func Segment(ctx context.Context, m callModel, systemPrompt string, normalized [
 		}
 		// Ranh giới nằm trong vùng ngữ cảnh thuộc quyền của khối lân cận (nó sẽ báo lại trong khoảng owned của chính nó), Go cắt thẳng:
 		// kỷ luật toạ độ do mã thực thi, còn lần thử lại ngữ nghĩa chỉ dành cho lỗi ngữ nghĩa thật sự — hành vi cũ hỏi lại khi có phản hồi vượt phạm vi,
-		// mô hình yếu thường dùng hết cả 3 lần thử rồi làm sập luôn cả khối (RFC §8.1「模型管语义，Go 管坐标」).
+		// mô hình yếu thường dùng hết cả 3 lần thử rồi làm sập luôn cả khối (RFC §8.1「mô hình lo ngữ nghĩa, Go lo toạ độ」).
 		kept := make([]BoundaryDecision, 0, len(batch.Boundaries))
 		for _, bd := range batch.Boundaries {
 			if ownedIDs[bd.UnitID] {

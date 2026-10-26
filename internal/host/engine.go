@@ -640,7 +640,7 @@ func contentFilterAdvice(werr error) string {
 
 // errInvalidWriteTarget đánh dấu mục tiêu ghi không hợp lệ bị tiền điều kiện của runWorker chặn lại, để chuỗi lỗi và
 // gói sự thật của Arbiter giữ được ngữ nghĩa ổn định; có thử lại hay đổi phái vẫn do quy trình thất bại thống nhất quyết định.
-// 文本固定为 tiếng Việt（sentinel dùng cho errors.Is）； bản theo ngôn ngữ tác phẩm
+// Văn bản cố định là tiếng Việt (sentinel dùng cho errors.Is); bản theo ngôn ngữ tác phẩm
 // cho gói sự thật gửi Tài phán nằm ở hostTexts.invalidWriteTarget.
 var errInvalidWriteTarget = errors.New("mục tiêu ghi không hợp lệ")
 

@@ -60,7 +60,7 @@ type Event struct {
 	Current   int       // tiến trình chương / đoạn
 	Total     int       // tổng số
 	Message   string    // mô tả dễ đọc cho con người
-	Level     string    // ""=普通进度；"warn"=cảnh báo như lùi rồi thử lại / hỏi lại khi kiểm tra
+	Level     string    // ""=tiến trình bình thường; "warn"=cảnh báo như lùi rồi thử lại / hỏi lại khi kiểm tra
 	Key       string    // khi khác rỗng, UI cập nhật tại chỗ các sự kiện liên tiếp cùng Key (ví dụ 7 lần lùi thay đổi trên một dòng), khớp cơ chế ID của bảng sự kiện
 	RetryAt   time.Time // khác 0 = thời điểm hết hạn của lần thử lại kế tiếp; UI đếm ngược từng giây theo đó, tới hạn là xoá (yêu cầu đã được gửi đi)
 	Err       error     // mang theo khi StageError

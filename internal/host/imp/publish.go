@@ -108,7 +108,7 @@ func publishFoundation(st *store.Store, f *Foundation) error {
 // checkFoundationConflicts kiểm tra hợp lệ sự nhất quán giữa Foundation chờ phát hành và các sản phẩm chính thức đã có:
 // hiện có rỗng thì coi là lần phát hành đầu tiên; giống nhau thì coi là idempotent; khác nhau thì báo xung đột và không ghi đè (RFC §12.2 / bất biến 6).
 // compass và dàn ý phẳng đều suy ra từ dàn ý phân lớp, dàn ý phân lớp nhất quán thì phần suy ra cũng nhất quán, nên không kiểm tra riêng các sản phẩm suy ra.
-// Lỗi đọc không được bị nuốt thành "文件不存在": bộ nạp của store trả về (giá trị 0, nil) khi thiếu, nên bất kỳ giá trị khác nil nào cũng là lỗi thật
+// Lỗi đọc không được bị nuốt thành "tệp không tồn tại": bộ nạp của store trả về (giá trị 0, nil) khi thiếu, nên bất kỳ giá trị khác nil nào cũng là lỗi thật
 // (hỏng dữ liệu/sai quyền/JSON không hợp lệ); coi như giá trị rỗng rồi đi tiếp sẽ ghi đè sản phẩm chính thức không đọc được (RFC §12.2).
 func checkFoundationConflicts(st *store.Store, f *Foundation) error {
 	wantBook := f.Book.Normalized()

@@ -113,7 +113,7 @@ func analyzedChaptersStrict(w *Workspace, seg *Segmentation, normalized []byte, 
 	return n, nil
 }
 
-// discardAnalysesAfter xoá các sản phẩm phân tích theo từng chương có số chương > keep, để "重分析某章即失效其后全部分析" trở thành điều đúng (#4a).
+// discardAnalysesAfter xoá các sản phẩm phân tích theo từng chương có số chương > keep, để "phân tích lại một chương thì mất hiệu lực mọi phân tích sau đó" trở thành điều đúng (#4a).
 // Trong lượt phân tích tiến về bình thường, sau keep vốn đã không có sản phẩm nào, nên đây là thao tác không-op idempotent; chỉ khi phân tích lại giữa chừng (vượt qua tiền tố còn tươi) mới dọn phần đuôi cũ.
 // Lỗi khi xoá phải được truyền ra: đây là điểm thực thi duy nhất của bất biến này, nuốt lỗi sẽ khiến phần đuôi cũ (digest từng chương luôn khớp)
 // bị tái sử dụng như tiền tố còn tươi, và bước tổng hợp sẽ tiêu thụ sự thật trộn lẫn cũ mới mà không báo lỗi nào.

@@ -92,7 +92,7 @@ func snippet(s string, max int) string {
 }
 
 // briefErr nén lỗi thành văn bản ngắn một dòng để hiển thị lại trên giao diện (chuỗi lỗi đầy đủ vẫn đi qua nhật ký và sản phẩm thất bại).
-// Sự thật có cấu trúc của adapter đặt trước: khi bị cắt, ưu tiên giữ "哪类错、什么状态码", message của gateway có thể hy sinh.
+// Sự thật có cấu trúc của adapter đặt trước: khi bị cắt, ưu tiên giữ "loại lỗi nào, mã trạng thái nào", message của gateway có thể hy sinh.
 func briefErr(err error) string {
 	s := err.Error()
 	if d := modelErrDetail(err); d != "" {

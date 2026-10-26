@@ -170,7 +170,7 @@ func Synthesize(ctx context.Context, m callModel, bookPrompt, rangePrompt string
 		digests = append(digests, rd)
 	}
 	// Reduce đệ quy: tổng khối lượng tóm tắt đoạn vẫn có thể vượt ngân sách đầu vào của bước tổng
-	// hợp cuối cùng (đẩy #83 từ "全部章节" sang "全部区间摘要").
+	// hợp cuối cùng (đẩy #83 từ "toàn bộ chương" sang "toàn bộ tóm tắt đoạn").
 	// Gộp từng tầng cho tới khi vừa chứa thì mới thực sự mở rộng không giới hạn (RFC §10.2).
 	digests, err := reduceToFit(ctx, m, rangePrompt, digests, budgetBytes, maxTokens, prof)
 	if err != nil {
@@ -252,7 +252,7 @@ func groupDigestsByBudget(digests []RangeDigest, budgetBytes int) [][]RangeDiges
 	return groups
 }
 
-// buildDigestReducePayload lắp ráp đầu vào cho "把若干下层区间摘要合并为一个 RangeDigest".
+// buildDigestReducePayload lắp ráp đầu vào cho "gộp nhiều tóm tắt đoạn cấp dưới thành một RangeDigest".
 // payload là nội dung mô hình nhìn thấy, câu lệnh đi theo ngôn ngữ tác phẩm (t).
 func buildDigestReducePayload(digests []RangeDigest, t *importTexts) string {
 	data, _ := json.Marshal(digests)
@@ -284,7 +284,7 @@ func synthesizeBook(ctx context.Context, m callModel, systemPrompt, payload stri
 	return &s, nil
 }
 
-// buildRangePayload lắp ráp đầu vào cho "为一个连续章节区间生成 RangeDigest".
+// buildRangePayload lắp ráp đầu vào cho "tạo một RangeDigest cho một dải chương liên tục".
 // payload là nội dung mô hình nhìn thấy, câu lệnh đi theo ngôn ngữ tác phẩm (t).
 func buildRangePayload(facts []ImportedChapterFacts, t *importTexts) string {
 	return fmt.Sprintf(t.rangeInstruction,
