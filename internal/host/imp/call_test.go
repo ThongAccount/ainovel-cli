@@ -46,7 +46,7 @@ func TestCallStructuredNotifiesRetries(t *testing.T) {
 		if !retryAt.IsZero() {
 			retries++
 		}
-		if strings.Contains(s, "重问") {
+		if strings.Contains(s, "hỏi lại") {
 			reasks++
 		}
 	}}
@@ -67,12 +67,12 @@ func TestBriefErrIncludesAdapterFacts(t *testing.T) {
 		Provider: "openai", Model: "gpt-x", Message: "Provider returned error",
 	}
 	got := briefErr(fmt.Errorf("外层包装：%w", le))
-	for _, want := range []string{"上游服务错误", "HTTP 502", "openai", "gpt-x", "Provider returned error"} {
+	for _, want := range []string{"lỗi dịch vụ phía trên", "HTTP 502", "openai", "gpt-x", "Provider returned error"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("回显应包含 %q，得 %q", want, got)
 		}
 	}
-	if !strings.HasPrefix(got, "上游服务错误") {
+	if !strings.HasPrefix(got, "lỗi dịch vụ phía trên") {
 		t.Fatalf("结构化事实应在前，得 %q", got)
 	}
 	if got := briefErr(errors.New("普通错误")); got != "普通错误" {
