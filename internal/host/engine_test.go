@@ -701,24 +701,27 @@ func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 	if err := st.Progress.Init(0); err != nil {
 		t.Fatalf("progress: %v", err)
 	}
-	// 模拟 StartPrepared 失败现场:输入事实在,裁定事实缺位。
-	if err := st.RunMeta.SetStartPrompt("凡人修仙"); err != nil {
+	// Mô phỏng hiện trường StartPrepared thất bại: sự thật đầu vào có, sự thật
+	// phán quyết thì thiếu.
+	if err := st.RunMeta.SetStartPrompt("Tiểu Đường Vấn Cốc"); err != nil {
 		t.Fatalf("start prompt: %v", err)
 	}
 
-	// Arbiter:首次调用是补裁(plan_start),之后是僵局咨询(abort 收尾)。
+	// Arbiter: lần gọi đầu là bổ sung phán quyết (plan_start), sau đó là hỏi ý
+	// kiến bế tắc (abort để chốt).
 	var arbCalls atomic.Int32
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
 		if arbCalls.Add(1) == 1 {
-			return testTextMsg(`{"planner":"architect_long","task":"围绕凡人修仙规划三卷框架","reason":"长篇修仙题材"}`)
+			return testTextMsg(`{"planner":"architect_long","task":"Lên kế hoạch ba tập cho Tiểu Đường Vấn Cốc","reason":"Tiểu thuyết tu tiên nhiều tập"}`)
 		}
-		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"规划师空转,停机"}`)
+		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"Nhà quy hoạch đứng yên, dừng"}`)
 	}}
-	// 规划师成功返回但不落任何盘 → Route 始终返回同一补齐指令 → 僵局。
+	// Nhà quy hoạch trả lời thành công nhưng không ghi gì xuống đĩa → Route luôn
+	// trả cùng một chỉ dẫn bổ sung → bế tắc.
 	architect := subagent.Config{
 		Name: "architect_long", Description: "idle planner",
 		Model: &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-			return testTextMsg("已规划(其实没有落盘)")
+			return testTextMsg("Đã lên kế hoạch (thực ra không ghi gì xuống đĩa)")
 		}},
 		SystemPrompt: "test", MaxTurns: 3,
 	}
@@ -731,10 +734,10 @@ func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 
 	meta, err := st.RunMeta.Load()
 	if err != nil || meta == nil || meta.PlanStart == nil {
-		t.Fatalf("补裁后 PlanStart 必须固化, meta=%+v err=%v", meta, err)
+		t.Fatalf("sau khi bổ sung phán quyết, PlanStart phải được ghim, meta=%+v err=%v", meta, err)
 	}
-	if meta.PlanStart.Planner != "architect_long" || meta.PlanStart.RawPrompt != "凡人修仙" || meta.PlanStart.DecisionID == "" {
-		t.Fatalf("PlanStartRecord 字段不完整: %+v", meta.PlanStart)
+	if meta.PlanStart.Planner != "architect_long" || meta.PlanStart.RawPrompt != "Tiểu Đường Vấn Cốc" || meta.PlanStart.DecisionID == "" {
+		t.Fatalf("PlanStartRecord thiếu trường: %+v", meta.PlanStart)
 	}
 	recs, err := st.Decisions.Recent(10)
 	if err != nil {
@@ -747,7 +750,7 @@ func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 		}
 	}
 	if !planStartRec {
-		t.Fatalf("补裁必须留下 plan_start 审计: %+v", recs)
+		t.Fatalf("bổ sung phán quyết phải để lại kiểm toán plan_start: %+v", recs)
 	}
 	var dispatched, healed bool
 	for _, ev := range *events {
@@ -774,14 +777,15 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 	if err := st.Progress.Init(0); err != nil {
 		t.Fatalf("progress: %v", err)
 	}
-	if err := st.RunMeta.SetStartPrompt("凡人修仙"); err != nil {
+	if err := st.RunMeta.SetStartPrompt("Tiểu Đường Vấn Cốc"); err != nil {
 		t.Fatalf("start prompt: %v", err)
 	}
 
 	var e *engine
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		e.abort() // 模拟宿主取消持续失败的调用，失败路径由 context 明确结束。
-		return testTextMsg("这不是 JSON")
+		e.abort() // Mô phỏng host huỷ lệnh gọi liên tục thất bại; nhánh lỗi do
+		// context kết thúc dứt khoát.
+		return testTextMsg("Đây không phải JSON")
 	}}
 	e, events, done := newTestEngine(t, st, subagent.NewRunner(), arb)
 
@@ -792,7 +796,7 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 
 	for _, ev := range *events {
 		if ev.Category == "DISPATCH" {
-			t.Fatal("补裁失败不得派发任何 worker")
+			t.Fatal("bổ sung phán quyết thất bại không được phái worker nào")
 		}
 	}
 	var paused bool
@@ -815,7 +819,7 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 		}
 	}
 	if !errRec {
-		t.Fatalf("失败裁定必须带 error 落盘: %+v", recs)
+		t.Fatalf("phán quyết thất bại phải ghi xuống đĩa kèm error: %+v", recs)
 	}
 }
 
