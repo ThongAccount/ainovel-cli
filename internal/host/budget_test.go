@@ -92,7 +92,8 @@ func TestBudgetSentinelJumpStraightPastLimit(t *testing.T) {
 	r := &budgetRecorder{}
 	s := r.sentinel(bootstrap.BudgetConfig{BookUSD: 10, WarnRatio: 0.8})
 
-	// 一次回调直接跨过告警与上限：warn 与 error 各恰好一次
+	// Một lần gọi lại vượt thẳng qua ngưỡng cảnh báo lẫn ngưỡng trần: cảnh báo
+	// và lỗi mỗi loại đúng một lần
 	s.OnCost(12)
 	if len(r.reports) != 2 {
 		t.Fatalf("expected warn+error in single jump, got %v", r.reports)
@@ -107,7 +108,7 @@ func TestBudgetSentinelHardStop(t *testing.T) {
 	if len(r.aborts) != 1 {
 		t.Fatalf("hard_stop should abort immediately, got %v", r.aborts)
 	}
-	// 后续边界不再重复停
+	// Các ngưỡng về sau không dừng lại lần nữa
 	r.cost = 11
 	s.HandleEvent(subagentEndEvent())
 	if len(r.aborts) != 1 {
@@ -122,7 +123,7 @@ func TestBudgetSentinelRefuse(t *testing.T) {
 	if err := s.Refuse(); err != nil {
 		t.Errorf("below limit should pass: %v", err)
 	}
-	r.cost = 10 // 恰好等于上限 → 拒绝
+	r.cost = 10 // đúng bằng ngưỡng trần → từ chối
 	if err := s.Refuse(); err == nil {
 		t.Error("at limit should refuse")
 	} else if !strings.Contains(err.Error(), "book_usd") {

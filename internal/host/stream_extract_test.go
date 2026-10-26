@@ -48,90 +48,90 @@ func mustNotContain(t *testing.T, got, want string) {
 // ── Chế độ chung: obj phẳng ──
 
 func TestExtract_PlanChapter(t *testing.T) {
-	in := `{"chapter":1,"title":"卖身契","goal":"建立矿场基线","conflict":"父债","hook":"灰矿","emotion_arc":"压抑"}`
+	in := `{"chapter":1,"title":"Hợp đồng bán thân","goal":"Dựng nền tảng cho mỏ quặng","conflict":"Nợ của cha","hook":"Quặng tro","emotion_arc":"Bức bố"}`
 	out := feedAll(t, "plan_chapter", in)
 	mustContain(t, out, "✻ Quy hoạch")
 	mustContain(t, out, "chapter: 1")
-	mustContain(t, out, "title: 卖身契")
-	mustContain(t, out, "goal: 建立矿场基线")
-	mustContain(t, out, "conflict: 父债")
-	mustContain(t, out, "hook: 灰矿")
-	mustContain(t, out, "emotion_arc: 压抑")
+	mustContain(t, out, "title: Hợp đồng bán thân")
+	mustContain(t, out, "goal: Dựng nền tảng cho mỏ quặng")
+	mustContain(t, out, "conflict: Nợ của cha")
+	mustContain(t, out, "hook: Quặng tro")
+	mustContain(t, out, "emotion_arc: Bức bố")
 }
 
 // ── Chế độ chung: obj lồng nhau + mảng ──
 
 func TestExtract_FoundationCharacters(t *testing.T) {
 	in := `{"type":"characters","scale":"long","content":[` +
-		`{"name":"沈砺","role":"主角","aliases":["灰脉","沈七"],"description":"边荒少年。","traits":["克制","多疑"]},` +
-		`{"name":"顾小灯","role":"重要配角","description":"药坊试药童女。"}` +
+		`{"name":"Thẩm Lệ","role":"Nhân vật chính","aliases":["Mạch tro","Thẩm Thất"],"description":"Thiếu niên vùng biên cương.","traits":["Tiết chế","Đa nghi"]},` +
+		`{"name":"Cố Tiểu Đăng","role":"Vai phò tá quan trọng","description":"Tuyển nữ thử dược trong tiệm thuốc."}` +
 		`]}`
 	out := feedAll(t, "save_foundation", in)
 	mustContain(t, out, "✻ Thiết lập")
 	mustContain(t, out, "type: characters")
 	mustContain(t, out, "scale: long")
 	// Dựng theo chế độ chung: mọi trường đều hiện, gồm cả aliases / traits trước đây bị danh sách trắng bỏ qua
-	mustContain(t, out, "name: 沈砺")
-	mustContain(t, out, "role: 主角")
+	mustContain(t, out, "name: Thẩm Lệ")
+	mustContain(t, out, "role: Nhân vật chính")
 	mustContain(t, out, "aliases:")
-	mustContain(t, out, "- 灰脉")
-	mustContain(t, out, "- 沈七")
-	mustContain(t, out, "description: 边荒少年。")
+	mustContain(t, out, "- Mạch tro")
+	mustContain(t, out, "- Thẩm Thất")
+	mustContain(t, out, "description: Thiếu niên vùng biên cương.")
 	mustContain(t, out, "traits:")
-	mustContain(t, out, "- 克制")
-	mustContain(t, out, "- 多疑")
-	mustContain(t, out, "name: 顾小灯")
-	mustContain(t, out, "role: 重要配角")
+	mustContain(t, out, "- Tiết chế")
+	mustContain(t, out, "- Đa nghi")
+	mustContain(t, out, "name: Cố Tiểu Đăng")
+	mustContain(t, out, "role: Vai phò tá quan trọng")
 }
 
 func TestExtract_FoundationLayeredOutline(t *testing.T) {
 	in := `{"type":"layered_outline","content":[` +
-		`{"index":1,"title":"矿火微明","arcs":[` +
-		`{"index":1,"title":"乌鳞矿役","goal":"求活","chapters":[` +
-		`{"chapter":1,"title":"卖身契","core_event":"被卖入矿场。"}` +
+		`{"index":1,"title":"Ánh lửa mỏ lấp lánh","arcs":[` +
+		`{"index":1,"title":"Lao động mỏ vảy huyền","goal":"Cầu sống","chapters":[` +
+		`{"chapter":1,"title":"Hợp đồng bán thân","core_event":"Bị bán vào mỏ quặng."}` +
 		`]}]}]}`
 	out := feedAll(t, "save_foundation", in)
 	mustContain(t, out, "type: layered_outline")
 	// Tập
 	mustContain(t, out, "index: 1")
-	mustContain(t, out, "title: 矿火微明")
+	mustContain(t, out, "title: Ánh lửa mỏ lấp lánh")
 	// Cung
-	mustContain(t, out, "title: 乌鳞矿役")
-	mustContain(t, out, "goal: 求活")
+	mustContain(t, out, "title: Lao động mỏ vảy huyền")
+	mustContain(t, out, "goal: Cầu sống")
 	// Chương
 	mustContain(t, out, "chapter: 1")
-	mustContain(t, out, "title: 卖身契")
-	mustContain(t, out, "core_event: 被卖入矿场。")
+	mustContain(t, out, "title: Hợp đồng bán thân")
+	mustContain(t, out, "core_event: Bị bán vào mỏ quặng.")
 	// Thụt lề lồng nhau thể hiện phân cấp
 	mustContain(t, out, "arcs:\n")
 	mustContain(t, out, "chapters:\n")
 }
 
 func TestExtract_FoundationUpdateCompass(t *testing.T) {
-	in := `{"type":"update_compass","content":{"ending_direction":"独自飞升 vs 切断血祭","open_threads":["灰脉钥匙","活人票账簿"],"estimated_scale":"5-6 卷"}}`
+	in := `{"type":"update_compass","content":{"ending_direction":"Một mình bay lên vs cắt đứt lễ hiến tế","open_threads":["Chìa khóa mạch tro","Sổ bộ phiếu người sống"],"estimated_scale":"5-6 tập"}}`
 	out := feedAll(t, "save_foundation", in)
 	mustContain(t, out, "type: update_compass")
-	mustContain(t, out, "ending_direction: 独自飞升 vs 切断血祭")
-	mustContain(t, out, "estimated_scale: 5-6 卷")
+	mustContain(t, out, "ending_direction: Một mình bay lên vs cắt đứt lễ hiến tế")
+	mustContain(t, out, "estimated_scale: 5-6 tập")
 	mustContain(t, out, "open_threads:")
-	mustContain(t, out, "- 灰脉钥匙")
-	mustContain(t, out, "- 活人票账簿")
+	mustContain(t, out, "- Chìa khóa mạch tro")
+	mustContain(t, out, "- Sổ bộ phiếu người sống")
 }
 
 // ── save_review: có object trong mảng + mảng số ──
 
 func TestExtract_SaveReview(t *testing.T) {
-	in := `{"chapter":3,"scope":"chapter","verdict":"polish","summary":"节奏略慢。","dimensions":[{"dimension":"hook","score":55,"verdict":"fail"}],"issues":[{"type":"hook","severity":"error","description":"章末缺钩子。"}],"affected_chapters":[3,4]}`
+	in := `{"chapter":3,"scope":"chapter","verdict":"polish","summary":"Nhịp truyện hơi chậm.","dimensions":[{"dimension":"hook","score":55,"verdict":"fail"}],"issues":[{"type":"hook","severity":"error","description":"Cuối chương thiếu điểm móc."}],"affected_chapters":[3,4]}`
 	out := feedAll(t, "save_review", in)
 	mustContain(t, out, "✻ Thẩm duyệt")
 	mustContain(t, out, "verdict: polish")
-	mustContain(t, out, "summary: 节奏略慢。")
+	mustContain(t, out, "summary: Nhịp truyện hơi chậm.")
 	mustContain(t, out, "dimension: hook")
 	mustContain(t, out, "score: 55")
 	mustContain(t, out, "verdict: fail")
 	mustContain(t, out, "type: hook")
 	mustContain(t, out, "severity: error")
-	mustContain(t, out, "description: 章末缺钩子。")
+	mustContain(t, out, "description: Cuối chương thiếu điểm móc.")
 	mustContain(t, out, "- 3")
 	mustContain(t, out, "- 4")
 }
@@ -139,31 +139,31 @@ func TestExtract_SaveReview(t *testing.T) {
 // ── commit_chapter: lồng nhau phức tạp ──
 
 func TestExtract_CommitChapter(t *testing.T) {
-	in := `{"chapter":1,"summary":"被卖入矿场。","characters":["沈砺","母亲"],"key_events":["签卖身契"],"foreshadow_updates":[{"id":"f1","action":"plant","description":"灰矿发烫。"}],"state_changes":[{"entity":"沈砺","field":"身份","old_value":"采药少年","new_value":"矿场杂役"}]}`
+	in := `{"chapter":1,"summary":"Bị bán vào mỏ quặng.","characters":["Thẩm Lệ","Mẹ"],"key_events":["Ký hợp đồng bán thân"],"foreshadow_updates":[{"id":"f1","action":"plant","description":"Quặng tro nóng bừng."}],"state_changes":[{"entity":"Thẩm Lệ","field":"Thân phận","old_value":"Thiếu niên hái dược","new_value":"Lao công mỏ quặng"}]}`
 	out := feedAll(t, "commit_chapter", in)
 	mustContain(t, out, "✻ Chốt chương")
-	mustContain(t, out, "summary: 被卖入矿场。")
-	mustContain(t, out, "- 沈砺")
-	mustContain(t, out, "- 母亲")
-	mustContain(t, out, "- 签卖身契")
+	mustContain(t, out, "summary: Bị bán vào mỏ quặng.")
+	mustContain(t, out, "- Thẩm Lệ")
+	mustContain(t, out, "- Mẹ")
+	mustContain(t, out, "- Ký hợp đồng bán thân")
 	mustContain(t, out, "id: f1")
 	mustContain(t, out, "action: plant")
-	mustContain(t, out, "description: 灰矿发烫。")
-	mustContain(t, out, "entity: 沈砺")
-	mustContain(t, out, "field: 身份")
-	mustContain(t, out, "old_value: 采药少年")
-	mustContain(t, out, "new_value: 矿场杂役")
+	mustContain(t, out, "description: Quặng tro nóng bừng.")
+	mustContain(t, out, "entity: Thẩm Lệ")
+	mustContain(t, out, "field: Thân phận")
+	mustContain(t, out, "old_value: Thiếu niên hái dược")
+	mustContain(t, out, "new_value: Lao công mỏ quặng")
 }
 
 // ── edit_chapter: chế độ chung + string nhiều dòng ──
 
 func TestExtract_EditChapter(t *testing.T) {
-	in := `{"chapter":24,"old_string":"沈砺低头不语。\n他攥紧了拳头。","new_string":"沈砺没有抬头，喉结滚动一下。\n指节攥得发白。","replace_all":false}`
+	in := `{"chapter":24,"old_string":"Thẩm Lệ cúi đầu không nói.\nAnh siết chặt nắm đấm.","new_string":"Thẩm Lệ không ngẩng đầu, cổ họng nhấp nhô một cái.\nCác đốt ngón siết đến bạc màu.","replace_all":false}`
 	out := feedAll(t, "edit_chapter", in)
 	mustContain(t, out, "✻ Hoàn thiện")
 	mustContain(t, out, "chapter: 24")
-	mustContain(t, out, "old_string: 沈砺低头不语。\n他攥紧了拳头。")
-	mustContain(t, out, "new_string: 沈砺没有抬头，喉结滚动一下。\n指节攥得发白。")
+	mustContain(t, out, "old_string: Thẩm Lệ cúi đầu không nói.\nAnh siết chặt nắm đấm.")
+	mustContain(t, out, "new_string: Thẩm Lệ không ngẩng đầu, cổ họng nhấp nhô một cái.\nCác đốt ngón siết đến bạc màu.")
 	mustContain(t, out, "replace_all: false")
 }
 
@@ -200,21 +200,21 @@ func TestExtract_NovelContextWithChapter(t *testing.T) {
 // ── Chế độ luồng trần ──
 
 func TestExtract_DraftChapterRawMarkdown(t *testing.T) {
-	in := `{"chapter":1,"content":"# 第一章\n\n沈砺站在矿口。\n"}`
+	in := `{"chapter":1,"content":"# Chương 1\n\nThẩm Lệ đứng ở cửa mỏ.\n"}`
 	out := feedAll(t, "draft_chapter", in)
 	// Luồng trần: không trang trí, không có tiền tố key
 	mustNotContain(t, out, "【")
 	mustNotContain(t, out, "content:")
 	mustNotContain(t, out, "chapter:")
-	mustContain(t, out, "# 第一章")
-	mustContain(t, out, "沈砺站在矿口。")
+	mustContain(t, out, "# Chương 1")
+	mustContain(t, out, "Thẩm Lệ đứng ở cửa mỏ.")
 }
 
 func TestExtract_DraftChapterIgnoresOtherFields(t *testing.T) {
 	// Các trường ngoài content phải bị bỏ qua im lặng, không làm bẩn output
-	in := `{"chapter":7,"summary":"meta","content":"正文","extra_array":[1,2,3]}`
+	in := `{"chapter":7,"summary":"meta","content":"Nội dung truyện","extra_array":[1,2,3]}`
 	out := feedAll(t, "draft_chapter", in)
-	mustContain(t, out, "正文")
+	mustContain(t, out, "Nội dung truyện")
 	mustNotContain(t, out, "meta")
 	mustNotContain(t, out, "summary")
 	mustNotContain(t, out, "7")
@@ -245,11 +245,11 @@ func TestExtract_ChunkedEqualsWhole(t *testing.T) {
 		tool  string
 		input string
 	}{
-		{"plan_chapter", `{"title":"卖身契","goal":"目标","conflict":"父债","hook":"灰矿","emotion_arc":"压抑"}`},
-		{"save_foundation", `{"type":"characters","content":[{"name":"沈砺","role":"主角","aliases":["灰脉","沈七"]}]}`},
-		{"save_foundation", `{"type":"layered_outline","content":[{"index":1,"title":"矿火","arcs":[{"index":1,"title":"矿役","goal":"求活","chapters":[{"chapter":1,"title":"卖身契"}]}]}]}`},
+		{"plan_chapter", `{"title":"Hợp đồng bán thân","goal":"Mục tiêu","conflict":"Nợ của cha","hook":"Quặng tro","emotion_arc":"Bức bố"}`},
+		{"save_foundation", `{"type":"characters","content":[{"name":"Thẩm Lệ","role":"Nhân vật chính","aliases":["Mạch tro","Thẩm Thất"]}]}`},
+		{"save_foundation", `{"type":"layered_outline","content":[{"index":1,"title":"Lửa mỏ","arcs":[{"index":1,"title":"Lao động mỏ","goal":"Cầu sống","chapters":[{"chapter":1,"title":"Hợp đồng bán thân"}]}]}]}`},
 		{"save_review", `{"verdict":"accept","summary":"good","dimensions":[{"dimension":"hook","score":85,"verdict":"pass"}],"issues":[]}`},
-		{"draft_chapter", `{"chapter":1,"content":"# 第一章\n\n正文。\n"}`},
+		{"draft_chapter", `{"chapter":1,"content":"# Chương 1\n\nNội dung truyện.\n"}`},
 	}
 	for _, tc := range cases {
 		whole := feedAll(t, tc.tool, tc.input)
@@ -265,29 +265,30 @@ func TestExtract_ChunkedEqualsWhole(t *testing.T) {
 // ── Ký tự thoát và Unicode ──
 
 func TestExtract_EscapeSequences(t *testing.T) {
-	in := `{"goal":"行1\n行2 \"引号\" \\反斜线 中字"}`
+	in := `{"goal":"Dòng1\nDòng2 \"dấu nháy\" \\dấu chéo chữ N"}`
 	out := feedAll(t, "plan_chapter", in)
-	mustContain(t, out, "行1\n行2")
-	mustContain(t, out, `"引号"`)
-	mustContain(t, out, `\反斜线`)
-	mustContain(t, out, "中字")
+	mustContain(t, out, "Dòng1\nDòng2")
+	mustContain(t, out, `"dấu nháy"`)
+	mustContain(t, out, `\dấu chéo chữ N`)
+	mustContain(t, out, "chữ N")
 }
 
 func TestExtract_UnicodeEscape(t *testing.T) {
-	// \u4e2d giải mã thành 中
-	in := `{"goal":"中文"}`
+	// Dạng \uXXXX giải mã thành ký tự thật; ở đây dữ liệu đưa vào ký tự đã giải
+	// mã (một ký tự Unicode nhiều byte) để kiểm tra đường truyền byte.
+	in := `{"goal":"Tiếng Việt"}`
 	out := feedAll(t, "plan_chapter", in)
-	mustContain(t, out, "中文")
+	mustContain(t, out, "Tiếng Việt")
 }
 
 // ── Container rỗng / cấu trúc đơn giản ──
 
 func TestExtract_EmptyArrays(t *testing.T) {
-	in := `{"key_events":[],"characters":["沈砺"]}`
+	in := `{"key_events":[],"characters":["Thẩm Lệ"]}`
 	out := feedAll(t, "commit_chapter", in)
 	mustContain(t, out, "key_events:")
 	mustContain(t, out, "characters:")
-	mustContain(t, out, "- 沈砺")
+	mustContain(t, out, "- Thẩm Lệ")
 }
 
 func TestExtract_BoolAndNull(t *testing.T) {
@@ -325,14 +326,14 @@ func TestExtract_DeeplyNested(t *testing.T) {
 // ── Chunk cắt giữa ký tự UTF-8 nhiều byte ──
 
 func TestExtract_ChunkSplitInUTF8(t *testing.T) {
-	// "中" dài 3 byte (E4 B8 AD). Đặt kích thước lát ở 1 để mỗi byte được nạp riêng.
-	in := `{"goal":"中文测试"}`
+	// "ệ" dài 3 byte (E1 BB 87). Đặt kích thước lát ở 1 để mỗi byte được nạp riêng.
+	in := `{"goal":"Tiếng Việt"}`
 	whole := feedAll(t, "plan_chapter", in)
 	chunked := feedChunked(t, "plan_chapter", in, 1)
 	if whole != chunked {
 		t.Errorf("byte-by-byte chunked output differs from whole:\n--- whole ---\n%s\n--- chunked ---\n%s", whole, chunked)
 	}
-	mustContain(t, chunked, "中文测试")
+	mustContain(t, chunked, "Tiếng Việt")
 }
 
 // ── Chế độ luồng trần: key trùng tên trong obj lồng nhau không được nhận nhầm ──
@@ -340,10 +341,10 @@ func TestExtract_ChunkSplitInUTF8(t *testing.T) {
 func TestExtract_NakedKeyOnlyTopLevel(t *testing.T) {
 	// "content" xuất hiện hai lần: bên trong object lồng + ở cấp ngoài cùng. Chỉ bản
 	// ở cấp ngoài cùng được trả ra.
-	in := `{"meta":{"content":"嵌套不应输出"},"content":"顶层应输出"}`
+	in := `{"meta":{"content":"Lồng không nên xuất ra"},"content":"Cấp ngoài cùng nên xuất ra"}`
 	out := feedAll(t, "draft_chapter", in)
-	mustContain(t, out, "顶层应输出")
-	mustNotContain(t, out, "嵌套不应输出")
+	mustContain(t, out, "Cấp ngoài cùng nên xuất ra")
+	mustNotContain(t, out, "Lồng không nên xuất ra")
 }
 
 // ── Chế độ luồng trần: content không phải string thì bỏ qua toàn bộ ──

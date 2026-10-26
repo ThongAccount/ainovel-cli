@@ -8,9 +8,12 @@ import (
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// TestHostReopen 守护 /reopen 的用户级重开出口：完本是重决策，重开只能由用户显式
-// 发起——未完结拒绝、运行中拒绝；重开成功把 phase 回退 writing，附带的续写方向登记为
-// 待处理干预（PendingSteer），恢复时先经 Arbiter 裁定注入再续跑。
+// TestHostReopen bảo vệ lối thoát mở lại ở cấp người dùng của /reopen: hoàn thành
+// tác phẩm là một quyết định lớn, mở lại chỉ được người dùng chủ động yêu cầu —
+// chưa hoàn thành thì từ chối, đang chạy thì từ chối; mở lại thành công sẽ đưa
+// phase về writing, hướng viết tiếp đi kèm được đăng ký thành can thiệp chờ xử
+// lý (PendingSteer), lúc khôi phục sẽ được Tài phán phán quyết rồi chèn vào
+// trước khi viết tiếp.
 func TestHostReopen(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	h := &Host{store: st, events: make(chan Event, 8)}
@@ -19,35 +22,38 @@ func TestHostReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := h.Reopen(""); err == nil {
-		t.Fatal("未完结的书应拒绝重开")
+		t.Fatal("sách chưa hoàn thành phải bị từ chối mở lại")
 	}
 
 	_ = st.Progress.UpdatePhase(domain.PhaseWriting)
 	if err := st.Progress.MarkComplete(); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.Reopen("以八十年大限开新卷"); err != nil {
-		t.Fatalf("完结书重开应成功：%v", err)
+	if err := h.Reopen("Mở tập mới với giới hạn tám mươi năm"); err != nil {
+		t.Fatalf("mở lại sách đã hoàn thành phải thành công: %v", err)
 	}
 	p, _ := st.Progress.Load()
 	if p.Phase != domain.PhaseWriting {
-		t.Fatalf("重开后 phase 应为 writing，得 %s", p.Phase)
+		t.Fatalf("sau khi mở lại phase phải là writing, got %s", p.Phase)
 	}
 	if len(p.PendingRewrites) != 0 || p.ReopenedFromComplete {
-		t.Fatalf("续写重开不得携带返工语义：%+v", p)
+		t.Fatalf("mở lại để viết tiếp không được mang ngữ nghĩa làm lại: %+v", p)
 	}
-	// 重开计数必须落盘：再完结的 progress digest 才会与上次不同——checkpoint 同 digest
-	// 幂等去重，字节相同的再完结无新 checkpoint，StopGuard 会把成功完本误判为空转终止。
+	// Bộ đếm mở lại phải được ghi xuống đĩa: digest progress của lần hoàn thành
+	// lại mới phải khác lần trước — checkpoint có cùng digest được khử trùng lặp
+	// theo tính lũy đẳng, lần hoàn thành lại với byte giống hệt sẽ không sinh
+	// checkpoint mới, và StopGuard sẽ nhầm tác phẩm hoàn thành thành dừng vì
+	// quay vòng không tiến triển.
 	if p.ReopenCount != 1 {
-		t.Fatalf("重开计数应为 1，得 %d", p.ReopenCount)
+		t.Fatalf("bộ đếm mở lại phải là 1, got %d", p.ReopenCount)
 	}
 	meta, _ := st.RunMeta.Load()
-	if meta == nil || !strings.Contains(meta.PendingSteer, "八十年大限") {
-		t.Fatalf("续写方向应登记为待处理干预，得 %+v", meta)
+	if meta == nil || !strings.Contains(meta.PendingSteer, "tám mươi năm") {
+		t.Fatalf("hướng viết tiếp phải được đăng ký thành can thiệp chờ xử lý, got %+v", meta)
 	}
 
 	running := &Host{store: st, lifecycle: lifecycleRunning, events: make(chan Event, 1)}
 	if err := running.Reopen(""); err == nil {
-		t.Fatal("引擎运行中应拒绝重开")
+		t.Fatal("khi engine đang chạy phải từ chối mở lại")
 	}
 }

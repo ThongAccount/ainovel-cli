@@ -1,10 +1,14 @@
 package host
 
-// Engine 端到端集成测试(engine-rfc.md §7 原型验收):
-// 真实 store + 真实 Worker 工具 + 脚本化 ChatModel,验证
-//  1. Route 驱动的完整写书链路:写第1章 → 写第2章 → 完本 → 引擎自然停机
-//  2. Worker 失败路径:重试一次 → Arbiter worker_failure 裁定 abort → 暂停 + 审计落盘
-//  3. 僵局路径:同指令无进展 ×3 → Arbiter deadlock 裁定 → 审计落盘 → abort 停机
+// Kiểm thử tích hợp end-to-end của Engine (nghiệm thu prototype theo
+// engine-rfc.md §7):
+// store thật + công cụ Worker thật + ChatModel theo kịch bản, kiểm tra
+//  1. Chuỗi viết sách đầy đủ do Route dẫn: viết chương 1 → viết chương 2 →
+//     hoàn thành → engine tự dừng
+//  2. Đường lỗi Worker: thử lại một lần → Tài phán phán quyết abort cho
+//     worker_failure → tạm dừng + ghi kiểm toán xuống đĩa
+//  3. Đường bế tắc: cùng chỉ dẫn không tiến triển ×3 → Tài phán phán quyết
+//     deadlock → ghi kiểm toán xuống đĩa → abort dừng máy
 
 import (
 	"context"
@@ -30,7 +34,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/tools"
 )
 
-// scriptedChatModel 按回调产出响应的最小 ChatModel。
+// scriptedChatModel là ChatModel tối thiểu sinh phản hồi theo callback.
 type scriptedChatModel struct {
 	fn func(msgs []agentcore.Message) agentcore.Message
 }
@@ -50,12 +54,12 @@ func TestFailureFactsKeepPartialStateAndWarnings(t *testing.T) {
 
 	e := &engine{store: st}
 	workerErr := fmt.Errorf("writer exhausted: %w", agentcore.ErrMaxTurns)
-	facts := e.failureFacts("worker_failure", &flow.Instruction{Agent: "writer", Task: "续写"}, workerErr)
+	facts := e.failureFacts("worker_failure", &flow.Instruction{Agent: "writer", Task: "viết tiếp"}, workerErr)
 	if facts.ErrorKind != "max_turns" || facts.Phase != string(domain.PhaseInit) {
-		t.Fatalf("应保留错误类型和可读取的进度事实: %+v", facts)
+		t.Fatalf("phải giữ loại lỗi và sự thật tiến độ đọc được: %+v", facts)
 	}
 	if len(facts.FactWarnings) == 0 {
-		t.Fatalf("不可读的基础事实必须作为告警交给 Arbiter: %+v", facts)
+		t.Fatalf("sự thật nền tảng không đọc được phải được giao cho Tài phán dưới dạng cảnh báo: %+v", facts)
 	}
 }
 
@@ -99,13 +103,13 @@ func TestInterventionDispatchTaskPreservesOriginalAuthority(t *testing.T) {
 
 	got := interventionDispatchTask(task, original, hostTextsVI)
 	if !strings.Contains(got, task) {
-		t.Fatalf("派单任务丢失: %q", got)
+		t.Fatalf("mất nhiệm vụ phân công: %q", got)
 	}
 	if !strings.Contains(got, original) {
-		t.Fatalf("用户原始干预未被逐字保留: %q", got)
+		t.Fatalf("can thiệp gốc của người dùng không được giữ nguyên từng chữ: %q", got)
 	}
 	if !strings.Contains(got, "nguồn duy nhất cho phép sửa đổi") {
-		t.Fatalf("缺少授权边界说明: %q", got)
+		t.Fatalf("thiếu phần mô tả ranh giới ủy quyền: %q", got)
 	}
 
 	// bản tiếng Trung phải giữ nguyên câu gốc của dự án
@@ -132,8 +136,9 @@ func (m *scriptedChatModel) GenerateStream(ctx context.Context, msgs []agentcore
 
 func (m *scriptedChatModel) SupportsTools() bool { return true }
 
-// editThenCancelModel 复现 #84：每次 Worker 都成功产生一个内容不同的
-// edit checkpoint，随后在同一 run 内返回 context canceled，始终没有 commit。
+// editThenCancelModel tái hiện #84: mỗi Worker đều thành công tạo ra một
+// edit checkpoint khác nội dung, rồi trả về context canceled trong cùng một
+// run, không bao giờ commit.
 type editThenCancelModel struct {
 	edits atomic.Int32
 }
@@ -145,8 +150,8 @@ func (m *editThenCancelModel) Generate(_ context.Context, msgs []agentcore.Messa
 	n := int(m.edits.Add(1))
 	return &agentcore.LLMResponse{Message: testToolCallMsg("edit_chapter", map[string]any{
 		"chapter":    1,
-		"old_string": fmt.Sprintf("版本%d", n-1),
-		"new_string": fmt.Sprintf("版本%d", n),
+		"old_string": fmt.Sprintf("phiên bản %d", n-1),
+		"new_string": fmt.Sprintf("phiên bản %d", n),
 	})}, nil
 }
 
@@ -163,8 +168,9 @@ func (m *editThenCancelModel) GenerateStream(ctx context.Context, msgs []agentco
 
 func (m *editThenCancelModel) SupportsTools() bool { return true }
 
-// providerNetworkModel 模拟 Worker 在任何模型输出前即遭遇瞬态网络故障。
-// MaxRetries=0 时每次 subagent.Run 对应一次调用，便于验证 Engine 重试计数。
+// providerNetworkModel mô phỏng Worker gặp lỗi mạng tức thời trước khi có
+// bất kỳ đầu ra mô hình nào. Khi MaxRetries=0 thì mỗi subagent.Run tương ứng
+// với một lần gọi, thuận tiện để kiểm chứng bộ đếm thử lại của Engine.
 type providerNetworkModel struct {
 	calls atomic.Int32
 }
@@ -205,8 +211,9 @@ func testTextMsg(text string) agentcore.Message {
 // "Viết lại chương 3", "Hoàn thiện chương 3").
 var chapterRe = regexp.MustCompile(`写第 (\d+) 章|(?:[Vv]iết(?:\s+\S+){0,2}\s+|[Hh]oàn thiện\s+)chương (\d+)`)
 
-// scriptedWriterModel 按对话内已有的 tool 结果数决定下一步,
-// 走完整 plan → draft → check → commit 序列(真实工具,真实落盘)。
+// scriptedWriterModel quyết định bước kế tiếp theo số kết quả tool đã có
+// trong hội thoại, đi qua trọn vẹn chuỗi plan → draft → check → commit
+// (công cụ thật, ghi xuống đĩa thật).
 func scriptedWriterModel() *scriptedChatModel {
 	return &scriptedChatModel{fn: func(msgs []agentcore.Message) agentcore.Message {
 		chapter := 0
@@ -228,20 +235,20 @@ func scriptedWriterModel() *scriptedChatModel {
 		switch toolResults {
 		case 0:
 			return testToolCallMsg("plan_chapter", map[string]any{
-				"chapter": chapter, "title": fmt.Sprintf("第%d章", chapter),
-				"goal": "推进主线", "conflict": "主角遇阻", "hook": "悬念收尾",
+				"chapter": chapter, "title": fmt.Sprintf("Chương %d", chapter),
+				"goal": "đẩy mạnh tuyến chính", "conflict": "nhân vật chính gặp trở ngại", "hook": "kết chương bằng tình huống treo",
 			})
 		case 1:
 			return testToolCallMsg("draft_chapter", map[string]any{
 				"chapter": chapter, "mode": "write",
-				"content": strings.Repeat(fmt.Sprintf("第%d章的正文段落，主角在黑暗中摸索前行。", chapter), 20),
+				"content": strings.Repeat(fmt.Sprintf("Đoạn nội dung của chương %d, nhân vật chính mò mò tiến trong bóng tối.", chapter), 20),
 			})
 		case 2:
 			return testToolCallMsg("check_consistency", map[string]any{"chapter": chapter})
 		default:
 			return testToolCallMsg("commit_chapter", map[string]any{
-				"chapter": chapter, "title": fmt.Sprintf("第%d章", chapter), "summary": fmt.Sprintf("第%d章摘要", chapter),
-				"characters": []string{"主角"}, "key_events": []string{"推进"},
+				"chapter": chapter, "title": fmt.Sprintf("Chương %d", chapter), "summary": fmt.Sprintf("Tóm tắt chương %d", chapter),
+				"characters": []string{"Nhân vật chính"}, "key_events": []string{"Tiến triển"},
 				"timeline_events": []any{}, "foreshadow_updates": []any{},
 				"relationship_changes": []any{}, "state_changes": []any{}, "cast_intros": []any{},
 				"hook_type": "crisis", "dominant_strand": "quest", "feedback": nil,
@@ -250,7 +257,8 @@ func scriptedWriterModel() *scriptedChatModel {
 	}}
 }
 
-// newTestEngine 组装带真实 store/observer 的引擎;返回引擎、事件采集与完成信号。
+// newTestEngine lắp ráp engine với store/observer thật; trả về engine, bộ thu
+// sự kiện và tín hiệu hoàn tất.
 func newTestEngine(t *testing.T, st *storepkg.Store, workers *subagent.Runner, arbiterModel agentcore.ChatModel) (*engine, *[]Event, chan struct{}) {
 	t.Helper()
 	if err := st.RunMeta.Init("default", "test", "test"); err != nil {
@@ -295,7 +303,7 @@ func waitEngineDone(t *testing.T, done chan struct{}) {
 	select {
 	case <-done:
 	case <-time.After(30 * time.Second):
-		t.Fatal("引擎未在期限内停机")
+		t.Fatal("engine không dừng trong thời hạn")
 	}
 }
 
@@ -320,9 +328,9 @@ func TestEngine_ReviewPermitWritesExactlyOneNewChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "一", CoreEvent: "a"},
-		{Chapter: 2, Title: "二", CoreEvent: "b"},
-		{Chapter: 3, Title: "三", CoreEvent: "c"},
+		{Chapter: 1, Title: "Một", CoreEvent: "a"},
+		{Chapter: 2, Title: "Hai", CoreEvent: "b"},
+		{Chapter: 3, Title: "Ba", CoreEvent: "c"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -351,11 +359,11 @@ func TestEngine_ReviewPermitWritesExactlyOneNewChapter(t *testing.T) {
 		t.Fatalf("load progress: %v", err)
 	}
 	if len(progress.CompletedChapters) != 1 || progress.CompletedChapters[0] != 1 {
-		t.Fatalf("一个许可必须恰好只稳定一个新章: %v", progress.CompletedChapters)
+		t.Fatalf("một giấy phép phải đúng và chỉ ổn định một chương mới: %v", progress.CompletedChapters)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvancePermitChapter != 0 {
-		t.Fatalf("稳定提交后许可必须消费: %+v", meta)
+		t.Fatalf("sau khi commit ổn định thì giấy phép phải được tiêu thụ: %+v", meta)
 	}
 }
 
@@ -372,27 +380,28 @@ func TestEngine_StalePairedDispatchDoesNotBypassHold(t *testing.T) {
 	}
 	e, _, _ := newTestEngine(t, st, subagent.NewRunner(), nil)
 	e.pending = []controlOp{{
-		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "先停下"},
-		dispatch: &arbiter.DispatchOp{Agent: "editor", Task: "过期任务"},
+		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "Dừng trước đã"},
+		dispatch: &arbiter.DispatchOp{Agent: "editor", Task: "Nhiệm vụ quá hạn"},
 		facts:    arbiter.InterventionFacts{Phase: string(domain.PhaseOutline)},
 	}}
 
 	if e.applyPendingOps(context.Background()) {
-		t.Fatal("事实过期的配对派单未落入 next 时不得绕过 Gate")
+		t.Fatal("phải phân công đi kèm sự thật đã hết hạn mà chưa rơi vào next thì không được lách Gate")
 	}
 	if e.next != nil || e.deferGateForNext {
-		t.Fatalf("过期派单不得留下可执行指令: next=%+v defer=%v", e.next, e.deferGateForNext)
+		t.Fatalf("phải phân công quá hạn không được để lại chỉ dẫn có thể thực thi: next=%+v defer=%v", e.next, e.deferGateForNext)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvanceHold != nil {
-		t.Fatalf("配对派单过期时不得留下孤立 hold: %+v", meta.AdvanceHold)
+		t.Fatalf("khi phản công đi kèm đã quá hạn thì không được để lại hold lẻ loi: %+v", meta.AdvanceHold)
 	}
 	if e.gate.HandleBoundary() {
-		t.Fatal("无孤立 hold 时 Gate 不应伪造暂停")
+		t.Fatal("khi không có hold lẻ loi, Gate không được tự bịa ra lệnh tạm dừng")
 	}
 }
 
-// TestEngine_WritesBookToCompletion 完整链路:两章非分层书从 writing 写到 complete。
+// TestEngine_WritesBookToCompletion chuỗi đầy đủ: cuốn sách hai chương không
+// phân tầng đi từ writing tới complete.
 func TestEngine_WritesBookToCompletion(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -405,8 +414,8 @@ func TestEngine_WritesBookToCompletion(t *testing.T) {
 		t.Fatalf("phase: %v", err)
 	}
 	if err := st.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "第一章", CoreEvent: "开端"},
-		{Chapter: 2, Title: "第二章", CoreEvent: "终局"},
+		{Chapter: 1, Title: "Chương 1", CoreEvent: "Mở đầu"},
+		{Chapter: 2, Title: "Chương 2", CoreEvent: "Kết cục"},
 	}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
@@ -436,12 +445,13 @@ func TestEngine_WritesBookToCompletion(t *testing.T) {
 		t.Fatalf("load progress: %v", err)
 	}
 	if progress.Phase != domain.PhaseComplete {
-		t.Fatalf("两章写满应完本, got phase=%s completed=%v", progress.Phase, progress.CompletedChapters)
+		t.Fatalf("viết đủ hai chương thì phải hoàn thành, got phase=%s completed=%v", progress.Phase, progress.CompletedChapters)
 	}
 	if len(progress.CompletedChapters) != 2 {
-		t.Fatalf("应完成 2 章, got %v", progress.CompletedChapters)
+		t.Fatalf("phải hoàn thành 2 chương, got %v", progress.CompletedChapters)
 	}
-	// 事件形状:每章一条 DISPATCH(engine 发起),TOOL 行来自进度中继
+	// Hình dạng sự kiện: mỗi chương một DISPATCH (engine phát ra), dòng TOOL đến
+	// từ bộ rút tiến độ
 	var dispatches, toolRows int
 	for _, ev := range *events {
 		switch ev.Category {
@@ -452,15 +462,16 @@ func TestEngine_WritesBookToCompletion(t *testing.T) {
 		}
 	}
 	if dispatches < 2 {
-		t.Fatalf("应至少 2 条 DISPATCH 事件, got %d", dispatches)
+		t.Fatalf("phải có ít nhất 2 sự kiện DISPATCH, got %d", dispatches)
 	}
 	if toolRows == 0 {
-		t.Fatal("Worker 工具进度未经中继投影(TOOL 行缺失)")
+		t.Fatal("tiến độ công cụ Worker chưa được chiếu qua bộ rút (thiếu dòng TOOL)")
 	}
 }
 
-// TestEngine_WorkerFailureConsultsArbiterAndAborts 失败路径:
-// 空转 writer 被 StopGuard 升级 → 重试一次 → Arbiter 裁定 abort → 暂停 + 审计。
+// TestEngine_WorkerFailureConsultsArbiterAndAborts đường lỗi:
+// writer mắc kẹt bị StopGuard nâng cấp → thử lại một lần → Tài phán phán quyết
+// abort → tạm dừng + kiểm toán.
 func TestEngine_WorkerFailureConsultsArbiterAndAborts(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -472,14 +483,15 @@ func TestEngine_WorkerFailureConsultsArbiterAndAborts(t *testing.T) {
 	if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("phase: %v", err)
 	}
-	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "一", CoreEvent: "s"}}); err != nil {
+	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Một", CoreEvent: "s"}}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
 
 	var runs atomic.Int32
-	// writer 每轮只回文字不落盘 → guard.NewWriterStopGuard 连续拦截后升级 → Execute 报错
+	// writer mỗi vòng chỉ trả lời chữ, không ghi xuống đĩa → guard.NewWriterStopGuard
+	// chặn liên tiếp rồi nâng cấp → Execute báo lỗi
 	idle := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		return testTextMsg("我写完了(其实什么都没做)")
+		return testTextMsg("Tôi đã viết xong (thực ra chẳng làm gì cả)")
 	}}
 	writer := subagent.Config{
 		Name: "writer", Description: "idle writer",
@@ -489,9 +501,9 @@ func TestEngine_WorkerFailureConsultsArbiterAndAborts(t *testing.T) {
 			return failNTimesGuard()
 		},
 	}
-	// Arbiter 裁定 abort
+	// Tài phán phán quyết abort
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"writer 反复空转,建议人工检查模型配置"}`)
+		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"writer lặp lại không tiến triển, nên kiểm tra cấu hình mô hình bằng tay"}`)
 	}}
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(writer), arb)
 
@@ -501,7 +513,7 @@ func TestEngine_WorkerFailureConsultsArbiterAndAborts(t *testing.T) {
 	waitEngineDone(t, done)
 
 	if got := runs.Load(); got != 2 {
-		t.Fatalf("首败应重试一次(共 2 次 spawn), got %d", got)
+		t.Fatalf("lần thất bại đầu phải được thử lại một lần (tổng 2 lần spawn), got %d", got)
 	}
 	recs, err := st.Decisions.Recent(10)
 	if err != nil {
@@ -512,16 +524,17 @@ func TestEngine_WorkerFailureConsultsArbiterAndAborts(t *testing.T) {
 		if r.Kind == "worker_failure" && r.Decider == "arbiter" {
 			found = true
 			if !strings.Contains(string(r.Decision), "abort") {
-				t.Fatalf("裁定内容应含 abort: %s", r.Decision)
+				t.Fatalf("nội dung phán quyết phải chứa abort: %s", r.Decision)
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("worker_failure 裁定必须落盘: %+v", recs)
+		t.Fatalf("phán quyết worker_failure phải được ghi xuống đĩa: %+v", recs)
 	}
 }
 
-// seedStuckRewrite 造出"第 2 章已完成并排进返工队列"的现场。
+// seedStuckRewrite dựng hiện trường "chương 2 đã hoàn thành và được xếp vào
+// hàng đợi làm lại".
 func seedStuckRewrite(t *testing.T, st *storepkg.Store) {
 	t.Helper()
 	if err := st.Init(); err != nil {
@@ -536,7 +549,7 @@ func seedStuckRewrite(t *testing.T, st *storepkg.Store) {
 	if err := st.Progress.MarkChapterComplete(2, 3000, "", ""); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if err := st.Progress.SetPendingRewrites([]int{2}, "评审要求重写"); err != nil {
+	if err := st.Progress.SetPendingRewrites([]int{2}, "Thẩm duyệt yêu cầu viết lại"); err != nil {
 		t.Fatalf("pending: %v", err)
 	}
 	if err := st.Progress.SetFlow(domain.FlowRewriting); err != nil {
@@ -580,17 +593,19 @@ func TestEngine_DeadlockAbortDropsStuckRewrite(t *testing.T) {
 	}
 }
 
-// TestEngine_DropStuckRewriteOnlyTouchesQueuedChapter 出队是破坏性动作，误伤面必须钉死：
-// 只有"排在返工队列里的那一章"可以被移出，其余指令一律不动队列。
+// TestEngine_DropStuckRewriteOnlyTouchesQueuedChapter ra khỏi hàng đợi là hành
+// động phá hủy, phạm vi ảnh hưởng phải được đóng đinh: chỉ "chương đang nằm
+// trong hàng đợi làm lại" mới được rút ra, mọi chỉ dẫn khác đều không được đụng
+// tới hàng đợi.
 func TestEngine_DropStuckRewriteOnlyTouchesQueuedChapter(t *testing.T) {
 	cases := []struct {
 		name string
 		inst *flow.Instruction
 	}{
-		{"非 writer 指令", &flow.Instruction{Agent: "editor", Task: "弧级评审"}},
-		{"不涉及章节的 writer 指令", &flow.Instruction{Agent: "writer", Task: "续写"}},
-		{"不在队列里的续写章", &flow.Instruction{Agent: "writer", Task: "写第 3 章", Chapter: 3}},
-		{"空指令", nil},
+		{"Chỉ thị không phải writer", &flow.Instruction{Agent: "editor", Task: "Thẩm duyệt mức cung"}},
+		{"Chỉ thị writer không liên quan chương nào", &flow.Instruction{Agent: "writer", Task: "Viết tiếp"}},
+		{"Chương viết tiếp không có trong hàng đợi", &flow.Instruction{Agent: "writer", Task: "Viết chương 3", Chapter: 3}},
+		{"Chỉ thị rỗng", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -598,22 +613,23 @@ func TestEngine_DropStuckRewriteOnlyTouchesQueuedChapter(t *testing.T) {
 			seedStuckRewrite(t, st)
 			e, _, _ := newTestEngine(t, st, subagent.NewRunner(), nil)
 			if e.dropStuckRewrite(tc.inst) {
-				t.Fatal("不该出队")
+				t.Fatal("không nên ra khỏi hàng đợi")
 			}
 			p, err := st.Progress.Load()
 			if err != nil {
 				t.Fatalf("progress: %v", err)
 			}
 			if len(p.PendingRewrites) != 1 || p.PendingRewrites[0] != 2 {
-				t.Fatalf("返工队列不得被误伤: %v", p.PendingRewrites)
+				t.Fatalf("hàng đợi làm lại không được bị ảnh hưởng nhầm: %v", p.PendingRewrites)
 			}
 		})
 	}
 }
 
-// TestEngine_TransientProviderFailuresDoNotBecomeDeadlock 回归第 135 章故障链：
-// 两轮网络失败后的 worker_failure=retry 不能在下一轮被 trackDeadlock 当成
-// “同一写作任务连续无进展”并触发 deadlock 改派。
+// TestEngine_TransientProviderFailuresDoNotBecomeDeadlock hồi quy chuỗi lỗi ở
+// chương 135: worker_failure=retry sau hai vòng lỗi mạng không được bị
+// trackDeadlock ở vòng kế tiếp coi là “cùng một nhiệm vụ viết liên tục không
+// tiến triển” rồi kích hoạt đổi phân công do bế tắc.
 func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -625,7 +641,7 @@ func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 	if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("phase: %v", err)
 	}
-	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "第一章", CoreEvent: "开端"}}); err != nil {
+	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Chương 1", CoreEvent: "Mở đầu"}}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
 
@@ -637,9 +653,9 @@ func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 	var arbiterCalls atomic.Int32
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
 		if arbiterCalls.Add(1) == 1 {
-			return testTextMsg(`{"action":"retry","dispatch":null,"reason":"瞬态网络故障，重试原任务"}`)
+			return testTextMsg(`{"action":"retry","dispatch":null,"reason":"Lỗi mạng tức thời, thử lại nhiệm vụ gốc"}`)
 		}
-		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"网络持续不可用，暂停等待恢复"}`)
+		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"Mạng tiếp tục không dùng được, tạm dừng chờ phục hồi"}`)
 	}}
 	e, events, done := newTestEngine(t, st, subagent.NewRunner(writer), arb)
 
@@ -649,7 +665,7 @@ func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 	waitEngineDone(t, done)
 
 	if got := network.calls.Load(); got != 4 {
-		t.Fatalf("两轮 Engine 失败周期各执行 2 次 Worker，got %d", got)
+		t.Fatalf("hai chu kỳ lỗi của Engine chạy 2 lần Worker mỗi chu kỳ, got %d", got)
 	}
 	recs, err := st.Decisions.Recent(10)
 	if err != nil {
@@ -665,7 +681,7 @@ func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 		}
 	}
 	if workerFailures != 2 || deadlocks != 0 {
-		t.Fatalf("网络失败只能进入 worker_failure，got worker_failure=%d deadlock=%d records=%+v", workerFailures, deadlocks, recs)
+		t.Fatalf("lỗi mạng chỉ được ghi vào worker_failure, got worker_failure=%d deadlock=%d records=%+v", workerFailures, deadlocks, recs)
 	}
 	var failedDispatches, duplicateErrors int
 	for _, ev := range *events {
@@ -677,11 +693,12 @@ func TestEngine_TransientProviderFailuresDoNotBecomeDeadlock(t *testing.T) {
 		}
 	}
 	if failedDispatches != 4 || duplicateErrors != 0 {
-		t.Fatalf("每次 Worker 失败应只更新 DISPATCH，got dispatch=%d duplicate_error=%d events=%+v", failedDispatches, duplicateErrors, *events)
+		t.Fatalf("mỗi lần Worker thất bại chỉ được cập nhật DISPATCH, got dispatch=%d duplicate_error=%d events=%+v", failedDispatches, duplicateErrors, *events)
 	}
 }
 
-// failNTimesGuard 立即升级的 StopGuard(模拟空转熔断)。
+// failNTimesGuard là StopGuard nâng cấp ngay lập tức (mô phỏng ngắt mạch do
+// mắc kẹt).
 func failNTimesGuard() agentcore.StopGuard {
 	return func(context.Context, agentcore.StopInfo) agentcore.StopDecision {
 		return agentcore.StopDecision{Allow: false, Escalate: true}
@@ -823,8 +840,9 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 	}
 }
 
-// TestEngine_DeadlockConsultsArbiter 僵局路径:规划补齐指令连续重现
-// → 第 3 次咨询 Arbiter → abort 停机 + deadlock 审计。
+// TestEngine_DeadlockConsultsArbiter đường bế tắc: chỉ dẫn bổ sung quy hoạch
+// lặp lại liên tiếp → lần thứ 3 hỏi ý kiến Tài phán → abort dừng máy +
+// kiểm toán deadlock.
 func TestEngine_DeadlockConsultsArbiter(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -833,21 +851,23 @@ func TestEngine_DeadlockConsultsArbiter(t *testing.T) {
 	if err := st.Progress.Init(3); err != nil {
 		t.Fatalf("progress: %v", err)
 	}
-	// 规划期 + tier 已知 + 缺项恒在 → Route 每轮产出同一补齐指令
+	// Giai đoạn quy hoạch + tier đã biết + thiếu mục vẫn còn → Route mỗi vòng
+	// vẫn sinh ra cùng một chỉ dẫn bổ sung
 	if err := st.RunMeta.SetPlanningTier(domain.PlanningTierLong); err != nil {
 		t.Fatalf("tier: %v", err)
 	}
 
-	// architect 无守卫、成功返回但不落任何盘 → Route 指令恒定
+	// architect không có guard, trả lời thành công nhưng không ghi gì xuống đĩa
+	// → chỉ dẫn Route không đổi
 	lazy := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		return testTextMsg("知道了(什么也不做)")
+		return testTextMsg("Biết rồi (chẳng làm gì cả)")
 	}}
 	architect := subagent.Config{
 		Name: "architect_long", Description: "lazy architect",
 		Model: lazy, SystemPrompt: "test", MaxTurns: 5,
 	}
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"规划师反复无产出"}`)
+		return testTextMsg(`{"action":"abort","dispatch":null,"reason":"Nhà quy hoạch lặp lại không có sản phẩm"}`)
 	}}
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(architect), arb)
 
@@ -867,13 +887,14 @@ func TestEngine_DeadlockConsultsArbiter(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("deadlock 裁定必须落盘: %+v", recs)
+		t.Fatalf("phán quyết deadlock phải được ghi xuống đĩa: %+v", recs)
 	}
 }
 
-// TestEngine_IntermediateCheckpointsDoNotMaskDeadlock 锁定 #84：Writer 反复修改
-// 草稿会产生新 digest 和新 edit checkpoint，但只要 Route 仍是同一个
-// “打磨第 1 章”，就说明 Engine 级后置条件(commit)未完成，必须继续累计僵局。
+// TestEngine_IntermediateCheckpointsDoNotMaskDeadlock ghim #84: Writer sửa bản
+// nháp nhiều lần sẽ tạo ra digest mới và edit checkpoint mới, nhưng chừng nào
+// Route vẫn là cùng một “Hoàn thiện chương 1” thì hậu điều kiện ở cấp Engine
+// (commit) vẫn chưa xong, phải tiếp tục cộng dồn bế tắc.
 func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -885,16 +906,16 @@ func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 	if err := st.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("phase: %v", err)
 	}
-	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "第一章", CoreEvent: "开端"}}); err != nil {
+	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Chương 1", CoreEvent: "Mở đầu"}}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
-	if err := st.Drafts.SaveDraft(1, "版本0 正文初稿"); err != nil {
+	if err := st.Drafts.SaveDraft(1, "phiên bản 0 bản nháp đầu tiên"); err != nil {
 		t.Fatalf("draft: %v", err)
 	}
-	if err := st.Progress.MarkChapterComplete(1, len([]rune("版本0 正文初稿")), "mystery", "quest"); err != nil {
+	if err := st.Progress.MarkChapterComplete(1, len([]rune("phiên bản 0 bản nháp đầu tiên")), "mystery", "quest"); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if err := st.Progress.SetPendingRewrites([]int{1}, "测试打磨不提交"); err != nil {
+	if err := st.Progress.SetPendingRewrites([]int{1}, "Thử hoàn thiện mà không commit"); err != nil {
 		t.Fatalf("pending rewrite: %v", err)
 	}
 	if err := st.Progress.SetFlow(domain.FlowPolishing); err != nil {
@@ -908,10 +929,11 @@ func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 		Tools:    []agentcore.Tool{tools.NewEditChapterTool(st)},
 		MaxTurns: 5,
 	}
-	// 即使 Arbiter 对 worker_failure / deadlock 一直要求 retry，现有第 5 次
-	// 硬熔断也必须在派发前截停，不得被 edit checkpoint 重置。
+	// Dù Tài phán luôn yêu cầu retry cho worker_failure / deadlock, lần ngắt
+	// mạch cứng thứ 5 hiện có vẫn phải cắt trước khi phân công, không được bị
+	// edit checkpoint đặt lại.
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		return testTextMsg(`{"action":"retry","dispatch":null,"reason":"继续重试"}`)
+		return testTextMsg(`{"action":"retry","dispatch":null,"reason":"Tiếp tục thử lại"}`)
 	}}
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(writer), arb)
 
@@ -921,7 +943,7 @@ func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 	waitEngineDone(t, done)
 
 	if got := writerModel.edits.Load(); got != deadlockAbortAt-1 {
-		t.Fatalf("deadlock 应在第 %d 次派发前硬熔断，实际 edit %d 次", deadlockAbortAt, got)
+		t.Fatalf("bế tắc phải bị ngắt mạch cứng trước lần phân công thứ %d, thực tế edit %d lần", deadlockAbortAt, got)
 	}
 	var edits int
 	for _, cp := range st.Checkpoints.All() {
@@ -930,7 +952,7 @@ func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 		}
 	}
 	if edits != deadlockAbortAt-1 {
-		t.Fatalf("应保留 %d 条不同的 edit checkpoint，实际 %d", deadlockAbortAt-1, edits)
+		t.Fatalf("phải giữ %d edit checkpoint khác nhau, thực tế %d", deadlockAbortAt-1, edits)
 	}
 	recs, err := st.Decisions.Recent(10)
 	if err != nil {
@@ -952,13 +974,15 @@ func TestEngine_IntermediateCheckpointsDoNotMaskDeadlock(t *testing.T) {
 		}
 	}
 	if !hasWorkerFailure || !hasDeadlockWithCause {
-		t.Fatalf("应先记录 worker_failure，deadlock 应保留最后错误: %+v", recs)
+		t.Fatalf("phải ghi worker_failure trước, deadlock phải giữ lại lỗi cuối cùng: %+v", recs)
 	}
 }
 
-// TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue 修复验证(评审阻断2):
-// Arbiter 返工裁定 = 停靠点 + 派 editor 入队。停靠点必须等 editor 建立返工队列、
-// writer 重写排空之后才消费——不能在 editor 执行前被"队列已排空"误判消费。
+// TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue kiểm chứng bản vá
+// (chặn thẩm duyệt 2): phán quyết làm lại của Tài phán = điểm dừng + phân
+// công editor để xếp hàng. Điểm dừng chỉ được tiêu thụ sau khi editor đã lập
+// hàng đợi làm lại và writer đã viết lại rút hết — không được bị “hàng đợi đã
+// rút hết” nhận nhầm rồi tiêu thụ trước khi editor chạy.
 func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -971,13 +995,14 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 		t.Fatalf("phase: %v", err)
 	}
 	if err := st.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "一", CoreEvent: "a"},
-		{Chapter: 2, Title: "二", CoreEvent: "b"},
-		{Chapter: 3, Title: "三", CoreEvent: "c"},
+		{Chapter: 1, Title: "Một", CoreEvent: "a"},
+		{Chapter: 2, Title: "Hai", CoreEvent: "b"},
+		{Chapter: 3, Title: "Ba", CoreEvent: "c"},
 	}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
-	// 第 1 章已完成(将被返工);writer worker 会先重写它,然后停靠点消费。
+	// Chương 1 đã hoàn thành (sẽ bị làm lại); writer worker sẽ viết lại nó trước,
+	// rồi điểm dừng mới được tiêu thụ.
 	if err := st.Progress.StartChapter(1); err != nil {
 		t.Fatalf("start ch1: %v", err)
 	}
@@ -985,7 +1010,8 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 		t.Fatalf("complete ch1: %v", err)
 	}
 
-	// editor:一次 save_review(verdict=rewrite, affected=[1]) 把第 1 章入队。
+	// editor: một lần save_review (verdict=rewrite, affected=[1]) đưa chương 1
+	// vào hàng đợi.
 	editorModel := &scriptedChatModel{fn: func(msgs []agentcore.Message) agentcore.Message {
 		toolResults := 0
 		for _, m := range msgs {
@@ -997,20 +1023,20 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 			return testToolCallMsg("save_review", map[string]any{
 				"chapter": 1, "scope": "chapter",
 				"dimensions": []map[string]any{
-					{"dimension": "consistency", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "character", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "pacing", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "continuity", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "foreshadow", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "hook", "score": 85, "comment": "达标(引用:原文)"},
-					{"dimension": "aesthetic", "score": 55, "comment": "语气不符(引用:原文第一段)"},
+					{"dimension": "consistency", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "character", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "pacing", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "continuity", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "foreshadow", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "hook", "score": 85, "comment": "Đạt (trích dẫn: nguyên văn)"},
+					{"dimension": "aesthetic", "score": 55, "comment": "Giọng văn không phù hợp (trích dẫn: đoạn đầu nguyên văn)"},
 				},
 				"issues": []map[string]any{{
-					"type": "aesthetic", "severity": "error", "description": "语气", "evidence": "原文", "suggestion": "改冷",
+					"type": "aesthetic", "severity": "error", "description": "Giọng văn", "evidence": "Nguyên văn", "suggestion": "Làm lạnh hơn",
 					"chapters": []int{1}, "requires_change": true,
 				}},
 				"contract_status": nil, "contract_misses": []string{}, "contract_notes": nil,
-				"verdict": "rewrite", "summary": "第1章语气需重写",
+				"verdict": "rewrite", "summary": "Cần viết lại giọng văn chương 1",
 			})
 		}
 		return testTextMsg("done")
@@ -1034,10 +1060,11 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 	}
 
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(editor, writer), nil)
-	// 模拟 Arbiter 返工裁定:hold + dispatch editor(引擎未运行 → 立即应用)。
+	// Mô phỏng phán quyết làm lại của Tài phán: hold + dispatch editor (engine
+	// chưa chạy → áp dụng ngay).
 	e.applyControlOp(context.Background(), controlOp{
-		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "重写第1章语气,改完暂停验收"},
-		dispatch: &arbiter.DispatchOp{Agent: "editor", Task: "复核第 1 章：语气改冷，用 issues[].chapters 与 requires_change 入队"},
+		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "Viết lại giọng văn chương 1, xong thì dừng lại để nghiệm thu"},
+		dispatch: &arbiter.DispatchOp{Agent: "editor", Task: "Rà soát chương 1: làm giọng văn lạnh hơn, dùng issues[].chapters và requires_change để xếp hàng"},
 		facts:    mustInterventionFacts(t, st),
 	})
 	if !e.start(nil) {
@@ -1049,27 +1076,30 @@ func TestEngine_PauseWithEditorDispatchWaitsForRewriteQueue(t *testing.T) {
 	if err != nil || progress == nil {
 		t.Fatalf("load progress: %v", err)
 	}
-	// 核心断言①:停靠点没有在 editor 入队前消费——第 1 章确实经历了重写
-	//(重写 commit 会把它从队列 drain 掉)。
+	// Khẳng định cốt lõi ①: điểm dừng không bị tiêu thụ trước khi editor xếp
+	// hàng — chương 1 thực sự đã trải qua lần viết lại (commit viết lại sẽ rút
+	// nó khỏi hàng đợi).
 	if len(progress.PendingRewrites) != 0 {
-		t.Fatalf("返工队列应已排空, got %v", progress.PendingRewrites)
+		t.Fatalf("hàng đợi làm lại phải đã rút hết, got %v", progress.PendingRewrites)
 	}
 	if progress.ChapterWordCounts[1] == 1200 {
-		t.Fatal("第 1 章应被真实重写(字数应变化)")
+		t.Fatal("chương 1 phải được viết lại thật (số từ phải thay đổi)")
 	}
-	// 核心断言②:排空后停靠点消费,引擎暂停——第 2 章不应被续写。
+	// Khẳng định cốt lõi ②: sau khi rút hết thì điểm dừng được tiêu thụ, engine
+	// tạm dừng — chương 2 không được viết tiếp.
 	if len(progress.CompletedChapters) != 1 {
-		t.Fatalf("停靠点应在续写第 2 章前暂停, completed=%v", progress.CompletedChapters)
+		t.Fatalf("điểm dừng phải tạm dừng trước khi viết tiếp chương 2, completed=%v", progress.CompletedChapters)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta != nil && meta.AdvanceHold != nil {
-		t.Fatalf("一次性暂停应已消费, got %+v", meta.AdvanceHold)
+		t.Fatalf("lệnh tạm dừng một lần phải đã được tiêu thụ, got %+v", meta.AdvanceHold)
 	}
 }
 
-// TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker 回归：
-// 用户干预只裁定出 boundary hold（无派单）时，引擎必须在当前边界立即
-// 消费 hold 并暂停，不得再多写一章。
+// TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker hồi quy:
+// khi can thiệp của người dùng chỉ phán quyết ra boundary hold (không có
+// phân công), engine phải tiêu thụ hold và tạm dừng ngay tại biên hiện tại,
+// không được viết thêm một chương nào.
 func TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -1082,9 +1112,9 @@ func TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker(t *testing.T) {
 		t.Fatalf("phase: %v", err)
 	}
 	if err := st.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "一", CoreEvent: "a"},
-		{Chapter: 2, Title: "二", CoreEvent: "b"},
-		{Chapter: 3, Title: "三", CoreEvent: "c"},
+		{Chapter: 1, Title: "Một", CoreEvent: "a"},
+		{Chapter: 2, Title: "Hai", CoreEvent: "b"},
+		{Chapter: 3, Title: "Ba", CoreEvent: "c"},
 	}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
@@ -1104,9 +1134,10 @@ func TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker(t *testing.T) {
 	if !e.start(nil) {
 		t.Fatal("engine start")
 	}
-	// 第 1 章写作期间到达 hold-only 干预（与真实 Steer 时序一致）。
+	// Trong lúc viết chương 1, can thiệp chỉ có hold đến (khớp với thứ tự thời
+	// gian thật của Steer).
 	e.enqueue(controlOp{
-		hold:  &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "先停一下我看看"},
+		hold:  &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAtBoundary, Reason: "Dừng lại một chút để tôi xem"},
 		facts: mustInterventionFacts(t, st),
 	})
 	waitEngineDone(t, done)
@@ -1115,13 +1146,14 @@ func TestEngine_BoundaryHoldDoesNotDispatchAnotherWorker(t *testing.T) {
 	if err != nil || progress == nil {
 		t.Fatalf("load progress: %v", err)
 	}
-	// 干预在第 1 章运行中到达 → 第 1 章写完;停靠点在边界立即消费 → 第 2 章不得开写。
+	// Can thiệp đến khi chương 1 đang chạy → chương 1 viết xong; điểm dừng
+	// được tiêu thụ ngay tại biên → chương 2 không được bắt đầu viết.
 	if n := len(progress.CompletedChapters); n > 1 {
-		t.Fatalf("boundary hold 后不得再多写一章, completed=%v", progress.CompletedChapters)
+		t.Fatalf("sau boundary hold không được viết thêm một chương, completed=%v", progress.CompletedChapters)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta != nil && meta.AdvanceHold != nil {
-		t.Fatalf("一次性暂停应已消费, got %+v", meta.AdvanceHold)
+		t.Fatalf("lệnh tạm dừng một lần phải đã được tiêu thụ, got %+v", meta.AdvanceHold)
 	}
 }
 
@@ -1137,9 +1169,9 @@ func TestEngine_TargetChapterHoldStopsAtRequestedChapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Outline.SaveOutline([]domain.OutlineEntry{
-		{Chapter: 1, Title: "一", CoreEvent: "a"},
-		{Chapter: 2, Title: "二", CoreEvent: "b"},
-		{Chapter: 3, Title: "三", CoreEvent: "c"},
+		{Chapter: 1, Title: "Một", CoreEvent: "a"},
+		{Chapter: 2, Title: "Hai", CoreEvent: "b"},
+		{Chapter: 3, Title: "Ba", CoreEvent: "c"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1154,7 +1186,7 @@ func TestEngine_TargetChapterHoldStopsAtRequestedChapter(t *testing.T) {
 	}
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(writer), nil)
 	if err := st.RunMeta.SetAdvanceHold(domain.AdvanceHold{
-		After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "写到第2章",
+		After: domain.AdvanceHoldAtChapter, TargetChapter: 2, Reason: "Viết đến chương 2",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1168,17 +1200,18 @@ func TestEngine_TargetChapterHoldStopsAtRequestedChapter(t *testing.T) {
 		t.Fatalf("load progress: %v", err)
 	}
 	if !slices.Equal(progress.CompletedChapters, []int{1, 2}) {
-		t.Fatalf("应准确停在第2章, completed=%v", progress.CompletedChapters)
+		t.Fatalf("phải dừng chính xác ở chương 2, completed=%v", progress.CompletedChapters)
 	}
 	meta, _ := st.RunMeta.Load()
 	if meta.AdvanceHold != nil {
-		t.Fatalf("目标章节 hold 应已消费: %+v", meta.AdvanceHold)
+		t.Fatalf("hold mục tiêu chương phải đã được tiêu thụ: %+v", meta.AdvanceHold)
 	}
 }
 
-// TestEngine_ExitRaceRestoresPendingDispatch 回归(评审阻断3):
-// 干预入队与引擎退出竞态时,残留的裁定派单不得无声丢弃——PendingSteer 必须回存,
-// pause 类事实动作必须补执行。
+// TestEngine_ExitRaceRestoresPendingDispatch hồi quy (chặn thẩm duyệt 3):
+// khi can thiệp xếp hàng đua với việc engine thoát, phần phân công còn sót
+// từ phán quyết không được bị vứt bỏ im lặng — PendingSteer phải được lưu
+// lại, các hành động sự thật loại pause phải được thực thi bù.
 func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 	st := storepkg.NewStore(t.TempDir())
 	if err := st.Init(); err != nil {
@@ -1191,14 +1224,15 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 		t.Fatalf("phase: %v", err)
 	}
 
-	// worker 挂起直到 ctx 取消:制造"入队后引擎被 abort"的窗口。
+	// worker treo tới khi ctx bị hủy: tạo ra cửa sổ "sau khi xếp hàng thì engine
+	// bị abort".
 	blocked := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
 		time.Sleep(50 * time.Millisecond)
 		return testTextMsg("...")
 	}}
 	writer := subagent.Config{Name: "writer", Description: "slow", Model: blocked, SystemPrompt: "t", MaxTurns: 100}
-	// 需要 outline 让 Route 派 writer
-	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "一", CoreEvent: "a"}, {Chapter: 2, Title: "二", CoreEvent: "b"}}); err != nil {
+	// Cần outline để Route phân công writer
+	if err := st.Outline.SaveOutline([]domain.OutlineEntry{{Chapter: 1, Title: "Một", CoreEvent: "a"}, {Chapter: 2, Title: "Hai", CoreEvent: "b"}}); err != nil {
 		t.Fatalf("outline: %v", err)
 	}
 	e, _, done := newTestEngine(t, st, subagent.NewRunner(writer), nil)
@@ -1206,11 +1240,12 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 	if !e.start(nil) {
 		t.Fatal("engine start")
 	}
-	// worker 运行中:入队 pause+dispatch,随即 abort(动作永远等不到下个边界)。
+	// worker đang chạy: xếp hàng pause+dispatch, rồi abort ngay (hành động không
+	// bao giờ kịp chờ biên kế tiếp).
 	e.enqueue(controlOp{
-		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "验收"},
-		dispatch: &arbiter.DispatchOp{Agent: "writer", Task: "重写第 1 章"},
-		text:     "重写第1章然后停下来",
+		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "nghiệm thu"},
+		dispatch: &arbiter.DispatchOp{Agent: "writer", Task: "Viết lại chương 1"},
+		text:     "Viết lại chương 1 rồi dừng lại",
 		facts:    mustInterventionFacts(t, st),
 	})
 	e.abort()
@@ -1220,10 +1255,10 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 	if err != nil || meta == nil {
 		t.Fatalf("load meta: %v", err)
 	}
-	if meta.PendingSteer != "重写第1章然后停下来" {
-		t.Fatalf("残留派单必须回存 PendingSteer 供恢复重放, got %q", meta.PendingSteer)
+	if meta.PendingSteer != "Viết lại chương 1 rồi dừng lại" {
+		t.Fatalf("phần phân công còn sót phải được lưu lại vào PendingSteer để phát lại khi phục hồi, got %q", meta.PendingSteer)
 	}
 	if meta.AdvanceHold == nil {
-		t.Fatal("hold 事实动作应在退出清理中补执行")
+		t.Fatal("hành động sự thật loại hold phải được thực thi bù trong bước dọn dẹp lúc thoát")
 	}
 }

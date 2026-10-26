@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// 关闭后的 emit 应被明确拒绝，不能依赖 recover 吞掉竞态。
+// emit sau khi đóng phải bị từ chối rõ ràng, không được dựa vào recover để nuốt
+// cuộc đua tranh.
 func TestEmitAfterCloseDoesNotPanic(t *testing.T) {
 	h := &Host{
 		events:   make(chan Event, 1),
@@ -40,6 +41,6 @@ func TestConcurrentEmitAndCloseDoesNotRaceChannelLifecycle(t *testing.T) {
 	emitters.Wait()
 
 	if !h.outputClosed {
-		t.Fatal("closeOutputChannels 应原子标记输出已关闭")
+		t.Fatal("closeOutputChannels phải đánh dấu nguyên tử rằng đầu ra đã đóng")
 	}
 }
