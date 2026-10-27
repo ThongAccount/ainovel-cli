@@ -256,3 +256,105 @@ var demoTextsZH = &demoTexts{
 		t.Fatalf("giá trị hằng số không được suy diễn thành lỗi, nhận: %v", issues)
 	}
 }
+
+// --- cặp i18n.Text: hai nhánh nằm trong cùng một literal --------------------
+
+// Cặp viết đúng: hai nhánh dùng cùng thứ tự tham số.
+func TestCheckCleanTextPairHasNoIssue(t *testing.T) {
+	source := `package demo
+
+import (
+	"fmt"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
+)
+
+func demo(count int) string {
+	return i18n.Text{
+		VI: fmt.Sprintf("Đã xong %d chương", count),
+		ZH: fmt.Sprintf("已完成 %d 章", count),
+	}.Resolve(i18n.Active())
+}
+`
+	root := writeFixture(t, "demo/texts.go", source)
+	issues, err := Check(root)
+	if err != nil {
+		t.Fatalf("quét: %v", err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("cặp song ngữ đúng phải sạch, nhận: %v", issues)
+	}
+}
+
+// Thiếu một nhánh: cặp mất nhánh thì ngôn ngữ đó nhận chuỗi rỗng.
+func TestCheckCatchesTextPairMissingSide(t *testing.T) {
+	source := `package demo
+
+import "github.com/voocel/ainovel-cli/internal/i18n"
+
+func demo() string {
+	return i18n.Text{
+		VI: "Đã xong",
+	}.Resolve(i18n.Active())
+}
+`
+	root := writeFixture(t, "demo/texts.go", source)
+	issues, err := Check(root)
+	if err != nil {
+		t.Fatalf("quét: %v", err)
+	}
+	if got := details(issues); !strings.Contains(got, "thiếu nhánh ZH") {
+		t.Fatalf("phải báo thiếu nhánh ZH, nhận: %s", got)
+	}
+}
+
+// Lệch định dạng giữa hai nhánh: %d ở một bên, %s ở bên kia → lỗi hiển thị
+// kiểu %!d(string=...) lúc chạy.
+func TestCheckCatchesTextPairFormatMismatch(t *testing.T) {
+	source := `package demo
+
+import (
+	"fmt"
+
+	"github.com/voocel/ainovel-cli/internal/i18n"
+)
+
+func demo(count int) string {
+	return i18n.Text{
+		VI: fmt.Sprintf("Đã xong %d chương", count),
+		ZH: fmt.Sprintf("已完成 %s 章", count),
+	}.Resolve(i18n.Active())
+}
+`
+	root := writeFixture(t, "demo/texts.go", source)
+	issues, err := Check(root)
+	if err != nil {
+		t.Fatalf("quét: %v", err)
+	}
+	if got := details(issues); !strings.Contains(got, "định dạng hai nhánh khác nhau") {
+		t.Fatalf("phải báo định dạng lệch, nhận: %s", got)
+	}
+}
+
+// Một nhánh rỗng: câu rỗng đi thẳng vào prompt gửi mô hình.
+func TestCheckCatchesTextPairEmptySide(t *testing.T) {
+	source := `package demo
+
+import "github.com/voocel/ainovel-cli/internal/i18n"
+
+func demo() string {
+	return i18n.Text{
+		VI: "",
+		ZH: "已完成",
+	}.Resolve(i18n.Active())
+}
+`
+	root := writeFixture(t, "demo/texts.go", source)
+	issues, err := Check(root)
+	if err != nil {
+		t.Fatalf("quét: %v", err)
+	}
+	if got := details(issues); !strings.Contains(got, "nhánh VI rỗng") {
+		t.Fatalf("phải báo nhánh VI rỗng, nhận: %s", got)
+	}
+}

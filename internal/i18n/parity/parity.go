@@ -59,9 +59,10 @@ func Check(root string) ([]Issue, error) {
 
 	structs := map[string]structType{} // "pkg::Type" -> khai báo struct
 	var tables []bilingualTable
+	var pairs []pairLiteral
 
 	for _, file := range files {
-		pkgStructs, pkgTables, err := parseFile(file)
+		pkgStructs, pkgTables, pkgPairs, err := parseFile(file)
 		if err != nil {
 			return nil, err
 		}
@@ -77,10 +78,25 @@ func Check(root string) ([]Issue, error) {
 			pkgTables[i].pkg = pkg
 			pkgTables[i].file = filepath.ToSlash(rel)
 		}
+		for i := range pkgPairs {
+			pkgPairs[i].file = filepath.ToSlash(rel)
+		}
 		tables = append(tables, pkgTables...)
+		pairs = append(pairs, pkgPairs...)
 	}
 
-	return compareTables(tables, structs), nil
+	issues := compareTables(tables, structs)
+	issues = append(issues, comparePairs(pairs)...)
+	sort.Slice(issues, func(i, j int) bool {
+		if issues[i].File != issues[j].File {
+			return issues[i].File < issues[j].File
+		}
+		if issues[i].Line != issues[j].Line {
+			return issues[i].Line < issues[j].Line
+		}
+		return issues[i].Table < issues[j].Table
+	})
+	return issues, nil
 }
 
 // CheckDir là bản tiện dụng của Check cho thư mục hiện tại.
@@ -122,6 +138,24 @@ type bilingualTable struct {
 	line int
 	// levels là các mức của bảng, khóa là đường dẫn trường ("hostTexts.style").
 	levels map[string]tableLevel
+}
+
+// pairLiteral là một cặp văn bản viết trong một literal duy nhất, dạng
+// `i18n.Text{VI: ..., ZH: ...}`. Khác với bảng struct, cặp nằm ngay tại chỗ
+// dùng nên có thể nằm trong thân hàm, không chỉ ở khai báo biến.
+type pairLiteral struct {
+	// file là đường dẫn file tương đối so với repo root.
+	file string
+	// line là dòng của literal.
+	line int
+	// viSet và zhSet cho biết nhánh nào có trong literal.
+	viSet bool
+	zhSet bool
+	// viText và zhText là chuỗi định dạng của hai nhánh (nếu đọc được).
+	viText string
+	viOK   bool
+	zhText string
+	zhOK   bool
 }
 
 // --- quét file ------------------------------------------------------------
@@ -166,17 +200,18 @@ func packageDir(root, file string) string {
 	return filepath.ToSlash(rel)
 }
 
-// parseFile đọc một file Go, trả về các kiểu struct khai báo và các bản bảng
-// song ngữ tìm thấy trong đó.
-func parseFile(path string) (map[string]structType, []bilingualTable, error) {
+// parseFile đọc một file Go, trả về các kiểu struct khai báo, các bản bảng
+// song ngữ và các cặp văn bản `i18n.Text` tìm thấy trong đó.
+func parseFile(path string) (map[string]structType, []bilingualTable, []pairLiteral, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 	if err != nil {
-		return nil, nil, fmt.Errorf("đọc %s: %w", path, err)
+		return nil, nil, nil, fmt.Errorf("đọc %s: %w", path, err)
 	}
 
 	structs := map[string]structType{}
 	var tables []bilingualTable
+	var pairs []pairLiteral
 
 	for _, decl := range file.Decls {
 		gd, ok := decl.(*ast.GenDecl)
@@ -239,7 +274,93 @@ func parseFile(path string) (map[string]structType, []bilingualTable, error) {
 			}
 		}
 	}
-	return structs, tables, nil
+
+	// Cặp `i18n.Text{VI: ..., ZH: ...}` có thể nằm ở bất kỳ chỗ nào trong
+	// thân hàm, nên phải quét toàn bộ cây cú pháp chứ không chỉ khai báo biến.
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		name, ok := pairTypeName(lit.Type)
+		if !ok || name != "Text" {
+			return true
+		}
+		pair := pairLiteral{line: fset.Position(lit.Pos()).Line}
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			switch key.Name {
+			case "VI":
+				pair.viSet = true
+				pair.viText, pair.viOK = formatStringOf(kv.Value)
+			case "ZH":
+				pair.zhSet = true
+				pair.zhText, pair.zhOK = formatStringOf(kv.Value)
+			}
+		}
+		pairs = append(pairs, pair)
+		return true
+	})
+
+	return structs, tables, pairs, nil
+}
+
+// pairTypeName trả về tên kiểu của một literal, kể cả khi kiểu là biểu thức
+// chọn như `i18n.Text`.
+func pairTypeName(expr ast.Expr) (string, bool) {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name, true
+	case *ast.SelectorExpr:
+		return t.Sel.Name, true
+	}
+	return "", false
+}
+
+// formatStringOf đọc chuỗi định dạng của một biểu thức: chuỗi literal, chuỗi
+// nối bằng `+`, hoặc đối số đầu của `fmt.Sprintf`.
+func formatStringOf(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind != token.STRING {
+			return "", false
+		}
+		s, err := strconv.Unquote(e.Value)
+		if err != nil {
+			return "", false
+		}
+		return s, true
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		left, okLeft := formatStringOf(e.X)
+		right, okRight := formatStringOf(e.Y)
+		if okLeft && okRight {
+			return left + right, true
+		}
+	case *ast.CallExpr:
+		if len(e.Args) == 0 {
+			return "", false
+		}
+		sel, ok := e.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != "fmt" || sel.Sel.Name != "Sprintf" {
+			return "", false
+		}
+		return formatStringOf(e.Args[0])
+	}
+	return "", false
 }
 
 // unwrapLiteral bóc literal từ biểu thức, xử lý cả `&T{...}` và `(T{...})`.
@@ -343,6 +464,64 @@ func compareTables(tables []bilingualTable, structs map[string]structType) []Iss
 		return issues[i].Table < issues[j].Table
 	})
 	return issues
+}
+
+// comparePairs so các cặp `i18n.Text{VI: ..., ZH: ...}`.
+//
+// Cặp viết tay trong thân hàm rất dễ lệch khi dịch: sửa `%d` thành `%s` ở
+// một bên là lỗi hiển thị kiểu %!d(string=...) lúc chạy, và bỏ trống một bên
+// là câu rỗng đi thẳng vào prompt.
+func comparePairs(pairs []pairLiteral) []Issue {
+	var issues []Issue
+	for _, pair := range pairs {
+		switch {
+		case !pair.viSet && !pair.zhSet:
+			continue
+		case !pair.viSet:
+			issues = append(issues, Issue{
+				File: pair.file, Line: pair.line, Table: "i18n.Text",
+				Detail: "cặp song ngữ thiếu nhánh VI",
+			})
+		case !pair.zhSet:
+			issues = append(issues, Issue{
+				File: pair.file, Line: pair.line, Table: "i18n.Text",
+				Detail: "cặp song ngữ thiếu nhánh ZH",
+			})
+		}
+		if pair.viOK && pair.viText == "" {
+			issues = append(issues, Issue{
+				File: pair.file, Line: pair.line, Table: "i18n.Text",
+				Detail: "nhánh VI rỗng",
+			})
+		}
+		if pair.zhOK && pair.zhText == "" {
+			issues = append(issues, Issue{
+				File: pair.file, Line: pair.line, Table: "i18n.Text",
+				Detail: "nhánh ZH rỗng",
+			})
+		}
+		if !pair.viOK || !pair.zhOK {
+			continue
+		}
+		viVerbs, viHas := formatVerbs(pair.viText)
+		zhVerbs, zhHas := formatVerbs(pair.zhText)
+		if viHas != zhHas || (viHas && viVerbs != zhVerbs) {
+			issues = append(issues, Issue{
+				File: pair.file, Line: pair.line, Table: "i18n.Text",
+				Detail: fmt.Sprintf("định dạng hai nhánh khác nhau: VI %s, ZH %s",
+					describeVerbs(viVerbs, viHas), describeVerbs(zhVerbs, zhHas)),
+			})
+		}
+	}
+	return issues
+}
+
+// describeVerbs mô tả chuỗi đặt tham số cho báo cáo.
+func describeVerbs(verbs string, has bool) string {
+	if !has {
+		return "(không có tham số)"
+	}
+	return fmt.Sprintf("%q", verbs)
 }
 
 // comparePair so một cặp bản VI/ZH của cùng một bảng văn bản.

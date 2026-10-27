@@ -61,15 +61,21 @@ func TestRepoHasBilingualTables(t *testing.T) {
 		t.Fatalf("dò file Go: %v", err)
 	}
 	count := 0
+	pairs := 0
 	for _, file := range files {
-		_, tables, err := parseFile(file)
+		_, tables, filePairs, err := parseFile(file)
 		if err != nil {
 			t.Fatalf("đọc %s: %v", file, err)
 		}
 		count += len(tables)
+		pairs += len(filePairs)
 	}
 	if count < 10 {
 		t.Fatalf("chỉ tìm thấy %d bản bảng văn bản song ngữ, có vẻ bộ dò quét đã hỏng", count)
 	}
-	t.Logf("tìm thấy %d bản bảng văn bản song ngữ trong %d file", count, len(files))
+	if pairs < 1 {
+		t.Fatalf("không tìm thấy cặp i18n.Text nào, có vẻ bộ dò quét đã hỏng")
+	}
+	t.Logf("tìm thấy %d bản bảng văn bản song ngữ và %d cặp i18n.Text trong %d file",
+		count, pairs, len(files))
 }
