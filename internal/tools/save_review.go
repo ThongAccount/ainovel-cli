@@ -16,7 +16,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// SaveReviewTool 保存 Editor 的审阅结果。
+// SaveReviewTool lưu kết quả đánh giá của Editor.
 type SaveReviewTool struct {
 	store *store.Store
 }
@@ -32,7 +32,7 @@ func (t *SaveReviewTool) Description() string {
 }
 func (t *SaveReviewTool) Label() string { return t.texts().saveReviewLabel }
 
-// 写工具（同时更新 reviews/ 与 Progress 的 PendingRewrites/Flow），禁止并发。
+// Công cụ ghi (cập nhật đồng thời reviews/ và PendingRewrites/Flow của Progress), cấm chạy song song.
 func (t *SaveReviewTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveReviewTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 func (t *SaveReviewTool) StrictSchema() bool                     { return true }
@@ -128,8 +128,8 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		}
 	}
 
-	// 先原子应用控制状态，再保存审阅工件。若第二步失败，返工意图仍然存在；
-	// Writer 排空队列后，路由会因审阅工件缺失而重新派发 Editor，不会跳过审阅。
+	// Trước hết áp dụng trạng thái điều khiển theo nguyên tử, rồi lưu bản ghi đánh giá. Nếu bước hai thất bại, ý định làm lại vẫn còn;
+	// khi Writer rút hết hàng chờ, Router sẽ phân phối lại cho Editor vì bản ghi đánh giá còn thiếu, không bỏ qua lượt đánh giá.
 	latest, err := t.store.Progress.ApplyReviewOutcome(reviewOutcome, affected, r.Summary)
 	if err != nil {
 		return nil, fmt.Errorf("apply review outcome: %w", err)
@@ -151,7 +151,7 @@ func (t *SaveReviewTool) finishReview(
 		return nil, fmt.Errorf("checkpoint review: %w", err)
 	}
 
-	// 使用原子更新返回的 Progress 快照作为事实，避免二次读取产生新的失败窗口。
+	// Dùng ảnh chụp Progress trả về từ bản cập nhật nguyên tử làm sự thật, tránh lần đọc thứ hai mở thêm một cửa sổ thất bại.
 	nextFlow := string(domain.FlowWriting)
 	nextChapter := 0
 	if progress != nil {
@@ -275,8 +275,8 @@ func uniqueSortedChapters(chapters []int) []int {
 	return result
 }
 
-// reviewFlow 是文学裁定与持久化协议之间唯一的映射点。verdict 由 Editor 决定；
-// 这里只接受 Router 能恢复的三种控制结果。
+// reviewFlow là điểm ánh xạ duy nhất giữa phán xét văn học và giao thức lưu trữ. verdict do Editor quyết định;
+// ở đây chỉ nhận ba kết quả điều khiển mà Router có thể khôi phục.
 func reviewFlow(verdict string) (domain.FlowState, error) {
 	switch verdict {
 	case "accept":
