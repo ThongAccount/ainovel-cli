@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestSmokeCasesLoad 确保仓库内置 smoke case 能被加载器解析（含 DisallowUnknownFields 校验）。
+// TestSmokeCasesLoad kiểm tra smoke case tích hợp sẵn trong repo được bộ nạp phân tích (gồm kiểm tra DisallowUnknownFields).
 func TestSmokeCasesLoad(t *testing.T) {
 	dir := filepath.Join("..", "..", "evals", "cases", "smoke")
 	cases, err := LoadCases(dir)
@@ -34,13 +34,13 @@ func TestSmokeCasesLoad(t *testing.T) {
 }
 
 func TestLoadCasesRejectsUnknownField(t *testing.T) {
-	// 间接验证：合法 case 必须含 id+prompt；缺失即报错（Validate 路径）。
+	// Kiểm tra gián tiếp: case hợp lệ phải có id+prompt; thiếu là báo lỗi (đường Validate).
 	if _, err := LoadCases(filepath.Join("..", "..", "evals", "cases", "smoke", "writer_first_chapter.json")); err != nil {
 		t.Fatalf("单文件加载应成功: %v", err)
 	}
 }
 
-// case id 会拼进 RemoveAll 的路径，路径穿越/分隔符必须被拒（高危防护）。
+// case id được ghép vào đường dẫn của RemoveAll; đường dẫn lệch ra ngoài/dấu phân cách phải bị từ chối (phòng vệ mức rủi ro cao).
 func TestCaseIDRejectsUnsafe(t *testing.T) {
 	for _, bad := range []string{"../evil", "a/b", "/abs", "..", "Up", "with space", "dot.case"} {
 		c := Case{ID: bad, Prompt: "x"}
