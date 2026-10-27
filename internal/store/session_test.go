@@ -14,7 +14,7 @@ import (
 // “assistant + có Usage” mới được gắn _meta — đây là tiền đề để đường phát lại tính
 // giá chính xác.
 //
-// Tên nhiệm vụ "写第 1 章" được giữ nguyên tiếng Trung: đó là dữ liệu thử nghiệm cố ý
+// Tên nhiệm vụ "写第 1 章" được giữ nguyên tiếng Trung: đây là dữ liệu thử nghiệm cố ý
 // cho bộ dò số chương (chapterRe) trích ra số chương.
 func TestSessionStore_MetaInjected_AssistantWithUsage(t *testing.T) {
 	dir := t.TempDir()

@@ -9,9 +9,10 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
-// fakeEngine 模拟 host：Abort 后像 waitDone 那样向 done 发送一次。done 带 1 缓冲，
-// 测试据此断言 drive 是否 drain 了 Done（len(done)==0 即已消费）——这是防 send-on-closed-channel
-// panic 的关键不变量。
+// fakeEngine mô phỏng host: sau khi Abort, gửi một lần vào done giống hệt waitDone. done
+// có buffer 1, nên test dựa vào đó để khẳng định drive có drain Done hay không
+// (len(done)==0 tức là đã tiêu thụ) — đây là bất biến quan trọng chống panic
+// send-on-closed-channel.
 type fakeEngine struct {
 	events chan host.Event
 	stream chan string
@@ -44,7 +45,7 @@ func (f *fakeEngine) Abort() bool {
 	f.mu.Lock()
 	f.aborted = true
 	f.mu.Unlock()
-	select { // 模拟 waitDone：abort 触发后向 done 发送一次
+	select { // mô phỏng waitDone: sau khi abort, gửi một lần vào done
 	case f.done <- struct{}{}:
 	default:
 	}
@@ -57,8 +58,8 @@ func (f *fakeEngine) wasAborted() bool {
 	return f.aborted
 }
 
-// 超时路径必须 Abort 后 drain 到 Done 再返回超时错误——否则 RunCase 的 Close 会与
-// waitDone 竞争关闭 done 通道而 panic（Codex review #1）。
+// Đường hết thời gian phải Abort rồi drain tới Done mới trả lỗi timeout — nếu không,
+// Close của RunCase sẽ tranh đóng kênh done với waitDone và gây panic (Codex review #1).
 func TestDriveTimeoutDrainsToDone(t *testing.T) {
 	f := newFakeEngine()
 	err := drive(f, 1, RunOptions{Timeout: 30 * time.Millisecond})
@@ -73,13 +74,13 @@ func TestDriveTimeoutDrainsToDone(t *testing.T) {
 	}
 }
 
-// 达到章数上限：Abort 后 drain 到 Done，返回 nil（正常截停，不是超时）。
+// Đạt giới hạn số chương: Abort rồi drain tới Done, trả nil (dừng có trật tự, không phải timeout).
 func TestDriveCapStopsAndDrains(t *testing.T) {
 	f := newFakeEngine()
 	f.mu.Lock()
 	f.snap = host.UISnapshot{CompletedCount: 1}
 	f.mu.Unlock()
-	f.events <- host.Event{Category: "SYSTEM", Summary: "committed"} // 触发 cap 检查
+	f.events <- host.Event{Category: "SYSTEM", Summary: "committed"} // kích hoạt kiểm tra cap
 
 	err := drive(f, 1, RunOptions{Timeout: time.Second})
 	if err != nil {
@@ -93,7 +94,7 @@ func TestDriveCapStopsAndDrains(t *testing.T) {
 	}
 }
 
-// 引擎自然 Done（书写完）：无需 Abort，返回 nil。
+// Engine tự Done (đã viết xong): không cần Abort, trả nil.
 func TestDriveNaturalDoneReturnsNil(t *testing.T) {
 	f := newFakeEngine()
 	f.done <- struct{}{}

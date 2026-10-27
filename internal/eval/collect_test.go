@@ -108,7 +108,7 @@ func TestChapterTitleUsesLayeredEntryChapter(t *testing.T) {
 		{
 			Index: 1,
 			Arcs: []domain.ArcOutline{
-				{Index: 1}, // 未展开 arc 不应让后续章节位置漂移
+				{Index: 1}, // arc chưa bung ra không nên làm lệch vị trí các chương sau
 				{
 					Index: 2,
 					Chapters: []domain.OutlineEntry{

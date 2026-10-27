@@ -28,7 +28,7 @@ func TestEnsureRulesDirAt(t *testing.T) {
 		t.Errorf("README.txt không được dạy YAML front matter, got %q", data)
 	}
 
-	// 始终覆盖为最新模板：旧版本写的过时文案再次 ensure 时被刷新
+	// Luôn ghi đè bằng mẫu mới nhất: văn bản lỗi thời do bản cũ viết sẽ được làm mới khi ensure lại
 	if err := os.WriteFile(readme, []byte("旧版本写的过时文案"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -39,13 +39,13 @@ func TestEnsureRulesDirAt(t *testing.T) {
 		t.Errorf("README.txt should be refreshed to latest template, got %q", again)
 	}
 
-	// README.txt 不被当规则（扫描只认 .md）
+	// README.txt không bị coi là quy tắc (bộ quét chỉ nhận .md)
 	if srcs := RawFileSources(LoadOptions{HomeRulesDir: dir}); len(srcs) != 0 {
 		t.Errorf("README.txt must not be scanned as a rule, got %d sources", len(srcs))
 	}
 }
 
-// TestDefaultProjectRulesDir 锁死项目级规则目录镜像全局：./.ainovel/rules/。
+// TestDefaultProjectRulesDir khoá chặt thư mục quy tắc cấp dự án phải phản chiếu cấp toàn cục: ./.ainovel/rules/.
 func TestDefaultProjectRulesDir(t *testing.T) {
 	proj := filepath.Join("/tmp", "demo-book")
 	want := filepath.Join(proj, ".ainovel", "rules")
@@ -57,8 +57,8 @@ func TestDefaultProjectRulesDir(t *testing.T) {
 	}
 }
 
-// TestDefaultOptions_ScansProjectRulesFromDotAinovel 端到端验证：
-// DefaultOptions 把 cwd 下的 ./.ainovel/rules/ 接进 SourceProject 来源。
+// TestDefaultOptions_ScansProjectRulesFromDotAinovel kiểm tra đầu-cuối:
+// DefaultOptions nối ./.ainovel/rules/ dưới cwd vào nguồn SourceProject.
 func TestDefaultOptions_ScansProjectRulesFromDotAinovel(t *testing.T) {
 	proj := t.TempDir()
 	t.Chdir(proj)
