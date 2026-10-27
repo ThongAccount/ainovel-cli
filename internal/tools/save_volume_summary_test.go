@@ -68,7 +68,7 @@ func TestSaveVolumeSummaryRejectsNonDueVolume(t *testing.T) {
 
 func TestReconcileLayeredCompletionRepairsInterruptedVolumeSummary(t *testing.T) {
 	s := setupVolumeSummaryStore(t)
-	// 模拟进程在卷摘要已经落盘、Progress.MarkComplete 尚未执行时退出。
+	// Mô phỏng tiến trình thoát khi tóm tắt tập đã ghi xuống nhưng Progress.MarkComplete chưa chạy.
 	if err := s.Summaries.SaveVolumeSummary(domain.VolumeSummary{Volume: 1, Title: "终卷", Summary: "全书收束", KeyEvents: []string{"终局"}}); err != nil {
 		t.Fatal(err)
 	}
