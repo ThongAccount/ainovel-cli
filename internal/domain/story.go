@@ -296,7 +296,7 @@ func OversizedArc(label string, chapters int) string {
 	}
 	return i18n.Text{
 		VI: fmt.Sprintf("%s có %d chương chi tiết, vượt giới hạn %d chương cho một cung. "+
-			"Thẩm duyệt cuối cung phải đọc toàn bộ cung một lần, nên không model nào có thể thẩm duyệt cung quá dài (thực nghiệm 20 chương đã làm tắc pipeline). "+
+			"Thẩm duyệt cuối cung phải đọc toàn bộ cung một lần, nên không mô hình nào có thể thẩm duyệt cung quá dài (thực nghiệm 20 chương đã làm tắc pipeline). "+
 			"Vui lòng chia thành nhiều cung, mỗi cung có mục tiêu độc lập: lần gọi này chỉ triển khai cung đầu tiên trong %d chương đầu; "+
 			"phần còn lại để thành cung khung, triển khai tiếp khi viết tới ranh giới",
 			label, chapters, maxArcChapters, maxArcChapters),

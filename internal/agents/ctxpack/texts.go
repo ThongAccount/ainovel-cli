@@ -56,7 +56,7 @@ var promptTextsVI = &PromptTexts{
 	currentArcSummary:   "Tóm tắt cung hiện tại",
 	currentVolSummary:   "Tóm tắt tập hiện tại",
 	characterSnapshots:  "Ảnh chụp nhân vật",
-	activeForeshadow:    "Manh mối đang hoạt động",
+	activeForeshadow:    "Phục bút đang hoạt động",
 	pendingReviews:      "Vấn đề biên tập chờ sửa",
 	recentTimeline:      "Dòng thời gian gần đây",
 	styleRules:          "Quy tắc văn phong",

@@ -52,9 +52,31 @@ func (i Issue) String() string {
 // File test (_test.go) và thư mục sinh ra tự động không được quét: bảng song
 // ngữ trong test là dữ liệu đầu vào của test, không phải bảng dùng lúc chạy.
 func Check(root string) ([]Issue, error) {
-	files, err := goFiles(root)
+	structs, tables, pairs, err := scanRepo(root)
 	if err != nil {
 		return nil, err
+	}
+
+	issues := compareTables(tables, structs)
+	issues = append(issues, comparePairs(pairs)...)
+	sort.Slice(issues, func(i, j int) bool {
+		if issues[i].File != issues[j].File {
+			return issues[i].File < issues[j].File
+		}
+		if issues[i].Line != issues[j].Line {
+			return issues[i].Line < issues[j].Line
+		}
+		return issues[i].Table < issues[j].Table
+	})
+	return issues, nil
+}
+
+// scanRepo đọc toàn bộ file Go production dưới root, gom các kiểu struct khai
+// báo, các bản bảng song ngữ và các cặp `i18n.Text` tìm được.
+func scanRepo(root string) (map[string]structType, []bilingualTable, []pairLiteral, error) {
+	files, err := goFiles(root)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	structs := map[string]structType{} // "pkg::Type" -> khai báo struct
@@ -64,7 +86,7 @@ func Check(root string) ([]Issue, error) {
 	for _, file := range files {
 		pkgStructs, pkgTables, pkgPairs, err := parseFile(file)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		pkg := packageDir(root, file)
 		for name, st := range pkgStructs {
@@ -84,19 +106,7 @@ func Check(root string) ([]Issue, error) {
 		tables = append(tables, pkgTables...)
 		pairs = append(pairs, pkgPairs...)
 	}
-
-	issues := compareTables(tables, structs)
-	issues = append(issues, comparePairs(pairs)...)
-	sort.Slice(issues, func(i, j int) bool {
-		if issues[i].File != issues[j].File {
-			return issues[i].File < issues[j].File
-		}
-		if issues[i].Line != issues[j].Line {
-			return issues[i].Line < issues[j].Line
-		}
-		return issues[i].Table < issues[j].Table
-	})
-	return issues, nil
+	return structs, tables, pairs, nil
 }
 
 // CheckDir là bản tiện dụng của Check cho thư mục hiện tại.
@@ -120,6 +130,14 @@ type tableLevel struct {
 	keys []string
 	// texts lưu chuỗi literal của từng trường, để so sánh định dạng.
 	texts map[string]string
+	// allTexts gom MỌI chuỗi literal tìm thấy ở mức này, kể cả phần tử của
+	// mảng chuỗi (mảng không lưu được vào texts vì giá trị không phải một
+	// chuỗi đơn). Dùng để hỏi "mức này còn chữ Trung hay không".
+	allTexts []string
+	// opaque đếm các trường có giá trị KHÔNG đọc được bằng phân tích cú
+	// pháp (hằng số, biểu thức nối, lời gọi hàm): nội dung của chúng không
+	// biết, nên không thể kết luận chắc chắn về chúng.
+	opaque int
 }
 
 // bilingualTable là một bản của bảng song ngữ (tiếng Việt hoặc tiếng Trung).
@@ -389,6 +407,33 @@ func languageSide(name string) (side, base string) {
 	return "", ""
 }
 
+// literalStringOf đọc một biểu thức chuỗi literal, gồm nối chuỗi bằng "+".
+// Không đọc lời gọi hàm: fmt.Sprintf("%s", x) cho biết định dạng chứ không cho
+// biết văn bản lúc chạy, nên vẫn phải để là không xác định.
+func literalStringOf(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind != token.STRING {
+			return "", false
+		}
+		s, err := strconv.Unquote(e.Value)
+		if err != nil {
+			return "", false
+		}
+		return s, true
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		left, okLeft := literalStringOf(e.X)
+		right, okRight := literalStringOf(e.Y)
+		if okLeft && okRight {
+			return left + right, true
+		}
+	}
+	return "", false
+}
+
 // collectLevels đi xuống từng mức của literal, ghi lại các trường khai báo tại
 // mỗi mức và giá trị chuỗi literal (nếu có).
 func collectLevels(lit *ast.CompositeLit, typeName, path string, out map[string]tableLevel) {
@@ -403,18 +448,285 @@ func collectLevels(lit *ast.CompositeLit, typeName, path string, out map[string]
 			continue
 		}
 		level.keys = append(level.keys, key.Name)
-		if bl, ok := kv.Value.(*ast.BasicLit); ok && bl.Kind == token.STRING {
-			if s, err := strconv.Unquote(bl.Value); err == nil {
-				level.texts[key.Name] = s
-			}
+
+		if s, ok := literalStringOf(kv.Value); ok {
+			level.texts[key.Name] = s
+			level.allTexts = append(level.allTexts, s)
+			continue
 		}
+
 		if nested, ok := unwrapLiteral(kv.Value); ok {
 			if id, ok := nested.Type.(*ast.Ident); ok {
+				// Nhóm con: nội dung của nó nằm ở mức sau.
 				collectLevels(nested, id.Name, path+"."+key.Name, out)
+				continue
+			}
+			// Mảng chuỗi: gom từng phần tử để kiểm tra nội dung nhánh ZH.
+			if arr, ok := nested.Type.(*ast.ArrayType); ok {
+				if id, ok := arr.Elt.(*ast.Ident); ok && id.Name == "string" {
+					readable := true
+					for _, item := range nested.Elts {
+						bl, ok := item.(*ast.BasicLit)
+						if !ok || bl.Kind != token.STRING {
+							readable = false
+							break
+						}
+						s, err := strconv.Unquote(bl.Value)
+						if err != nil {
+							readable = false
+							break
+						}
+						level.allTexts = append(level.allTexts, s)
+					}
+					if !readable {
+						level.opaque++
+					}
+					continue
+				}
+			}
+			level.opaque++
+			continue
+		}
+
+		level.opaque++
+	}
+	out[path] = level
+}
+
+// --- kiểm tra nhánh ZH -----------------------------------------------------
+
+// Loại kết quả kiểm tra nhánh ZH.
+const (
+	// ZHViolation nghĩa là nhánh ZH chắc chắn không còn ký tự CJK nào.
+	ZHViolation = "vi phạm"
+	// ZHUnknown nghĩa là nhánh ZH có giá trị không đọc được bằng phân tích
+	// cú pháp nên không kết luận được; cần người đọc.
+	ZHUnknown = "không xác định"
+)
+
+// ZHFinding là kết quả kiểm tra nhánh ZH của một bảng song ngữ hoặc một
+// cặp `i18n.Text`.
+type ZHFinding struct {
+	// File là đường dẫn tương đối so với repo root.
+	File string
+	// Line là dòng khai báo.
+	Line int
+	// Table là tên bảng (hoặc "i18n.Text" với cặp viết tay trong thân hàm).
+	Table string
+	// Kind là ZHViolation hoặc ZHUnknown.
+	Kind string
+	// Detail mô tả sai lệch bằng tiếng Việt.
+	Detail string
+}
+
+// String trả về một dòng báo cáo.
+func (f ZHFinding) String() string {
+	return fmt.Sprintf("%s:%d: %s: %s: %s", f.File, f.Line, f.Table, f.Kind, f.Detail)
+}
+
+// ZHReport là kết quả quét nhánh ZH của cả repo.
+type ZHReport struct {
+	// Tables là số bản ZH song ngữ đã kiểm tra (có bản VI đi kèm).
+	Tables int
+	// Pairs là số cặp `i18n.Text` có nhánh ZH đã kiểm tra.
+	Pairs int
+	// Findings là các nhánh ZH không còn ký tự CJK, hoặc không xác định được.
+	Findings []ZHFinding
+}
+
+// Violations trả về các lỗi chặn: nhánh ZH chắc chắn không còn ký tự CJK.
+func (r ZHReport) Violations() []ZHFinding {
+	var out []ZHFinding
+	for _, f := range r.Findings {
+		if f.Kind == ZHViolation {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// Unknown trả về các nhánh ZH không đọc được, nên không kết luận được.
+func (r ZHReport) Unknown() []ZHFinding {
+	var out []ZHFinding
+	for _, f := range r.Findings {
+		if f.Kind == ZHUnknown {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// CheckZH quét repo và trả về các nhánh ZH không còn ký tự CJK.
+//
+// Lỗi mà mọi cổng khác đều bỏ lọt: cổng CJK không thấy vì nhánh ZH đã hết
+// chữ Trung, cổng song ngữ không thấy vì tập trường vẫn khớp. Đó chính là
+// cách một bảng "tiếng Trung" âm thầm trở thành bản tiếng Việt — thứ mà
+// cổng CJK không thể phát hiện vì bản dịch không còn ký tự CJK.
+//
+// Quy tắc: nhánh ZH của mỗi bảng "...ZH" và mỗi cặp `i18n.Text` phải còn
+// ít nhất MỘT ký tự CJK. Kiểm tra theo cả bảng, không theo từng mục: một
+// mục đơn lẻ có thể hợp lệ là chuỗi ASCII thuần (ví dụ "%d").
+//
+// Không đòi bản "...ZH" phải có bản "...VI" đi kèm: nếu đòi thì chỉ cần
+// đổi tên bản VI là nhánh ZH rơi khỏi phạm vi kiểm tra — cổng tự tắt mình
+// trong im lặng, đúng cái lỗi mà cổng này sinh ra để chặn.
+func CheckZH(root string) (ZHReport, error) {
+	_, tables, pairs, err := scanRepo(root)
+	if err != nil {
+		return ZHReport{}, err
+	}
+
+	tableFindings, checkedTables := checkTableZHs(tables)
+	pairFindings, checkedPairs := checkPairZHs(pairs)
+
+	findings := append(tableFindings, pairFindings...)
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].File != findings[j].File {
+			return findings[i].File < findings[j].File
+		}
+		if findings[i].Line != findings[j].Line {
+			return findings[i].Line < findings[j].Line
+		}
+		return findings[i].Table < findings[j].Table
+	})
+	return ZHReport{
+		Tables:   checkedTables,
+		Pairs:    checkedPairs,
+		Findings: findings,
+	}, nil
+}
+
+// checkTableZHs kiểm tra MỌI bản ZH, kể cả bản không có bản VI đi kèm.
+// Trả về các kết quả và số bản ZH đã kiểm tra.
+//
+// Không đòi có bản VI: một bản tên "...ZH" mà không còn chữ Trung thì sai
+// dù có hay không có bản VI. Nếu đòi bản VI thì chỉ cần đổi tên bản VI là
+// nhánh ZH rơi ra khỏi phạm vi kiểm tra — cổng tự tắt mình trong im lặng,
+// đúng cái lỗi mà cổng này sinh ra để chặn.
+func checkTableZHs(tables []bilingualTable) ([]ZHFinding, int) {
+	groups := map[string][]bilingualTable{}
+	for _, tbl := range tables {
+		key := tbl.pkg + "::" + tbl.base
+		groups[key] = append(groups[key], tbl)
+	}
+
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var findings []ZHFinding
+	checked := 0
+	for _, key := range keys {
+		for _, tbl := range groups[key] {
+			if tbl.side != "zh" {
+				continue
+			}
+			checked++
+			found, unknown, preview := zhTableContent(tbl)
+			switch {
+			case found:
+				continue
+			case unknown:
+				findings = append(findings, ZHFinding{
+					File: tbl.file, Line: tbl.line, Table: tbl.name, Kind: ZHUnknown,
+					Detail: "nhánh ZH có giá trị không đọc được bằng phân tích cú pháp, " +
+						"không kết luận được có còn ký tự CJK hay không",
+				})
+			default:
+				findings = append(findings, ZHFinding{
+					File: tbl.file, Line: tbl.line, Table: tbl.name, Kind: ZHViolation,
+					Detail: fmt.Sprintf("nhánh ZH không còn ký tự CJK nào%s", preview),
+				})
 			}
 		}
 	}
-	out[path] = level
+	return findings, checked
+}
+
+// zhTableContent kiểm tra nội dung của một bản ZH.
+//
+// Trả về: đã tìm thấy ký tự CJK hay không, có mục không đọc được hay không,
+// và một đoạn trích nhỏ để người đọc biết bảng đang chứa gì.
+func zhTableContent(tbl bilingualTable) (found bool, unknown bool, preview string) {
+	paths := make([]string, 0, len(tbl.levels))
+	for path := range tbl.levels {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	var samples []string
+	opaque := 0
+	for _, path := range paths {
+		level := tbl.levels[path]
+		opaque += level.opaque
+		for _, text := range level.allTexts {
+			if hasCJK(text) {
+				return true, false, ""
+			}
+		}
+		for _, key := range level.keys {
+			text, ok := level.texts[key]
+			if !ok {
+				// Giá trị là mảng chuỗi: nội dung đã được gom vào allTexts.
+				continue
+			}
+			if len(samples) < 3 {
+				samples = append(samples, fmt.Sprintf("%s.%s=%q", path, key, text))
+			}
+		}
+	}
+	if opaque > 0 {
+		return false, true, ""
+	}
+	if len(samples) == 0 {
+		return false, false, " (bảng không có chuỗi literal nào để đọc)"
+	}
+	return false, false, ": " + strings.Join(samples, ", ")
+}
+
+// checkPairZHs kiểm tra nhánh ZH của các cặp `i18n.Text` viết tay.
+// Trả về các kết quả và số cặp đã kiểm tra.
+func checkPairZHs(pairs []pairLiteral) ([]ZHFinding, int) {
+	var findings []ZHFinding
+	checked := 0
+	for _, pair := range pairs {
+		if !pair.zhSet {
+			// Thiếu nhánh ZH: comparePairs đã báo sai lệch đó.
+			continue
+		}
+		checked++
+		if !pair.zhOK {
+			findings = append(findings, ZHFinding{
+				File: pair.file, Line: pair.line, Table: "i18n.Text", Kind: ZHUnknown,
+				Detail: "nhánh ZH không đọc được bằng phân tích cú pháp, " +
+					"không kết luận được có còn ký tự CJK hay không",
+			})
+			continue
+		}
+		if !hasCJK(pair.zhText) {
+			findings = append(findings, ZHFinding{
+				File: pair.file, Line: pair.line, Table: "i18n.Text", Kind: ZHViolation,
+				Detail: fmt.Sprintf("nhánh ZH không còn ký tự CJK nào: %q", pair.zhText),
+			})
+		}
+	}
+	return findings, checked
+}
+
+// hasCJK báo chuỗi có chứa ít nhất một ký tự CJK hay không.
+//
+// Dùng đúng hai dải mà cổng CJK (scripts/vi_port_scan.py) dùng, để hai bộ
+// kiểm tra cùng hiểu một chữ "Trung" là gì: CJK hợp nhất (U+4E00–U+9FFF) và
+// CJK mở rộng A (U+3400–U+4DBF).
+func hasCJK(text string) bool {
+	for _, r := range text {
+		if (r >= 0x4E00 && r <= 0x9FFF) || (r >= 0x3400 && r <= 0x4DBF) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- so sánh ---------------------------------------------------------------

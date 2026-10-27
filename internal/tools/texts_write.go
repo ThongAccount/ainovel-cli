@@ -161,7 +161,7 @@ var writeTextsVI = &writeTexts{
 	planChapterCompleted:           "Chương %d đã được nộp hoàn tất, không thể quy hoạch lại",
 	planChapterNextStep:            "Gọi ngay draft_chapter(chapter=số chương này, content=chuỗi nội dung truyện đầy đủ) để ghi nội dung, đừng quy hoạch lại cùng một chương",
 
-	commitChapterDesc: "Nộp bản chính của chương. Nạp nội dung truyện từ bản nháp và lưu thành bản chính, cập nhật dòng thời gian, manh mối, quan hệ, trạng thái nhân vật và tiến độ. " +
+	commitChapterDesc: "Nộp bản chính của chương. Nạp nội dung truyện từ bản nháp và lưu thành bản chính, cập nhật dòng thời gian, phục bút, quan hệ, trạng thái nhân vật và tiến độ. " +
 		"Trả về các sự thật có cấu trúc: next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow v.v.",
 	commitChapterLabel:      "Nộp chương",
 	commitChapterArgChapter: "Số chương",
@@ -212,7 +212,7 @@ var writeTextsVI = &writeTexts{
 	auditFoundationArgIssues:      "Các vấn đề ngữ nghĩa xuyên suốt các tệp tìm được; khi ready=true thì là mảng rỗng",
 	auditFoundationNextAction:     "Sửa bối cảnh nền tảng tương ứng theo issues, gọi lại novel_context rồi kiểm tra lần nữa",
 
-	checkConsistencyDesc:       "Nạp bản nháp đã viết và dữ liệu đối chiếu (luật thế giới, manh mối, quan hệ, bí danh, tóm tắt gần đây) để bạn kiểm tra tính nhất quán. Phải gọi sau draft_chapter",
+	checkConsistencyDesc:       "Nạp bản nháp đã viết và dữ liệu đối chiếu (luật thế giới, phục bút, quan hệ, bí danh, tóm tắt gần đây) để bạn kiểm tra tính nhất quán. Phải gọi sau draft_chapter",
 	checkConsistencyLabel:      "Kiểm tra tính nhất quán",
 	checkConsistencyArgChapter: "Số chương cần kiểm tra",
 

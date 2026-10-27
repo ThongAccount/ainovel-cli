@@ -48,7 +48,7 @@ var factsTextsVI = &factsTexts{
 	storyTime:         "Thời gian trong truyện",
 	event:             "Sự kiện",
 	involvedCharacter: "Các nhân vật liên quan",
-	foreshadowID:      "ID manh mối",
+	foreshadowID:      "ID phục bút",
 	operation:         "Thao tác",
 	plantDescription:  "Mô tả plant, các thao tác khác là null",
 	characterA:        "Nhân vật A",
@@ -64,7 +64,7 @@ var factsTextsVI = &factsTexts{
 	presentCharacters: "Các nhân vật xuất hiện",
 	keyEvents:         "Sự kiện then chốt",
 	timelineEvents:    "Sự kiện dòng thời gian",
-	foreshadowOps:     "Thao tác manh mối",
+	foreshadowOps:     "Thao tác phục bút",
 	relationshipMoves: "Thay đổi quan hệ",
 	stateChanges:      "Thay đổi trạng thái",
 	newCast:           "Nhân vật phụ mới",
@@ -77,9 +77,9 @@ var factsTextsVI = &factsTexts{
 	feedbackObject:    "Đối tượng gợi ý cho dàn ý về sau; phải truyền trực tiếp JSON object, không truyền JSON đã chuyển thành chuỗi",
 
 	placeholderID: "foreshadow_updates[%d].id = %q là giá trị giữ chỗ, không phải định danh. " +
-		"Mỗi manh mối cần một id duy nhất và ổn định (ví dụ FORESHADOW_OBSERVER, jade-pendant), " +
+		"Mỗi phục bút cần một id duy nhất và ổn định (ví dụ FORESHADOW_OBSERVER, jade-pendant), " +
 		"các chương sau dựa vào nó để advance/resolve; " +
-		"dùng lại giá trị giữ chỗ sẽ khiến manh mối mới đụng mục với mục cũ",
+		"dùng lại giá trị giữ chỗ sẽ khiến phục bút mới đụng mục với mục cũ",
 }
 
 var factsTextsZH = &factsTexts{
