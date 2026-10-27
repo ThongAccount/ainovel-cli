@@ -201,8 +201,8 @@ func TestSaveReviewRejectsIssueOutsideChapterScope(t *testing.T) {
 	}
 }
 
-// TestSaveReviewKeepsModelDefinedDimension 验证工具不再把文学评价维度和分数阈值
-// 写死在 Go 中；Editor 可以按当前任务补充更准确的评价面。
+// TestSaveReviewKeepsModelDefinedDimension kiểm tra công cụ không còn viết cứng các chiều đánh giá văn học
+// và ngưỡng điểm trong Go; Editor có thể bổ sung mặt đánh giá chính xác hơn cho nhiệm vụ hiện tại.
 func TestSaveReviewKeepsModelDefinedDimension(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -309,10 +309,10 @@ func TestSaveReviewRejectsIssueWithoutEvidence(t *testing.T) {
 	}
 }
 
-// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition 防回归：返工排空中途
-// （Flow=rewriting、PendingRewrites=[8,9]）对已重写章复审得到 polish 时，
-// Flow=polishing 与 rewriting 构成非法迁移。ApplyReviewOutcome 必须在同一次写锁中
-// 完成校验和写入，非法迁移时队列保持不变。
+// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition chống hồi quy: khi đang rút hàng chờ làm lại
+// (Flow=rewriting, PendingRewrites=[8,9]) mà đánh giá lại một chương đã viết lại cho ra polish,
+// thì Flow=polishing và rewriting tạo thành một chuyển trạng thái luồng trái phép. ApplyReviewOutcome phải
+// hoàn tất việc kiểm tra và ghi trong cùng một khoá ghi, và khi chuyển trạng thái trái phép thì hàng chờ giữ nguyên.
 func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -385,7 +385,7 @@ func TestSaveReviewKeepsOutcomeWhenReviewArtifactWriteFails(t *testing.T) {
 	if err := s.Progress.MarkChapterComplete(3, 3000, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	// 让目标文件路径成为目录，稳定触发原子 rename 失败。
+	// Biến đường dẫn tệp đích thành thư mục để ổn định kích hoạt lỗi rename nguyên tử.
 	if err := os.MkdirAll(filepath.Join(dir, "reviews", "03.json"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func setupArcReviewStore(t *testing.T) *store.Store {
 			t.Fatal(err)
 		}
 	}
-	// 第一弧已经完整收尾，因此 Router 当前唯一待补工件是第二弧评审。
+	// Cung một đã chốt trọn vẹn, nên bản ghi duy nhất còn thiếu mà Router phải bổ sung là đánh giá cung hai.
 	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 2, Scope: "arc", Verdict: "accept", Summary: "第一弧评审"}); err != nil {
 		t.Fatal(err)
 	}
