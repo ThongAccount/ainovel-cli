@@ -98,10 +98,10 @@ EOF
 
 # Danh sách allowlist: các thư mục được kiểm tra khi cờ tương ứng được bật.
 SCOPES_TRACK_A="internal/tools"
-SCOPES_TRACK_B="internal/agents internal/arbiter internal/llmcontract internal/userrules internal/chapterfacts internal/stylestat"
+SCOPES_TRACK_B="internal/agents internal/arbiter internal/llmcontract internal/userrules internal/chapterfacts internal/stylestat internal/llmretry internal/i18n"
 SCOPES_TRACK_C="internal/host"
 SCOPES_TRACK_D="internal/store internal/revision internal/flow internal/diag internal/eval internal/domain internal/rules"
-SCOPES_TRACK_E="internal/entry internal/bootstrap internal/logger internal/notify internal/version internal/models internal/utils cmd"
+SCOPES_TRACK_E="internal/entry internal/bootstrap internal/logger internal/notify internal/version internal/models internal/utils internal/errs assets cmd"
 
 # Danh sách denylist: đường dẫn luôn được bỏ qua vì còn CJK có chủ đích.
 # Thư mục kết thúc bằng "/" nghĩa là bỏ qua cả cây thư mục.
