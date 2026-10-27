@@ -1,7 +1,7 @@
 // Package arbiter là lớp phán quyết ngữ nghĩa: LLM-as-function được đánh thức
 // khi cần.
 //
-// Hai mặt đối xứng (docs/engine-arbiter.md §二):
+// Hai mặt đối xứng (docs/engine-arbiter.md §2):
 //
 //	Mặt quyết định:  flow.LoadState   → flow.Route     → Instruction
 //	Mặt ngữ nghĩa:    arbiter.Collect* → arbiter.Decide* → XxxDecision

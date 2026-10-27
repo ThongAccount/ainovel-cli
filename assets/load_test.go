@@ -28,7 +28,8 @@ func TestBuildWriterPrompt_AssemblesProperly(t *testing.T) {
 	}
 }
 
-// TestLoad_NoOverrides 零覆盖时 Voice/AntiAITone 与内置逐字节一致。
+// TestLoad_NoOverrides kiểm tra khi không có ghi đè thì Voice/AntiAITone
+// khớp byte-for-byte với bản tích hợp.
 func TestLoad_NoOverrides(t *testing.T) {
 	b := Load("default", LoadOptions{})
 	if b.Voice != mustRead(voiceFS, "voice.md") {
