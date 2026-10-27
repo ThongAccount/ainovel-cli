@@ -14,6 +14,12 @@ Khác với bản quét nhúng sẵn trong `check-vi-port.sh` (v1), bộ quét n
 nhận diện được các hình thức bản ngữ zh hợp lệ thay vì phải duy trì
 thủ công một danh sách đường dẫn được bảo vệ.
 
+Baseline ghi hai mục riêng: `files` (literal trong mã) và `comments` (comment
+Go). Comment luôn được thu thập khi quét — kể cả khi không bật
+`--strict-comments` — nên chạy `--update-baseline` không bao giờ xoá mất mục
+comment đã ghi nhận. Chỉ khi bật `--strict-comments` thì comment mới bị báo
+là vi phạm.
+
 Cách dùng trực tiếp (thường gọi qua `scripts/check-vi-port.sh`):
 
     python3 scripts/vi_port_scan.py --scope internal/host --production
@@ -67,7 +73,7 @@ WORDLIST_NAME = re.compile(
 class Literal:
     """Một chuỗi literal (hoặc comment) trong file Go."""
 
-    __slots__ = ("path", "line", "body", "kind", "reason")
+    __slots__ = ("path", "line", "body", "kind", "reason", "is_comment")
 
     def __init__(self, path: str, line: int, body: str) -> None:
         self.path = path
@@ -75,6 +81,8 @@ class Literal:
         self.body = body
         self.kind = "violation"
         self.reason = ""
+        # True nếu chuỗi này nằm trong comment Go (không phải literal).
+        self.is_comment = False
 
     def __repr__(self) -> str:  # pragma: no cover - chỉ phục vụ debug
         return f"<{self.path}:{self.line} {self.kind}>"
@@ -419,12 +427,19 @@ def scan(
     denylist: list[str],
     production_only: bool,
     strict_comments: bool = False,
-) -> tuple[list[Literal], int, int]:
+) -> tuple[list[Literal], list[Literal], int, int]:
     """Quét phạm vi.
 
-    Trả về (literal đã phân loại, số file đã quét, số file được bảo vệ).
+    Trả về (literal đã phân loại, comment CJK tìm thấy, số file đã quét,
+    số file được bảo vệ).
+
+    Comment luôn được thu thập để baseline biết chúng tồn tại, nhưng chỉ bị
+    báo là vi phạm khi bật `--strict-comments`.  Nhờ vậy chạy
+    `--update-baseline` (không bật strict) vẫn giữ được mục comment trong
+    baseline thay vì xoá sạch chúng.
     """
     found: list[Literal] = []
+    comments: list[Literal] = []
     scanned = 0
     skipped = 0
     for path in git_ls_files(scopes):
@@ -437,7 +452,8 @@ def scan(
             continue
         scanned += 1
         try:
-            text = open(path, encoding="utf-8", errors="replace").read()
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
         except OSError:
             continue
         lines = text.splitlines()
@@ -446,50 +462,86 @@ def scan(
             if not CJK.search(body):
                 continue
             found.append(classify_literal(path, line, body, lines, zh_tables))
-        if strict_comments:
-            for line, body in scan_comments(text):
-                if not CJK.search(body):
-                    continue
-                lit = Literal(path, line, body)
-                if not in_ranges(line, [(s, e) for s, e, _ in zh_tables]):
-                    lit.kind = "violation"
-                    lit.reason = "ký tự CJK còn sót trong comment"
-                    found.append(lit)
-    return found, scanned, skipped
+        for line, body in scan_comments(text):
+            if not CJK.search(body):
+                continue
+            if in_ranges(line, [(s, e) for s, e, _ in zh_tables]):
+                continue
+            lit = Literal(path, line, body)
+            lit.is_comment = True
+            lit.kind = "violation" if strict_comments else "comment"
+            lit.reason = "ký tự CJK còn sót trong comment"
+            comments.append(lit)
+            if strict_comments:
+                found.append(lit)
+    return found, comments, scanned, skipped
 
 
 # -------------------------------------------------------------- baseline -- #
 
 
-def baseline_path_counters(found: list[Literal]) -> dict[str, Counter]:
-    """Đếm literal theo (path, body) để baseline bám theo nội dung, không theo dòng."""
-    counters: dict[str, Counter] = {}
+def baseline_path_counters(
+    found: list[Literal], comments: list[Literal]
+) -> tuple[dict[str, Counter], dict[str, Counter]]:
+    """Đếm literal và comment theo (path, body).
+
+    Baseline bám theo nội dung chứ không theo dòng, nên dịch xong một chỗ
+    chỉ cần chạy lại `--update-baseline` là baseline tự co lại đúng.
+
+    Trả về (counter của literal, counter của comment) — hai mục được ghi
+    riêng trong file baseline để người đọc thấy rõ phần nào là comment.
+    """
+    literals: dict[str, Counter] = {}
+    comment_hits: dict[str, Counter] = {}
     for lit in found:
-        if lit.kind != "violation":
+        if lit.kind != "violation" or lit.is_comment:
             continue
-        counters.setdefault(lit.path, Counter())[lit.body] += 1
-    return counters
+        literals.setdefault(lit.path, Counter())[lit.body] += 1
+    for lit in comments:
+        comment_hits.setdefault(lit.path, Counter())[lit.body] += 1
+    return literals, comment_hits
 
 
 def load_baseline(path: str) -> dict[str, Counter]:
+    """Nạp baseline cũ (chỉ literal) hoặc mới (literal + comment).
+
+    Hai mục được gộp lại thành một bộ đếm chung nên cách so khớp không đổi:
+    một chuỗi CJK đã biết ở file nào đó thì không bao giờ bị báo lại.
+    """
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    return {p: Counter(v.get("literals", [])) for p, v in data.get("files", {}).items()}
+    merged: dict[str, Counter] = {}
+    for p, v in data.get("files", {}).items():
+        merged.setdefault(p, Counter()).update(v.get("literals", []))
+    for p, v in data.get("comments", {}).items():
+        merged.setdefault(p, Counter()).update(v.get("comments", []))
+    return merged
 
 
-def write_baseline(path: str, counters: dict[str, Counter]) -> None:
+def write_baseline(
+    path: str,
+    literal_counters: dict[str, Counter],
+    comment_counters: dict[str, Counter],
+) -> None:
     payload = {
-        "version": 1,
+        "version": 2,
         "note": (
-            "Baseline cổng Việt hóa: các literal CJK còn sót đã biết. "
-            "CI chỉ đỏ khi có literal MỚI chưa có trong danh sách này. "
+            "Baseline cổng Việt hóa: các chuỗi CJK còn sót đã biết. "
+            "CI chỉ đỏ khi có chuỗi MỚI chưa có trong danh sách này. "
+            "'files' là literal trong mã, 'comments' là comment Go "
+            "(chỉ được kiểm tra khi bật --strict-comments). "
             "Sinh lại bằng: bash scripts/check-vi-port.sh --update-baseline <file>"
         ),
         "files": {
             p: {"literals": sorted(c.elements())}
-            for p, c in sorted(counters.items())
+            for p, c in sorted(literal_counters.items())
+            if c
+        },
+        "comments": {
+            p: {"comments": sorted(c.elements())}
+            for p, c in sorted(comment_counters.items())
             if c
         },
     }
@@ -554,12 +606,13 @@ def main(argv: list[str] | None = None) -> int:
     os.chdir(root)
 
     denylist = [p for p in args.denylist.split("|") if p]
-    found, scanned, skipped = scan(
+    found, comments, scanned, skipped = scan(
         args.scope, denylist, args.production, args.strict_comments
     )
 
     if args.update_baseline:
-        write_baseline(args.update_baseline, baseline_path_counters(found))
+        literal_counters, comment_counters = baseline_path_counters(found, comments)
+        write_baseline(args.update_baseline, literal_counters, comment_counters)
         print(f"Đã ghi baseline vào {args.update_baseline}")
         return 0
 
