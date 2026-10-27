@@ -238,6 +238,50 @@ class BaselineTest(unittest.TestCase):
             finally:
                 os.chdir(cwd)
 
+    def test_comments_only_update_baseline_still_collects_literals(self):
+        """--comments-only lọc phần BÁO CÁO, không lọc phần THU THẬP.
+
+        Bẫy: có ai đó cho rằng `--comments-only` nên bỏ luôn literal khi ghi
+        baseline, để mục `files` gọn lại. Kết quả đo được trên repo thật là
+        lần chạy mặc định kế tiếp báo **1068 literal mới** trên 66 file
+        `_test.go` — baseline co lại đúng lúc mã chưa đổi, và cổng đỏ trần.
+        Báo cáo lọc theo comment, thu thập vẫn đối xứng: đó cùng một luật
+        giữ mục comments khỏi bị xoá bởi một `--update-baseline` thường.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            baseline = Path(tmp) / "baseline.json"
+            cwd = os.getcwd()
+            os.chdir(repo)
+            try:
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    status = scan_mod.main(
+                        [
+                            "--scope",
+                            ".",
+                            "--production",
+                            "--comments-only",
+                            "--update-baseline",
+                            str(baseline),
+                        ]
+                    )
+                self.assertEqual(status, 0)
+
+                data = json.loads(baseline.read_text(encoding="utf-8"))
+                self.assertIn(
+                    "sample.go",
+                    data["files"],
+                    "mục files không được rỗng sau khi chạy --comments-only",
+                )
+                self.assertIn(
+                    '"还有中文"',
+                    data["files"]["sample.go"]["literals"],
+                    "literal vẫn phải được thu thập, nếu không lần chạy mặc định kế tiếp báo mới",
+                )
+            finally:
+                os.chdir(cwd)
+
 
 GO_SAMPLE = """package demo
 
