@@ -40,6 +40,12 @@
 #                        ghi lại baseline hiện tại (mặc định: file baseline
 #                        đang dùng), dùng để ratchet backlog
 #   --self-test          chạy bộ test của chính cổng rồi thoát
+#   --comment-only-diff <base>..<head>
+#                        kiểm tra diff trong khoảng ref chỉ đổi comment Go,
+#                        không đổi mã (dùng cho track dịch comment)
+#   --comment-only-diff <base>...<head>
+#                        như trên nhưng lấy merge-base làm gốc — dùng khi
+#                        nhánh đang đứng sau main
 #   --list-flags         in danh sách cờ + đường dẫn được bảo vệ rồi thoát
 #   -h, --help           in phần trợ giúp này rồi thoát
 #
@@ -87,6 +93,10 @@ TÙY CHỌN
   --update-baseline [<file>]
                       ghi lại baseline hiện tại
   --self-test          chạy bộ test của chính cổng rồi thoát
+  --comment-only-diff <base>..<head>
+                       kiểm tra diff chỉ đổi comment Go, không đổi mã
+  --comment-only-diff <base>...<head>
+                       như trên nhưng lấy merge-base làm gốc
   --list-flags         in danh sách cờ + đường dẫn được bảo vệ
   -h, --help           in phần trợ giúp
 
@@ -124,6 +134,7 @@ baseline=""
 baseline_set=0
 update_baseline=""
 self_test=0
+comment_only_diff=""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_BASELINE="$SCRIPT_DIR/vi-port-baseline.json"
@@ -139,6 +150,7 @@ list_flags() {
 	printf '  --strict-comments: %s\n' "$([[ $strict -eq 1 ]] && echo BẬT || echo TẮT)"
 	printf '  --comments-only: %s\n' "$([[ $comments_only -eq 1 ]] && echo BẬT || echo TẮT)"
 	printf '  --baseline : %s\n' "${baseline:-<không có>}"
+	printf '  --comment-only-diff : %s\n' "${comment_only_diff:-<không có>}"
 	printf '\nĐường dẫn được bảo vệ (luôn bỏ qua):\n'
 	local entry
 	while IFS= read -r entry; do
@@ -193,6 +205,11 @@ while [[ $# -gt 0 ]]; do
 		fi
 		;;
 	--self-test) self_test=1 ;;
+	--comment-only-diff)
+		[[ $# -ge 2 ]] || { printf 'Thiếu phạm vi diff sau --comment-only-diff (dạng base..head).\n' >&2; exit 2; }
+		comment_only_diff="$2"
+		shift
+		;;
 	--list-flags)
 		list_flags
 		exit 0
@@ -245,6 +262,12 @@ fi
 if [[ -z "$PYTHON_BIN" ]]; then
 	printf 'Thiếu python3 — cần python3 để kiểm tra literal CJK.\n' >&2
 	exit 2
+fi
+
+# Chế độ kiểm tra diff "chỉ đổi comment": chạy trước khi kiểm tra phạm vi
+# quét, nên dùng được cả với --none (không cần bật track nào).
+if [[ -n "$comment_only_diff" ]]; then
+	exec "$PYTHON_BIN" "$SCRIPT_DIR/comment_only_diff.py" "$comment_only_diff"
 fi
 
 if [[ -z "$scopes" ]]; then

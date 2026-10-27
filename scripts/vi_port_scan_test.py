@@ -22,11 +22,13 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCANNER = Path(__file__).with_name("vi_port_scan.py")
+COMMENT_DIFF = Path(__file__).with_name("comment_only_diff.py")
 
 
 def load_scanner():
@@ -36,7 +38,15 @@ def load_scanner():
     return module
 
 
+def load_comment_diff():
+    spec = importlib.util.spec_from_file_location("comment_only_diff", COMMENT_DIFF)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 scan_mod = load_scanner()
+diff_mod = load_comment_diff()
 
 SAMPLE = """package demo
 
@@ -227,6 +237,213 @@ class BaselineTest(unittest.TestCase):
                 self.assertNotIn("[giữ]", output)
             finally:
                 os.chdir(cwd)
+
+
+GO_SAMPLE = """package demo
+
+// 这是中文注释
+func demo() string {
+	return "还有中文" // ghi chú cuối dòng
+}
+"""
+
+
+def commit_all(repo: Path, message: str) -> None:
+    """Commit mọi thay đổi trong repo tạm (không phụ thuộc git config toàn cục)."""
+    identity = [
+        "-c",
+        "user.name=Toolsmith",
+        "-c",
+        "user.email=toolsmith@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+    ]
+    subprocess.run(["git", *identity, "add", "-A"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", *identity, "commit", "-q", "-m", message], cwd=repo, check=True
+    )
+
+
+def run_diff(repo: Path, rng: str) -> subprocess.CompletedProcess:
+    """Chạy comment_only_diff.py trong repo tạm, trả về kết quả."""
+    return subprocess.run(
+        [sys.executable, str(COMMENT_DIFF), rng],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+class CommentOnlyDiffTest(unittest.TestCase):
+    """Kiểm tra trình xác minh "diff chỉ đổi comment".
+
+    Đây là công cụ Chief dùng để chấp nhận nhanh branch dịch comment: thay vì
+    đọc diff bằng mắt, chạy máy và có kết luận khách quan.
+    """
+
+    def make_repo(self, root: Path) -> tuple[Path, str]:
+        repo = root / "repo"
+        repo.mkdir(parents=True, exist_ok=True)
+        (repo / "demo.go").write_text(GO_SAMPLE, encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        commit_all(repo, "khởi tạo")
+        base = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        return repo, base
+
+    def test_code_tokens_ignore_comments(self):
+        """Comment không đổi danh sách token của phần mã."""
+        self.assertEqual(
+            diff_mod.code_tokens("x := 1 // note\n"),
+            diff_mod.code_tokens("x := 1\n"),
+        )
+        self.assertEqual(
+            diff_mod.code_tokens("f(a /*x*/, b)\n"),
+            diff_mod.code_tokens("f(a, b)\n"),
+        )
+
+    def test_code_tokens_keep_string_interior(self):
+        """Khoảng trắng bên trong chuỗi là thay đổi thật, phải khác token."""
+        self.assertNotEqual(
+            diff_mod.code_tokens('s := "a  b"\n'),
+            diff_mod.code_tokens('s := "a b"\n'),
+        )
+
+    def test_code_tokens_ignore_line_numbers(self):
+        """Số dòng không thuộc về mã: comment dài thêm một dòng là lệch dòng.
+
+        Đây là bẫt đã gặp: so sánh kèm số dòng thì mọi comment viết lại
+        thành hai dòng đều bị báo nhầm là "mã đã thay đổi".
+        """
+        one_line = diff_mod.code_tokens("// ghi chú\nx := 1\n")
+        two_lines = diff_mod.code_tokens("// ghi chú\n// viết lại\nx := 1\n")
+        self.assertNotEqual(one_line, two_lines)  # số dòng khác
+        self.assertEqual(
+            diff_mod.token_texts(one_line), diff_mod.token_texts(two_lines)
+        )  # nhưng mã thì không khác
+
+    def test_comment_reflow_passes(self):
+        """Comment một dòng viết lại thành hai dòng vẫn là comment-only."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+            path = repo / "demo.go"
+            path.write_text(
+                GO_SAMPLE.replace(
+                    "// 这是中文注释",
+                    "// Ghi chú tiếng Việt\n// viết trên hai dòng",
+                ),
+                encoding="utf-8",
+            )
+            commit_all(repo, "viết lại comment")
+
+            proc = run_diff(repo, f"{base}..HEAD")
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_comment_only_change_passes(self):
+        """Chỉ đổi nội dung comment ⇒ không vi phạm, mã thoát 0."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+            path = repo / "demo.go"
+            path.write_text(
+                GO_SAMPLE.replace("// 这是中文注释", "// Ghi chú tiếng Việt"),
+                encoding="utf-8",
+            )
+            commit_all(repo, "đổi comment")
+
+            proc = run_diff(repo, f"{base}..HEAD")
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("chỉ nằm trong comment", proc.stdout)
+
+    def test_trailing_comment_removal_passes(self):
+        """Bỏ hẳn comment cuối dòng vẫn là thay đổi comment-only."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+            path = repo / "demo.go"
+            path.write_text(
+                GO_SAMPLE.replace(" // ghi chú cuối dòng", ""), encoding="utf-8"
+            )
+            commit_all(repo, "bỏ comment cuối dòng")
+
+            proc = run_diff(repo, f"{base}..HEAD")
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_code_change_is_flagged(self):
+        """Đổi literal trong chuỗi ⇒ báo 'mã đã thay đổi', mã thoát 1."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+            path = repo / "demo.go"
+            path.write_text(
+                GO_SAMPLE.replace('"还有中文"', '"还有中文!"'), encoding="utf-8"
+            )
+            commit_all(repo, "đổi literal")
+
+            proc = run_diff(repo, f"{base}..HEAD")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("mã đã thay đổi", proc.stdout)
+            self.assertIn("demo.go", proc.stdout)
+
+    def test_non_go_file_change_is_flagged(self):
+        """Đụng file không phải mã Go ⇒ báo 'file ngoài phạm vi comment'."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+            (repo / "notes.json").write_text('{"a": 1}\n', encoding="utf-8")
+            commit_all(repo, "thêm file json")
+
+            proc = run_diff(repo, f"{base}..HEAD")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("file ngoài phạm vi comment", proc.stdout)
+
+    def test_invalid_range_is_usage_error(self):
+        """Phạm vi sai dạng ⇒ mã thoát 2 (lỗi tham số)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self.make_repo(Path(tmp))
+            proc = run_diff(repo, "HEAD")
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+
+    def test_three_dot_range_uses_merge_base(self):
+        """Dạng base...head lấy merge-base làm gốc.
+
+        Nhánh đứng sau main mà so với main thì sẽ thấy cả "thay đổi" của
+        chính main — đó là thay đổi của người khác, không phải của nhánh.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self.make_repo(Path(tmp))
+
+            # "main" đi trước bằng một commit không liên quan.
+            subprocess.run(
+                ["git", "checkout", "-q", "-b", "main"], cwd=repo, check=True
+            )
+            (repo / "other.go").write_text("package demo\n", encoding="utf-8")
+            commit_all(repo, "commit trên main")
+            subprocess.run(["git", "checkout", "-q", "-"], cwd=repo, check=True)
+
+            # Nhánh hiện tại đổi mã.
+            path = repo / "demo.go"
+            path.write_text(
+                GO_SAMPLE.replace('"还有中文"', '"还有中文!"'), encoding="utf-8"
+            )
+            commit_all(repo, "đổi literal")
+
+            # So thẳng với main: thấy cả commit của main (other.go bị mất).
+            proc = run_diff(repo, "main..HEAD")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("other.go", proc.stdout)
+
+            # So từ merge-base: chỉ thấy thay đổi của nhánh này.
+            proc = run_diff(repo, "main...HEAD")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("demo.go", proc.stdout)
+            self.assertNotIn("other.go", proc.stdout)
+            self.assertEqual(base, subprocess.run(
+                ["git", "rev-parse", "HEAD~1"],
+                cwd=repo, check=True, capture_output=True, text=True).stdout.strip())
 
 
 if __name__ == "__main__":
