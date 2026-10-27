@@ -79,3 +79,56 @@ func TestRepoHasBilingualTables(t *testing.T) {
 	t.Logf("tìm thấy %d bản bảng văn bản song ngữ và %d cặp i18n.Text trong %d file",
 		count, pairs, len(files))
 }
+
+// TestRepoZHHalvesKeepChinese là cổng chặn nhánh ZH của cả repo.
+//
+// Lỗi mà hai cổng cũ đều bỏ lọt: cổng CJK không thấy vì nhánh ZH đã hết
+// chữ Trung, cổng song ngữ không thấy vì tập trường vẫn khớp. Khi một
+// bảng "tiếng Trung" bị dịch hết sang tiếng Việt mà vẫn giữ tên xxxZH, công
+// cụ không có cách nào phát hiện — đó là lỗ hổng của việc chỉ dựa vào hình
+// thức câu lệnh.
+//
+// Quy tắc: nhánh ZH của mỗi bảng "...ZH" và mỗi cặp i18n.Text phải còn ít
+// nhất một ký tự CJK. Kiểm tra theo cả bảng, không theo từng mục: một mục
+// ASCII thuần (ví dụ "%d") là hợp lệ. Bảng "...ZH" không cần có bảng "...VI"
+// đi kèm — nếu đòi thì chỉ cần đổi tên bản VI là nhánh ZH rơi khỏi phạm vi
+// kiểm tra và cổng tự tắt trong im lặng.
+func TestRepoZHHalvesKeepChinese(t *testing.T) {
+	root := repoRoot(t)
+	report, err := CheckZH(root)
+	if err != nil {
+		t.Fatalf("quét nhánh ZH: %v", err)
+	}
+
+	// Chặn "xanh giả": nếu không còn gì để kiểm tra thì cổng này không bảo vệ
+	// được gì, và phải báo ngay thay vì im lặng.
+	if report.Tables < 10 {
+		t.Fatalf("chỉ kiểm tra được %d bản ZH, có vẻ bộ dò quét đã hỏng", report.Tables)
+	}
+	if report.Pairs < 1 {
+		t.Fatalf("không kiểm tra được cặp i18n.Text nào, có vẻ bộ dò quét đã hỏng")
+	}
+
+	violations := report.Violations()
+	if len(violations) > 0 {
+		var sb strings.Builder
+		for _, finding := range violations {
+			sb.WriteString("\n  " + finding.String())
+		}
+		t.Errorf("nhánh ZH mất ký tự CJK (%d sai lệch):%s", len(violations), sb.String())
+	}
+
+	// Không đọc được thì cũng phải đỏ: im lặng ở đây là để lỗi đi qua.
+	unknown := report.Unknown()
+	if len(unknown) > 0 {
+		var sb strings.Builder
+		for _, finding := range unknown {
+			sb.WriteString("\n  " + finding.String())
+		}
+		t.Errorf("không đọc được nội dung nhánh ZH (%d trường hợp), cần người kiểm tra:%s",
+			len(unknown), sb.String())
+	}
+
+	t.Logf("đã kiểm tra %d bản ZH và %d cặp i18n.Text: %d vi phạm, %d không xác định",
+		report.Tables, report.Pairs, len(violations), len(unknown))
+}
