@@ -109,7 +109,7 @@ func segFixture() ([]byte, []SourceUnit) {
 
 func TestResolveSegmentationHappy(t *testing.T) {
 	norm, units := segFixture()
-	// L1 前言(front) / L3 第一章 / L5 卷二(group) / L6 第二章
+	// Chú giải segFixture: L1 前言(front) / L3 第一章 / L5 卷二(group) / L6 第二章
 	decisions := []BoundaryDecision{
 		{UnitID: "L1", Kind: kindFrontMatter, Title: "前言"},
 		{UnitID: "L3", Kind: kindChapter, Title: "第一章 风起"},
