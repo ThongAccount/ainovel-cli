@@ -407,6 +407,33 @@ func languageSide(name string) (side, base string) {
 	return "", ""
 }
 
+// literalStringOf đọc một biểu thức chuỗi literal, gồm nối chuỗi bằng "+".
+// Không đọc lời gọi hàm: fmt.Sprintf("%s", x) cho biết định dạng chứ không cho
+// biết văn bản lúc chạy, nên vẫn phải để là không xác định.
+func literalStringOf(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind != token.STRING {
+			return "", false
+		}
+		s, err := strconv.Unquote(e.Value)
+		if err != nil {
+			return "", false
+		}
+		return s, true
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		left, okLeft := literalStringOf(e.X)
+		right, okRight := literalStringOf(e.Y)
+		if okLeft && okRight {
+			return left + right, true
+		}
+	}
+	return "", false
+}
+
 // collectLevels đi xuống từng mức của literal, ghi lại các trường khai báo tại
 // mỗi mức và giá trị chuỗi literal (nếu có).
 func collectLevels(lit *ast.CompositeLit, typeName, path string, out map[string]tableLevel) {
@@ -422,13 +449,9 @@ func collectLevels(lit *ast.CompositeLit, typeName, path string, out map[string]
 		}
 		level.keys = append(level.keys, key.Name)
 
-		if bl, ok := kv.Value.(*ast.BasicLit); ok && bl.Kind == token.STRING {
-			if s, err := strconv.Unquote(bl.Value); err == nil {
-				level.texts[key.Name] = s
-				level.allTexts = append(level.allTexts, s)
-				continue
-			}
-			level.opaque++
+		if s, ok := literalStringOf(kv.Value); ok {
+			level.texts[key.Name] = s
+			level.allTexts = append(level.allTexts, s)
 			continue
 		}
 
