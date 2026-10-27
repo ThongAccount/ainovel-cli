@@ -282,7 +282,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// 先创建初始 layered_outline（卷1）
+	// Tạo layered_outline ban đầu trước (tập 1)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -298,7 +298,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// append_volume：追加卷2
+	// append_volume: thêm tập 2
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
 		"reason": "主线仍有多条长线未收束，需继续第二卷",
@@ -320,7 +320,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("expected volume=2, got %v", result["volume"])
 	}
 
-	// 验证大纲有 2 卷
+	// Kiểm tra đề cương có 2 tập
 	volumes, _ := s.Outline.LoadLayeredOutline()
 	if len(volumes) != 2 {
 		t.Fatalf("expected 2 volumes, got %d", len(volumes))
@@ -329,7 +329,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("expected title '第二卷', got %q", volumes[1].Title)
 	}
 
-	// 卷末判定理由必须进裁定审计
+	// Lý do phán quyết cuối tập phải vào nhật ký phán quyết
 	recs, _ := s.Decisions.Recent(1)
 	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
 		t.Fatalf("append_volume 应落一条 volume_end 裁定审计, got %+v", recs)
@@ -401,7 +401,7 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// 初始卷
+	// Tập khởi đầu
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -415,7 +415,7 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 	})
 	tool.Execute(context.Background(), layeredArgs)
 
-	// Index 不递增 → 应失败（结构性校验）
+	// Index không tăng → phải thất bại (kiểm tra cấu trúc)
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
 		"reason": "测试理由",
@@ -433,8 +433,9 @@ func TestSaveFoundationAppendVolumeValidation(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationAppendVolumeRejectsAfterComplete 验证 Phase=Complete 后不允许 append_volume。
-// 取代旧的"Final 卷拒绝追加"语义（Final 字段已删除）。
+// TestSaveFoundationAppendVolumeRejectsAfterComplete kiểm tra Phase=Complete không còn
+// cho phép append_volume. Thay thế ngữ nghĩa cũ "tập Final từ chối thêm" (trường Final
+// đã bị xoá).
 func TestSaveFoundationAppendVolumeRejectsAfterComplete(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -506,7 +507,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 	}
 	if err := s.Progress.Save(&domain.Progress{
 		Phase:             domain.PhaseWriting,
-		CompletedChapters: []int{1, 2, 3, 5, 4}, // 乱序，验证取 max 而非 len
+		CompletedChapters: []int{1, 2, 3, 5, 4}, // thứ tự lộn xộn, kiểm tra lấy max chứ không phải len
 	}); err != nil {
 		t.Fatalf("Save progress: %v", err)
 	}
@@ -517,7 +518,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 		"content": map[string]any{
 			"ending_direction": "主角面对最终抉择",
 			"open_threads":     []string{"线索A"},
-			"last_updated":     0, // LLM 通常忘填或留 0
+			"last_updated":     0, // LLM thường quên điền hoặc để 0
 		},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {
@@ -589,9 +590,10 @@ func TestSaveFoundationAcceptsDirectJSONArrayContent(t *testing.T) {
 	}
 }
 
-// completeBookSetup 建一份处于 writing 阶段、共 2 章的最小 Store,用于 complete_book
-// 系列测试。工具层校验(全部可枚举,进代码不进提示词):progress 已初始化、
-// PendingRewrites 为空、至少写完一章、大纲内无未写章节。
+// completeBookSetup dựng một Store tối thiểu ở giai đoạn writing, gồm 2 chương, dùng
+// cho bộ test complete_book. Các kiểm tra ở tầng công cụ (đều liệt kê được, nằm trong
+// code chứ không nằm trong prompt): progress đã khởi tạo, PendingRewrites rỗng, đã
+// viết ít nhất một chương, đề cương không còn chương nào chưa viết.
 func completeBookSetup(t *testing.T) *store.Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -635,7 +637,7 @@ func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 		t.Fatalf("expected progress.Phase=complete, got %s", progress.Phase)
 	}
 
-	// 完结判定的理由必须进裁定审计（事实快照取判定时刻）
+	// Lý do phán quyết hoàn thành phải vào nhật ký phán quyết (ảnh chụp sự thật lấy tại thời điểm phán quyết)
 	recs, _ := s.Decisions.Recent(1)
 	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
 		t.Fatalf("complete_book 应落一条 volume_end 裁定审计, got %+v", recs)
@@ -648,9 +650,10 @@ func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsZeroChapters 复现真实事故:规划刚落盘
-// phase 自动翻到 writing,弱模型顺手误调 complete_book——一章未写必须拒绝,
-// 否则整本书被跳过(0/68 章标记完本)。
+// TestSaveFoundationCompleteBookRejectsZeroChapters tái hiện sự cố thật: kế hoạch vừa
+// ghi xuống đĩa, phase tự đảo sang writing, mô hình yếu tiện tay gọi complete_book —
+// chưa viết chương nào thì phải từ chối, nếu không cả cuốn sách bị đánh dấu hoàn thành
+// (0/68 chương) và bị bỏ qua.
 func TestSaveFoundationCompleteBookRejectsZeroChapters(t *testing.T) {
 	s := completeBookSetup(t)
 	tool := NewSaveFoundationTool(s)
@@ -667,10 +670,13 @@ func TestSaveFoundationCompleteBookRejectsZeroChapters(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsOpenThreads 守护"长线未收束不可完本"的工具级
-// 防线：OpenThreads 契约即"需收束才能结局"，但实测架构师会在论述里把未收束长线豁免为
-// "作者有意留白"直接完本（导入完本书续写场景，用户续写诉求被完本规则锁死）。豁免必须
-// 显式落盘——update_compass 清空 open_threads 后方可完本。
+// TestSaveFoundationCompleteBookRejectsOpenThreads canh giữ đường phòng thủ ở tầng công cụ
+// cho quy tắc "tuyến dài chưa khép thì không được đóng sách": hợp đồng OpenThreads nghĩa
+// là "phải khép thì mới kết", nhưng thực tế kiến trúc sư hay miễn trừ tuyến dài chưa khép
+// trong lập luận rồi đóng sách thẳng (kịch bản nhập sách đã hoàn thành rồi viết tiếp —
+// nhu cầu viết tiếp của người dùng bị quy tắc hoàn thành khoá cứng). Mọi khoản miễn trừ
+// phải được ghi xuống đĩa tường minh — update_compass xoá open_threads rồi mới được
+// đóng sách.
 func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	s := completeBookSetup(t)
 	for ch := 1; ch <= 2; ch++ {
@@ -694,7 +700,7 @@ func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	if p, _ := s.Progress.Load(); p.Phase != domain.PhaseWriting {
 		t.Fatalf("phase 应保持 writing，得 %s", p.Phase)
 	}
-	// 显式收束落盘（update_compass 清空 open_threads）后放行。
+	// Sau khi việc khép tuyến được ghi xuống đĩa tường minh (update_compass xoá open_threads) thì mới cho đi.
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "终局已达成"}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
@@ -703,8 +709,8 @@ func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsUnwrittenChapters 大纲内还有未写章节时
-// 不可完本(提前收束的正规路径是 final 收官卷)。
+// TestSaveFoundationCompleteBookRejectsUnwrittenChapters khi đề cương còn chương chưa
+// viết thì không được đóng sách (đường chính để khép sớm là tập kết final).
 func TestSaveFoundationCompleteBookRejectsUnwrittenChapters(t *testing.T) {
 	s := completeBookSetup(t)
 	if err := s.Progress.MarkChapterComplete(1, 3000, "", ""); err != nil {
@@ -729,7 +735,7 @@ func TestSaveFoundationCompleteBookRejectsUnwrittenChapters(t *testing.T) {
 }
 
 func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
-	// 规划阶段误调 complete_book 必须被拒，否则会直接跳过整本写作。
+	// Gọi complete_book nhầm ở giai đoạn quy hoạch phải bị từ chối, nếu không sẽ bỏ qua trọn cả quyển sách.
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -754,8 +760,9 @@ func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationVolumeEndRequiresReason 卷末三选一必须带判定理由——
-// 它是全书最重的语义判断，理由要成为审计事实而不是散在会话日志里。
+// TestSaveFoundationVolumeEndRequiresReason ba lựa chọn cuối tập phải kèm lý do phán
+// quyết — đây là phán đoán ngữ nghĩa nặng nhất của cả cuốn sách, lý do phải thành sự
+// thật được kiểm toán chứ không nằm rải rác trong nhật ký hội thoại.
 func TestSaveFoundationVolumeEndRequiresReason(t *testing.T) {
 	s := completeBookSetup(t)
 	tool := NewSaveFoundationTool(s)
