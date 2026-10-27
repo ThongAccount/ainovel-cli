@@ -583,6 +583,11 @@ def main(argv: list[str] | None = None) -> int:
         help="coi ký tự CJK trong comment Go cũng là vi phạm",
     )
     ap.add_argument(
+        "--comments-only",
+        action="store_true",
+        help="chỉ báo comment CJK, bỏ qua literal (tự bật --strict-comments)",
+    )
+    ap.add_argument(
         "--baseline",
         help="file baseline: literal đã biết được bỏ qua, literal mới thì đỏ",
     )
@@ -606,8 +611,9 @@ def main(argv: list[str] | None = None) -> int:
     os.chdir(root)
 
     denylist = [p for p in args.denylist.split("|") if p]
+    strict_comments = args.strict_comments or args.comments_only
     found, comments, scanned, skipped = scan(
-        args.scope, denylist, args.production, args.strict_comments
+        args.scope, denylist, args.production, strict_comments
     )
 
     if args.update_baseline:
@@ -618,6 +624,13 @@ def main(argv: list[str] | None = None) -> int:
 
     preserved = [l for l in found if l.kind == "preserved"]
     violations = [l for l in found if l.kind == "violation"]
+
+    if args.comments_only:
+        # Khi lọc theo comment thì literal không liên quan tới việc dịch
+        # comment nên bỏ khỏi báo cáo — nếu không, mỗi dòng "giữ nguyên" là
+        # nhiễu khiến người đọc tưởng còn việc phải làm.
+        violations = [l for l in violations if l.is_comment]
+        preserved = []
 
     known: list[Literal] = []
     new: list[Literal] = []
@@ -665,20 +678,32 @@ def main(argv: list[str] | None = None) -> int:
     for lit in known:
         print(f"[đã biết] {lit.path}:{lit.line}: {lit.body}")
     for lit in new:
-        print(f"{lit.path}:{lit.line}: chuỗi literal CJK còn sót: {lit.body}")
+        if args.comments_only:
+            print(f"{lit.path}:{lit.line}: comment CJK còn sót: {lit.body}")
+        else:
+            print(f"{lit.path}:{lit.line}: chuỗi literal CJK còn sót: {lit.body}")
     print("")
     print(
         "Đã quét %d file Go trong phạm vi đang bật, bỏ qua %d file được bảo vệ."
         % (scanned, skipped)
     )
-    print(
-        "Đã thấy %d literal CJK: %d giữ nguyên, %d đã biết, %d mới."
-        % (len(found), len(preserved), len(known), len(new))
-    )
+    if args.comments_only:
+        print(
+            "Đã thấy %d comment CJK: %d đã biết, %d mới."
+            % (len(known) + len(new), len(known), len(new))
+        )
+    else:
+        print(
+            "Đã thấy %d literal CJK: %d giữ nguyên, %d đã biết, %d mới."
+            % (len(found), len(preserved), len(known), len(new))
+        )
     if new:
         print(f"Phát hiện {len(new)} vi phạm CJK mới.")
         return 1
-    print("Không có chuỗi literal CJK mới.")
+    if args.comments_only:
+        print("Không có comment CJK mới.")
+    else:
+        print("Không có chuỗi literal CJK mới.")
     return 0
 
 

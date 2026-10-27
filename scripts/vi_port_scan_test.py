@@ -16,7 +16,9 @@ mất danh sách đã ghi nhận.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -184,6 +186,45 @@ class BaselineTest(unittest.TestCase):
                     any(lit.is_comment for lit in new),
                     "comment mới phải bị báo, không được grandfather",
                 )
+            finally:
+                os.chdir(cwd)
+
+    def test_comments_only_filters_literals_from_report(self):
+        """--comments-only chỉ báo comment, không báo literal.
+
+        Khi dịch backlog comment, mỗi dòng "giữ nguyên" của literal là nhiễu:
+        người đọc dễ tưởng còn việc phải làm.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = make_repo(Path(tmp))
+            cwd = os.getcwd()
+            os.chdir(repo)
+            try:
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    status = scan_mod.main(
+                        [
+                            "--scope",
+                            ".",
+                            "--production",
+                            "--comments-only",
+                            "--update-baseline",
+                            str(Path(tmp) / "baseline.json"),
+                        ]
+                    )
+                self.assertEqual(status, 0)
+                self.assertIn("Đã ghi baseline", buffer.getvalue())
+
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    status = scan_mod.main(
+                        ["--scope", ".", "--production", "--comments-only"]
+                    )
+                output = buffer.getvalue()
+                self.assertEqual(status, 1)  # chưa có baseline nên comment là mới
+                self.assertIn("comment CJK", output)
+                self.assertNotIn("还有中文", output)
+                self.assertNotIn("[giữ]", output)
             finally:
                 os.chdir(cwd)
 

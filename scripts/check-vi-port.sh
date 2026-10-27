@@ -33,6 +33,7 @@
 #   --production         chỉ quét mã production, bỏ qua file _test.go    [BẬT]
 #   --all-files          quét cả file _test.go (kèm backlog fixture/comment)
 #   --strict-comments    coi ký tự CJK trong comment Go cũng là vi phạm   [TẮT]
+#   --comments-only      chỉ báo comment CJK, bỏ qua literal (tự bật strict)
 #   --baseline <file>    file baseline dùng để grandfather literal đã biết
 #   --no-baseline        không dùng baseline — mọi literal sót đều là vi phạm
 #   --update-baseline [<file>]
@@ -80,6 +81,7 @@ TÙY CHỌN
   --production         chỉ quét mã production (bỏ qua _test.go)      [BẬT]
   --all-files          quét cả file _test.go
   --strict-comments    ký tự CJK trong comment Go cũng là vi phạm     [TẮT]
+  --comments-only      chỉ báo comment CJK, bỏ qua literal
   --baseline <file>    file baseline dùng để grandfather literal đã biết
   --no-baseline        không dùng baseline
   --update-baseline [<file>]
@@ -116,6 +118,7 @@ enable_c=1
 enable_d=1
 enable_e=1
 strict=0
+comments_only=0
 production=1
 baseline=""
 baseline_set=0
@@ -134,6 +137,7 @@ list_flags() {
 	printf '  --track-d  : %s  %s\n' "$([[ $enable_d -eq 1 ]] && echo BẬT || echo TẮT)" "$SCOPES_TRACK_D"
 	printf '  --production: %s\n' "$([[ $production -eq 1 ]] && echo BẬT || echo TẮT)"
 	printf '  --strict-comments: %s\n' "$([[ $strict -eq 1 ]] && echo BẬT || echo TẮT)"
+	printf '  --comments-only: %s\n' "$([[ $comments_only -eq 1 ]] && echo BẬT || echo TẮT)"
 	printf '  --baseline : %s\n' "${baseline:-<không có>}"
 	printf '\nĐường dẫn được bảo vệ (luôn bỏ qua):\n'
 	local entry
@@ -166,6 +170,11 @@ while [[ $# -gt 0 ]]; do
 	--production) production=1 ;;
 	--all-files) production=0 ;;
 	--strict-comments) strict=1 ;;
+	--comments-only)
+		# Chỉ báo comment CJK: tự bật strict và bỏ literal khỏi báo cáo.
+		strict=1
+		comments_only=1
+		;;
 	--baseline)
 		[[ $# -ge 2 ]] || { printf 'Thiếu đường dẫn file sau --baseline.\n' >&2; exit 2; }
 		baseline="$2"
@@ -256,6 +265,7 @@ cd "$ROOT"
 scan_args=(--scope $scopes --denylist "$PATHS_DENYLIST")
 [[ $production -eq 1 ]] && scan_args+=(--production)
 [[ $strict -eq 1 ]] && scan_args+=(--strict-comments)
+[[ $comments_only -eq 1 ]] && scan_args+=(--comments-only)
 [[ -n "$baseline" ]] && scan_args+=(--baseline "$baseline")
 
 if [[ -n "$update_baseline" ]]; then
@@ -267,6 +277,10 @@ if "$PYTHON_BIN" "$SCANNER" "${scan_args[@]}"; then
 	exit 0
 else
 	status=$?
-	printf '\nKiểm tra Việt hóa thất bại: còn chuỗi literal CJK trong phạm vi đang bật.\n' >&2
+	if [[ $comments_only -eq 1 ]]; then
+		printf '\nKiểm tra Việt hóa thất bại: còn comment CJK trong phạm vi đang bật.\n' >&2
+	else
+		printf '\nKiểm tra Việt hóa thất bại: còn chuỗi literal CJK trong phạm vi đang bật.\n' >&2
+	fi
 	exit "$status"
 fi
