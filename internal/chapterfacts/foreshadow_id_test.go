@@ -81,7 +81,7 @@ func TestPropertiesDescriptionsFollowWorkLanguage(t *testing.T) {
 		wantForesh string
 		wantID     string
 	}{
-		{"vi", "Tiêu đề cuối cùng", "Thao tác manh mối", "ID manh mối"},
+		{"vi", "Tiêu đề cuối cùng", "Thao tác phục bút", "ID phục bút"},
 		{"zh", "最终标题", "伏笔操作", "伏笔 ID"},
 	} {
 		t.Run(tc.lang, func(t *testing.T) {
