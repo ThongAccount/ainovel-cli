@@ -38,6 +38,7 @@
 #   --update-baseline [<file>]
 #                        ghi lại baseline hiện tại (mặc định: file baseline
 #                        đang dùng), dùng để ratchet backlog
+#   --self-test          chạy bộ test của chính cổng rồi thoát
 #   --list-flags         in danh sách cờ + đường dẫn được bảo vệ rồi thoát
 #   -h, --help           in phần trợ giúp này rồi thoát
 #
@@ -83,6 +84,7 @@ TÙY CHỌN
   --no-baseline        không dùng baseline
   --update-baseline [<file>]
                       ghi lại baseline hiện tại
+  --self-test          chạy bộ test của chính cổng rồi thoát
   --list-flags         in danh sách cờ + đường dẫn được bảo vệ
   -h, --help           in phần trợ giúp
 
@@ -118,6 +120,7 @@ production=1
 baseline=""
 baseline_set=0
 update_baseline=""
+self_test=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_BASELINE="$SCRIPT_DIR/vi-port-baseline.json"
@@ -180,6 +183,7 @@ while [[ $# -gt 0 ]]; do
 			shift
 		fi
 		;;
+	--self-test) self_test=1 ;;
 	--list-flags)
 		list_flags
 		exit 0
@@ -214,19 +218,29 @@ if [[ $enable_c -eq 1 ]]; then add_scopes "$SCOPES_TRACK_C"; fi
 if [[ $enable_d -eq 1 ]]; then add_scopes "$SCOPES_TRACK_D"; fi
 if [[ $enable_e -eq 1 ]]; then add_scopes "$SCOPES_TRACK_E"; fi
 
-if [[ -z "$scopes" ]]; then
-	printf 'Không có phạm vi nào được bật — dùng --list-flags để xem danh sách cờ.\n'
-	exit 0
-fi
-
 PYTHON_BIN=""
 if command -v python3 >/dev/null 2>&1; then
 	PYTHON_BIN="python3"
 elif command -v python >/dev/null 2>&1; then
 	PYTHON_BIN="python"
-else
+fi
+
+if [[ $self_test -eq 1 ]]; then
+	if [[ -z "$PYTHON_BIN" ]]; then
+		printf 'Thiếu python3 — cần python3 để chạy self-test của cổng.\n' >&2
+		exit 2
+	fi
+	exec "$PYTHON_BIN" "$SCRIPT_DIR/vi_port_scan_test.py"
+fi
+
+if [[ -z "$PYTHON_BIN" ]]; then
 	printf 'Thiếu python3 — cần python3 để kiểm tra literal CJK.\n' >&2
 	exit 2
+fi
+
+if [[ -z "$scopes" ]]; then
+	printf 'Không có phạm vi nào được bật — dùng --list-flags để xem danh sách cờ.\n'
+	exit 0
 fi
 
 SCANNER="$SCRIPT_DIR/vi_port_scan.py"

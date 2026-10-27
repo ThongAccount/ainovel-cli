@@ -45,6 +45,10 @@ jobs:
           GOWORK: "off"
         run: go test -buildvcs=false -count=1 ./...
 
+      - name: Vietnamese gate self-test
+        shell: bash
+        run: bash scripts/check-vi-port.sh --self-test
+
       - name: Vietnamese port check
         shell: bash
         run: bash scripts/check-vi-port.sh
