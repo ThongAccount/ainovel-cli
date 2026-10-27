@@ -53,6 +53,10 @@ jobs:
         shell: bash
         run: bash scripts/check-vi-port.sh
 
+      - name: Vietnamese test-file comment check
+        shell: bash
+        run: bash scripts/check-vi-port.sh --all --all-files --comments-only
+
       - name: Race test critical state paths
         if: runner.os == 'Linux'
         env:
