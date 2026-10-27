@@ -10,7 +10,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/stylestat"
 )
 
-// writerSmokeCase 是一个典型的 writer 第一章 smoke case，用于门禁测试。
+// writerSmokeCase là một smoke case điển hình cho chương đầu tiên của writer, dùng để kiểm thử cổng chặn.
 func writerSmokeCase() Case {
 	c := Case{
 		ID:          "writer_first_chapter",
@@ -25,11 +25,11 @@ func writerSmokeCase() Case {
 			NoPending:            []string{"pending_commit", "pending_steer"},
 		},
 	}
-	_ = c.Validate() // 填默认 max_severity
+	_ = c.Validate() // điền max_severity mặc định
 	return c
 }
 
-// cleanCollected 构造一个"一章正常完成"的采集结果（无 findings、无残留、契约齐备）。
+// cleanCollected dựng một kết quả thu thập "một chương hoàn thành bình thường" (không findings, không cặn sót, hợp đồng đầy đủ).
 func cleanCollected() Collected {
 	return Collected{
 		Dir:      "/fake",
@@ -54,10 +54,10 @@ func TestGradePassesCleanRun(t *testing.T) {
 	}
 }
 
-// 核心假设：writer 跳过 commit 必须被拦下。
+// Giả định cốt lõi: writer bỏ qua commit phải bị chặn.
 func TestGradeCatchesMissingCommit(t *testing.T) {
 	col := cleanCollected()
-	col.Checkpoints = col.Checkpoints[:2] // 去掉 commit
+	col.Checkpoints = col.Checkpoints[:2] // bỏ commit
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
 		t.Fatalf("缺 commit 应 FAIL，得到 %s", r.Outcome)
@@ -67,7 +67,7 @@ func TestGradeCatchesMissingCommit(t *testing.T) {
 	}
 }
 
-// 核心假设：pending 残留必须被拦下。
+// Giả định cốt lõi: phần pending còn sót phải bị chặn.
 func TestGradeCatchesPendingResidual(t *testing.T) {
 	col := cleanCollected()
 	col.Pending["pending_commit"] = true
@@ -80,10 +80,10 @@ func TestGradeCatchesPendingResidual(t *testing.T) {
 	}
 }
 
-// 核心假设：phase 不符必须被拦下。
+// Giả định cốt lõi: phase không khớp phải bị chặn.
 func TestGradeCatchesPhaseMismatch(t *testing.T) {
 	col := cleanCollected()
-	col.Progress.Phase = domain.PhaseOutline // 还没进入 writing
+	col.Progress.Phase = domain.PhaseOutline // chưa vào writing
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
 		t.Fatalf("phase 不符应 FAIL，得到 %s", r.Outcome)
@@ -102,7 +102,7 @@ func TestGradeMinChaptersNotMet(t *testing.T) {
 	}
 }
 
-// critical finding 触发 hard fail；warning finding 仅 WARN（默认 max_severity=warning）。
+// critical finding kích hoạt hard fail; warning finding chỉ WARN (mặc định max_severity=warning).
 func TestGradeFindingSeverity(t *testing.T) {
 	crit := cleanCollected()
 	crit.Report.Findings = []diag.Finding{{Rule: "PhaseFlowMismatch", Severity: diag.SevCritical, Title: "状态机异常"}}
@@ -117,7 +117,7 @@ func TestGradeFindingSeverity(t *testing.T) {
 		t.Fatalf("warning finding 应 WARN，得到 %s", r.Outcome)
 	}
 
-	// info finding 是信息性 Note，不应把干净的 case 推成 WARN。
+	// info finding là Note mang tính thông tin, không nên đẩy case sạch lên WARN.
 	info := cleanCollected()
 	info.Report.Findings = []diag.Finding{{Rule: "GhostCharacter", Severity: diag.SevInfo, Title: "角色长期未出场"}}
 	ri := Grade(writerSmokeCase(), info)
@@ -138,7 +138,7 @@ func TestGradeRuntimeErrorFails(t *testing.T) {
 	}
 }
 
-// 契约依赖工件读坏不能 false pass，必须 hard fail（fail-loud）。
+// Không đọc được artifact mà hợp đồng phụ thuộc thì không được false pass, phải hard fail (fail-loud).
 func TestGradeLoadErrorFails(t *testing.T) {
 	col := cleanCollected()
 	col.LoadErrors = []string{"pending_commit: unexpected end of JSON input"}
@@ -276,7 +276,7 @@ func cleanResult() Result {
 	return r
 }
 
-// TestCollectReadsCheckpoints 验证真实 store 读取路径：写入 checkpoint 后 Collect 能命中契约。
+// TestCollectReadsCheckpoints kiểm tra đường đọc store thật: sau khi ghi checkpoint, Collect phải khớp hợp đồng.
 func TestCollectReadsCheckpoints(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)

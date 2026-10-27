@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// findViolation 在结果中按 rule + target 查找第一条违规。
+// findViolation tìm vi phạm đầu tiên theo rule + target trong kết quả.
 func findViolation(vs []Violation, rule, target string) *Violation {
 	for i := range vs {
 		if vs[i].Rule == rule && vs[i].Target == target {
@@ -73,7 +73,7 @@ func TestCheck_FatigueWordsUnderLimit(t *testing.T) {
 }
 
 func TestCheck_FatigueWordsAtLimit(t *testing.T) {
-	// limit=1，actual=1 → 不违规
+	// limit=1, actual=1 → không vi phạm
 	text := "他不禁笑了。"
 	vs := Check(text, Structured{
 		FatigueWords: map[string]int{"不禁": 1},
@@ -112,7 +112,7 @@ func TestCheck_MultipleRulesAtOnce(t *testing.T) {
 	}
 	vs := Check(text, s)
 
-	// 应同时触发两类：forbidden_chars + fatigue_words
+	// phải kích hoạt cả hai loại: forbidden_chars + fatigue_words
 	rules := map[string]bool{}
 	for _, v := range vs {
 		rules[v.Rule] = true
@@ -123,7 +123,7 @@ func TestCheck_MultipleRulesAtOnce(t *testing.T) {
 }
 
 func TestCheck_FatigueZeroLimitSkipped(t *testing.T) {
-	// limit=0 是非法值，应跳过整条规则（parser 也会过滤，这里防御）
+	// limit=0 là giá trị không hợp lệ, phải bỏ qua cả quy tắc (parser cũng lọc, ở đây là phòng vệ)
 	text := "不禁不禁不禁"
 	vs := Check(text, Structured{
 		FatigueWords: map[string]int{"不禁": 0},
@@ -134,7 +134,7 @@ func TestCheck_FatigueZeroLimitSkipped(t *testing.T) {
 }
 
 func TestCheck_EmptyTargetsSkipped(t *testing.T) {
-	// 空字符串目标不应导致 false positive
+	// target rỗng không nên gây false positive
 	vs := Check("任何文本", Structured{
 		ForbiddenChars:   []string{""},
 		ForbiddenPhrases: []string{""},
