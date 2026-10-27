@@ -14,7 +14,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// References 嵌入的参考资料。
+// References là tài liệu tham khảo được nhúng vào.
 type References struct {
 	// V0
 	ChapterGuide      string
@@ -28,14 +28,14 @@ type References struct {
 	ContentExpansion string
 	DialogueWriting  string
 	// V2
-	StyleReference   string // 风格补充参考（可为空）
-	LongformPlanning string // 通用长篇规划参考
-	Differentiation  string // 通用差异化设计参考
-	ArcTemplates     string // 题材弧型模板（按 style 加载，可为空）
-	AntiAITone       string // 去 AI 味判据库（writer/editor 共用，全程注入）
+	StyleReference   string // tài liệu tham khảo bổ sung theo phong cách (có thể rỗng)
+	LongformPlanning string // tài liệu tham khảo quy hoạch truyện dài dùng chung
+	Differentiation  string // tài liệu tham khảo thiết kế khác biệt dùng chung
+	ArcTemplates     string // khuôn mẫu cung theo thể loại (nạp theo style, có thể rỗng)
+	AntiAITone       string // thư viện tiêu chí khửi mùi AI (writer/editor dùng chung, luôn chèn)
 }
 
-// ContextTool 组装当前章节所需上下文。
+// ContextTool lắp ráp ngữ cảnh cần thiết cho chương hiện tại.
 type ContextTool struct {
 	store      *store.Store
 	refs       References
@@ -71,9 +71,10 @@ func (r *contextReads) require(scope string, err error) {
 	r.err = fmt.Errorf("%s đọc thất bại: %w", scope, err)
 }
 
-// NewContextTool 创建上下文工具。styleStats 必须与 commit_chapter 共享，
-// 否则重写章节后上下文会继续读取旧统计。
-// user_rules 由 buildUserRules 直接读本书快照（meta/user_rules.json）注入，不再依赖加载选项。
+// NewContextTool tạo công cụ ngữ cảnh. styleStats bắt buộc phải dùng chung với
+// commit_chapter, nếu không thì sau khi viết lại chương, ngữ cảnh vẫn đọc thống kê cũ.
+// user_rules được buildUserRules chèn thẳng từ ảnh chụp của tác phẩm
+// (meta/user_rules.json), không còn phụ thuộc tùy chọn tải.
 func NewContextTool(
 	store *store.Store,
 	refs References,
@@ -93,7 +94,7 @@ func (t *ContextTool) Description() string {
 }
 func (t *ContextTool) Label() string { return t.texts().novelContextLabel }
 
-// 纯读工具，可被并发调度。
+// Công cụ chỉ đọc, có thể được lập lịch đồng thời.
 func (t *ContextTool) ReadOnly(_ json.RawMessage) bool        { return true }
 func (t *ContextTool) ConcurrencySafe(_ json.RawMessage) bool { return true }
 
@@ -115,30 +116,32 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 	reads := &contextReads{}
 
 	if a.Chapter > 0 {
-		// Writer 路径：加载全量基础数据 + 章节上下文
+		// Nhánh writer: tải toàn bộ dữ liệu nền tảng + ngữ cảnh chương
 		t.buildBaseContext(result, reads)
 		seed := newChapterContextEnvelope()
 		state := t.prepareChapterContext(a.Chapter, &seed, reads)
 		seed.apply(result)
 		t.buildChapterContext(result, state, reads)
-		// 该章的机械违规事实(commit 时按 user_rules 检查并落盘):
-		// editor 评审据此映射进七维(editor.md §机械检查映射);writer 返工时自查。
+		// Sự thật vi phạm cơ học của chương (được kiểm tra theo user_rules lúc commit
+		// rồi ghi xuống đĩa): biên tập viên ánh xạ chúng vào bảy chiều
+		// (editor.md §3b Quy tắc người dùng); người viết tự kiểm khi làm lại.
 		if violations := t.store.World.LoadRuleViolations(a.Chapter); len(violations) > 0 {
 			result["rule_violations"] = violations
 		}
-		// episodic 是已写入正文的备忘，不是待写素材。
+		// episodic là ghi chú đã viết vào nội dung truyện, không phải nguyên liệu chờ viết.
 		if epi, ok := result["episodic_memory"].(map[string]any); ok && len(epi) > 0 {
 			epi["_usage"] = "Conteneur này là ghi chú sự kiện đã viết vào văn bản chính (dùng để đối chiếu tính nhất quán và nối nối); trích lại nguyên bản nội dung này trong văn bản chương mới là lỗi trùng lặp"
 		}
 	} else {
-		// Architect 路径：只返回状态 + 结构化数据，不加载全量原文
+		// Nhánh architect: chỉ trả về trạng thái + dữ liệu có cấu trúc, không tải toàn bộ văn bản gốc
 		t.buildProgressStatus(result, reads)
 		t.buildArchitectContext(result, reads)
 	}
 
-	// 注入 working_memory.user_rules（canonical 路径）。架构师路径原本没有 working_memory，
-	// 由 buildUserRules 按需新建只装 user_rules 的容器。快照缺失时退到内置默认，
-	// 始终输出稳定结构，避免 LLM 看到 user_rules=null 走异常分支。
+	// Chèn working_memory.user_rules (đường canonical). Nhánh architect vốn không có
+	// working_memory, buildUserRules tạo mới container chỉ chứa user_rules khi cần.
+	// Khi thiếu ảnh chụp thì lùi về giá trị mặc định tích hợp, luôn cho ra cấu trúc
+	// ổn định để LLM không thấy user_rules=null rồi rẽ vào nhánh ngoại lệ.
 	if a.Chapter > 0 {
 		t.buildSimulationProfile(result, "working_memory", reads)
 	} else {
@@ -154,8 +157,9 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 		result["_warnings"] = reads.warnings
 	}
 
-	// 优先级预算：总大小超过阈值时裁剪低优先级数据；摘要在裁剪完成后重建，
-	// 确保展示的字段数量和 _trimmed 与最终 payload 一致。
+	// Ngân sách ưu tiên: khi tổng kích thước vượt ngưỡng thì cắt bớt dữ liệu ưu tiên thấp;
+	// phần tóm tắt được dựng lại sau khi cắt, đảm bảo số trường hiển thị và _trimmed
+	// khớp với payload cuối cùng.
 	budget := 60 * 1024
 	if a.Chapter > 0 {
 		budget = 100 * 1024
@@ -183,7 +187,8 @@ func finalizeContextPayload(result map[string]any, chapter, budget int) (json.Ra
 	return data, nil
 }
 
-// buildLoadingSummary 从已组装的 result 中统计各项数据量，生成一行可读摘要。
+// buildLoadingSummary thống kê khối lượng từng loại dữ liệu trong result đã lắp ráp,
+// sinh ra một dòng tóm tắt dễ đọc.
 func buildLoadingSummary(result map[string]any, chapter int) string {
 	var parts []string
 	working, _ := result["working_memory"].(map[string]any)
@@ -300,7 +305,7 @@ func buildLoadingSummary(result map[string]any, chapter int) string {
 	return strings.Join(parts, " | ")
 }
 
-// sliceLen 对 any 类型尝试取 slice 长度。
+// sliceLen thử lấy độ dài slice của một giá trị any.
 func sliceLen(v any) int {
 	switch s := v.(type) {
 	case []domain.ChapterSummary:
@@ -343,8 +348,9 @@ func firstSliceLen(values ...any) int {
 	return 0
 }
 
-// loadFilteredCharacters 按 Tier 和场景出场过滤角色。
-// core/important 始终返回；secondary/decorative 只在当前章节大纲提及时返回。
+// loadFilteredCharacters lọc nhân vật theo Tier và theo việc xuất hiện trong bối cảnh.
+// core/important luôn được trả về; secondary/decorative chỉ được trả về khi đề cương
+// chương hiện tại nhắc tới.
 func (t *ContextTool) loadFilteredCharacters(result map[string]any, chapter int, reads *contextReads) {
 	chars, err := t.store.Characters.Load()
 	if err != nil {
@@ -355,7 +361,7 @@ func (t *ContextTool) loadFilteredCharacters(result map[string]any, chapter int,
 		return
 	}
 
-	// 获取当前章节大纲的场景描述，用于匹配次要角色
+	// Lấy mô tả bối cảnh trong đề cương chương hiện tại, dùng để khớp nhân vật phụ
 	entry, err := t.store.Outline.GetChapterOutline(chapter)
 	if err != nil {
 		reads.require("current_chapter_outline", err)
@@ -375,14 +381,15 @@ func (t *ContextTool) loadFilteredCharacters(result map[string]any, chapter int,
 			if matchCharacter(sceneText, c) {
 				filtered = append(filtered, c)
 			}
-		default: // core, important, 或未设置
+		default: // core, important, hoặc chưa đặt
 			filtered = append(filtered, c)
 		}
 	}
 	result["characters"] = filtered
 }
 
-// matchCharacter 检查场景文本中是否包含角色的正式名或任一别名。
+// matchCharacter kiểm tra văn bản bối cảnh có chứa tên chính thức hay bất kỳ bí danh
+// nào của nhân vật không.
 func matchCharacter(text string, c domain.Character) bool {
 	if strings.Contains(text, c.Name) {
 		return true
@@ -395,7 +402,8 @@ func matchCharacter(text string, c domain.Character) bool {
 	return false
 }
 
-// loadLayeredSummaries 分层摘要加载：卷摘要 + 当前卷弧摘要 + 弧内章摘要。
+// loadLayeredSummaries tải tóm tắt phân tầng: tóm tắt tập + tóm tắt cung của tập
+// hiện tại + tóm tắt chương trong cung.
 func (t *ContextTool) loadLayeredSummaries(result map[string]any, chapter, summaryWindow int, reads *contextReads) {
 	vol, arc, err := t.store.Outline.LocateChapter(chapter)
 	if err != nil {
@@ -403,14 +411,14 @@ func (t *ContextTool) loadLayeredSummaries(result map[string]any, chapter, summa
 		return
 	}
 
-	// 1. 已完成卷的卷摘要
+	// 1. Tóm tắt tập của các tập đã hoàn thành
 	if volSummaries, err := t.store.Summaries.LoadAllVolumeSummaries(); err == nil && len(volSummaries) > 0 {
 		result["volume_summaries"] = volSummaries
 	} else {
 		reads.require("volume_summaries", err)
 	}
 
-	// 2. 当前卷内已完成弧的弧摘要（不含当前弧）
+	// 2. Tóm tắt cung của các cung đã hoàn thành trong tập hiện tại (không gồm cung hiện tại)
 	if arcSummaries, err := t.store.Summaries.LoadArcSummaries(vol); err == nil && len(arcSummaries) > 0 {
 		var prior []domain.ArcSummary
 		for _, s := range arcSummaries {
@@ -425,7 +433,7 @@ func (t *ContextTool) loadLayeredSummaries(result map[string]any, chapter, summa
 		reads.require("arc_summaries", err)
 	}
 
-	// 3. 当前弧内最近 N 章的章摘要
+	// 3. Tóm tắt chương của N chương gần nhất trong cung hiện tại
 	if summaries, err := t.store.Summaries.LoadRecentSummaries(chapter, summaryWindow); err == nil && len(summaries) > 0 {
 		result["recent_summaries"] = summaries
 	} else {
@@ -433,21 +441,24 @@ func (t *ContextTool) loadLayeredSummaries(result map[string]any, chapter, summa
 	}
 }
 
-// loadLayeredCharacters Layered 模式下的角色加载：优先用最近快照，回退到原始设定 + Tier 过滤。
+// loadLayeredCharacters tải nhân vật ở chế độ Layered: ưu tiên ảnh chụp gần nhất,
+// lùi về thiết lập gốc + lọc theo Tier.
 func (t *ContextTool) loadLayeredCharacters(result map[string]any, chapter int, reads *contextReads) {
 	snapshots, err := t.store.Characters.LoadLatestSnapshots()
 	if err == nil && len(snapshots) > 0 {
 		result["character_snapshots"] = snapshots
-		// 同时保留原始设定中的 core/important 角色（快照可能不含新登场角色）
+		// Vẫn giữ các nhân vật core/important trong thiết lập gốc (ảnh chụp có thể không có
+		// nhân vật mới xuất hiện)
 		t.loadFilteredCharacters(result, chapter, reads)
 		return
 	}
 	reads.require("character_snapshots", err)
-	// 无快照时回退到原始设定
+	// Không có ảnh chụp thì lùi về thiết lập gốc
 	t.loadFilteredCharacters(result, chapter, reads)
 }
 
-// writerReferences 返回写作参考资料。章节 1 返回全量，后续章节裁剪掉不再需要的模板。
+// writerReferences trả về tài liệu tham khảo cho việc viết. Chương 1 trả về toàn bộ,
+// các chương sau cắt bớt những template không còn cần.
 func (t *ContextTool) writerReferences(chapter int) map[string]string {
 	refs := map[string]string{}
 	add := func(k, v string) {
@@ -455,18 +466,18 @@ func (t *ContextTool) writerReferences(chapter int) map[string]string {
 			refs[k] = v
 		}
 	}
-	// 渐进式加载：始终保留核心参考，前 3 章额外加载完整写作指南
+	// Tải tiện dần: luôn giữ phần tham khảo lõi, 3 chương đầu còn tải thêm hướng dẫn viết đầy đủ
 	add("consistency", t.refs.Consistency)
 	add("hook_techniques", t.refs.HookTechniques)
 	add("quality_checklist", t.refs.QualityChecklist)
-	add("anti_ai_tone", t.refs.AntiAITone) // 去 AI 味判据全程注入，不随章节裁剪
+	add("anti_ai_tone", t.refs.AntiAITone) // tiêu chí khửi mùi AI luôn được chèn đầy đủ, không bị cắt bớt theo chương
 	if chapter <= 3 {
 		add("chapter_guide", t.refs.ChapterGuide)
 		add("dialogue_writing", t.refs.DialogueWriting)
 		add("style_reference", t.refs.StyleReference)
 	}
 
-	// 仅首章加载的补充参考
+	// Tài liệu tham khảo bổ sung chỉ được tải ở chương đầu
 	if chapter <= 1 {
 		add("chapter_template", t.refs.ChapterTemplate)
 		add("content_expansion", t.refs.ContentExpansion)
@@ -487,14 +498,16 @@ func (t *ContextTool) architectReferences() map[string]string {
 	add("differentiation", t.refs.Differentiation)
 	add("style_reference", t.refs.StyleReference)
 	add("arc_templates", t.refs.ArcTemplates)
-	add("anti_ai_tone", t.refs.AntiAITone) // architect 大纲去 AI 腔；亦兜 editor 走 Chapter=0 路径
+	add("anti_ai_tone", t.refs.AntiAITone) // dàn ý của architect khửi mùi AI; cũng phủ cho editor đi theo nhánh Chapter=0
 	return refs
 }
 
-// foundationStatus 检查基础设定的完备性，返回缺失项列表。
-// 与 save_foundation 工具共用 store.FoundationMissing 判定逻辑，保证 LLM 从
-// novel_context 看到的 ready/missing 与 save_foundation 返回的 foundation_ready
-// 永远一致（长篇 compass 必需项等细节不会漂移）。
+// foundationStatus kiểm tra độ đầy đủ của thiết lập nền tảng, trả về danh sách phần
+// còn thiếu.
+// Dùng chung logic phán quyết store.FoundationMissing với công cụ save_foundation, bảo
+// đảm ready/missing mà LLM thấy từ novel_context luôn khớp với foundation_ready mà
+// save_foundation trả về (các chi tiết như mục bắt buộc của compass trong tiểu thuyết
+// dài không bị trôi lệch).
 func (t *ContextTool) foundationStatus() (map[string]any, error) {
 	missing, err := t.store.FoundationMissing()
 	if err != nil {
@@ -519,16 +532,19 @@ func (t *ContextTool) foundationStatus() (map[string]any, error) {
 	return status, nil
 }
 
-// trimByBudget 按优先级裁剪 result，使 JSON 总大小不超过 budget 字节。
-// 优先级（从低到高）：references < voice_samples < style_anchors < previous_tail < timeline
+// trimByBudget cắt bớt result theo mức ưu tiên để tổng kích thước JSON không vượt budget
+// byte.
+// Mức ưu tiên (từ thấp đến cao): references < voice_samples < style_anchors < previous_tail
+// < timeline
 //
-//	< recent_state_changes < foreshadow_ledger < relationship_state < 其余（不裁剪）
+//	< recent_state_changes < foreshadow_ledger < relationship_state < phần còn lại (không cắt)
 //
-// style_stats 是体积有界的全书级核心信号，不参与裁剪。
+// style_stats là tín hiệu lõi ở cấp toàn truyện với thể tích có kiểm soát, không tham gia
+// cắt bớt.
 //
-// 裁剪的 key 会记录到 result["_trimmed"] 供日志排查。
+// Các key bị cắt được ghi lại vào result["_trimmed"] để truy khi trong nhật ký.
 func trimByBudget(result map[string]any, budget int) error {
-	// 先测量当前大小
+	// Đo kích thước hiện tại trước
 	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("measure context payload: %w", err)
@@ -537,7 +553,7 @@ func trimByBudget(result map[string]any, budget int) error {
 		return nil
 	}
 
-	// 按优先级从低到高列出可裁剪的 key
+	// Liệt kê các key có thể cắt theo mức ưu tiên từ thấp đến cao
 	trimOrder := []string{
 		"references",
 		"voice_samples",
@@ -591,9 +607,11 @@ func deleteContextKey(result map[string]any, key string) bool {
 	return deleted
 }
 
-// buildRelatedChapters 根据结构化数据反查与当前章相关的历史章节。
-// 从伏笔、角色出场、状态变化、关系四个维度推荐，去重后最多返回 5 条。
-// 所有数据通过参数传入，不做额外 IO。
+// buildRelatedChapters dựa trên dữ liệu có cấu trúc để tra ngược các chương trước liên
+// quan tới chương hiện tại.
+// Đề xuất theo bốn chiều: phục bút, nhân vật xuất hiện, thay đổi trạng thái, quan hệ;
+// khử trùng lặp rồi trả về tối đa 5 mục.
+// Mọi dữ liệu đều truyền qua tham số, không thực hiện IO bổ sung.
 func (t *ContextTool) buildRelatedChapters(
 	chapter int,
 	entry *domain.OutlineEntry,
@@ -611,7 +629,7 @@ func (t *ContextTool) buildRelatedChapters(
 		if ch <= 0 || ch >= chapter {
 			return
 		}
-		// 最近几章太近，不推荐
+		// Mấy chương gần nhất quá gần, không đề xuất
 		if ch > chapter-recentWindow {
 			return
 		}
@@ -622,13 +640,14 @@ func (t *ContextTool) buildRelatedChapters(
 		results = append(results, domain.RelatedChapter{Chapter: ch, Reason: reason})
 	}
 
-	// 拼接大纲文本用于关键词匹配
+	// Ghép văn bản đề cương để khớp từ khoá
 	outlineText := entry.Title + " " + entry.CoreEvent
 	for _, s := range entry.Scenes {
 		outlineText += " " + s
 	}
 
-	// 1. 伏笔反查：活跃伏笔的描述是否与当前章大纲相关
+	// 1. Tra ngược phục bút: mô tả của phục bút đang hoạt động có liên quan tới đề cương
+	// chương hiện tại không
 	for _, f := range foreshadow {
 		if strings.Contains(outlineText, f.ID) || containsAny(outlineText, strings.Fields(f.Description)) {
 			add(f.PlantedAt, fmt.Sprintf("Phục bút%s(%s) đã cấy tại chương", f.ID, truncateRunes(f.Description, 15)))
@@ -638,7 +657,8 @@ func (t *ContextTool) buildRelatedChapters(
 		}
 	}
 
-	// 2. 角色出场反查：批量单次遍历，IO 从 O(角色数×章节数) 降为 O(章节数)
+	// 2. Tra ngược nhân vật xuất hiện: quét hàng loạt trong một lượt, IO từ
+	// O(số nhân vật×số chương) giảm còn O(số chương)
 	chars, err := t.store.Characters.Load()
 	if err != nil {
 		reads.warn("related_chapters.characters", err)
@@ -659,7 +679,7 @@ func (t *ContextTool) buildRelatedChapters(
 		}
 	}
 
-	// 3. 状态变化反查：在已加载的 slice 上操作，零 IO
+	// 3. Tra ngược thay đổi trạng thái: thao tác trên slice đã tải, không tốn IO
 	for _, name := range outlineChars {
 		if len(results) >= maxResults {
 			break
@@ -670,7 +690,8 @@ func (t *ContextTool) buildRelatedChapters(
 		}
 	}
 
-	// 4. 关系反查：当前章涉及的角色对之间关系最后变化
+	// 4. Tra ngược quan hệ: lần thay đổi quan hệ gần nhất giữa các cặp nhân vật liên quan
+	// tới chương hiện tại
 	if len(relationships) > 0 && len(outlineChars) >= 2 {
 		charSet := make(map[string]struct{}, len(outlineChars))
 		for _, c := range outlineChars {
@@ -691,7 +712,8 @@ func (t *ContextTool) buildRelatedChapters(
 	return results
 }
 
-// findLastStateChange 在已加载的状态变化列表中查找实体最近一次变化的章节号。
+// findLastStateChange tìm số chương của lần thay đổi gần nhất của một thực thể trong
+// danh sách thay đổi trạng thái đã tải.
 func findLastStateChange(changes []domain.StateChange, entity string, currentChapter int) int {
 	for i := len(changes) - 1; i >= 0; i-- {
 		if changes[i].Entity == entity && changes[i].Chapter < currentChapter {
@@ -701,7 +723,7 @@ func findLastStateChange(changes []domain.StateChange, entity string, currentCha
 	return 0
 }
 
-// matchOutlineCharacters 从大纲文本中匹配出场角色名。
+// matchOutlineCharacters khớp tên nhân vật xuất hiện từ văn bản đề cương.
 func matchOutlineCharacters(text string, chars []domain.Character) []string {
 	var matched []string
 	for _, c := range chars {
@@ -719,7 +741,8 @@ func matchOutlineCharacters(text string, chars []domain.Character) []string {
 	return matched
 }
 
-// containsAny 检查 text 是否包含 words 中的任一词（至少 2 字才匹配，避免噪音）。
+// containsAny kiểm tra text có chứa bất kỳ từ nào trong words không (từ nào dưới 2 ký
+// tự thì không khớp, để tránh nhiễu).
 func containsAny(text string, words []string) bool {
 	for _, w := range words {
 		if len([]rune(w)) >= 2 && strings.Contains(text, w) {
@@ -740,7 +763,7 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 	const maxThreads = 5
 	var items []domain.RecallItem
 	seen := make(map[string]struct{})
-	picked := make(map[string]struct{}) // 已选中的伏笔 ID，供账龄回填去重
+	picked := make(map[string]struct{}) // ID phục bút đã chọn, dùng để khửi trùng lặp khi lấp đầy tuổi treo
 	add := func(item domain.RecallItem) {
 		key := item.Kind + "|" + item.Key + "|" + item.Summary
 		if _, ok := seen[key]; ok {
@@ -751,7 +774,7 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 		items = append(items, item)
 	}
 
-	// 1. 相关性召回：与当前章 focus 词重叠的伏笔。
+	// 1. Gọi lại theo mức liên quan: các phục bút có từ focus của chương hiện tại trùng lặp.
 	focusTerms := recallFocusTerms(state.currentEntry, state.chapterPlan)
 	focusText := strings.Join(focusTerms, " ")
 	for _, entry := range state.foreshadow {
@@ -770,8 +793,10 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 		}
 	}
 
-	// 2. 账龄回填：与当前章无关、但久挂未回收的伏笔（最旧优先），补足剩余名额。
-	//    补的是相关性召回天然的盲区——独自悬挂太久、却没在本章撞上关键词的那根线。
+	// 2. Lấp đầy theo tuổi treo: các phục bút không liên quan tới chương hiện tại nhưng đã
+	//    treo quá lâu chưa được thu hồi (cũ nhất trước), lấp đủ số suất còn lại.
+	//    Đây chính là vùng mù mà gọi lại theo mức liên quan không thấy — tuyến treo một
+	//    mình quá lâu mà không chạm từ khoá ở chương này.
 	for _, entry := range agingForeshadow(state.foreshadow, state.chapter, picked) {
 		add(domain.RecallItem{
 			Kind:    "story_thread",
@@ -788,8 +813,10 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 	return items
 }
 
-// agingForeshadow 返回账龄 ≥ foreshadowAgingChapters 的未回收伏笔，按最旧优先排序，
-// 跳过 picked 中已被相关性召回选中的。入参 all 已是 active（未回收）列表，故无需再过滤状态。
+// agingForeshadow trả về các phục bút chưa thu hồi có tuổi treo ≥
+// foreshadowAgingChapters, sắp xếp cũ nhất trước, bỏ qua những cái đã được gọi lại theo
+// mức liên quan chọn trong picked.
+// Tham số all vốn đã là danh sách active (chưa thu hồi) nên không cần lọc lại trạng thái.
 func agingForeshadow(all []domain.ForeshadowEntry, chapter int, picked map[string]struct{}) []domain.ForeshadowEntry {
 	var aging []domain.ForeshadowEntry
 	for _, e := range all {
@@ -945,10 +972,13 @@ func hasMeaningfulOverlap(a, b string) bool {
 const storyThreadRecallThreshold = 6
 const storyThreadRecallMinSelected = 2
 
-// foreshadowAgingChapters：一条伏笔自埋设起超过这么多章仍未回收，视为"久挂"。
-// 这类伏笔即使与当前章关键词无关，也回填进 story_threads，避免长篇里被彻底遗忘
-// （相关性召回天然只看见与本章相关的线，看不见独自悬挂太久的那根）。
-// 账龄是纯代码派生的事实（当前章 - 埋设章），只陈述"已挂 N 章未回收"，不下指令。
+// foreshadowAgingChapters: một phục bút kể từ lúc gieo mà quá nhiêu chương vẫn chưa được
+// thu hồi thì bị coi là "treo lâu".
+// Loại phục bút này, dù không liên quan tới từ khoá chương hiện tại, vẫn được lấp đầy vào
+// story_threads để khỏi bị quên hẳn trong tiểu thuyết dài (gọi lại theo mức liên quan
+// vốn chỉ thấy các tuyến liên quan chương, không thấy tuyến treo một mình quá lâu).
+// Tuổi treo là sự thật thuần do code suy ra (chương hiện tại - chương gieo), chỉ nêu
+// "đã treo N chương chưa thu hồi", không đưa ra mệnh lệnh.
 const foreshadowAgingChapters = 30
 
 func longestCommonSubstringRunes(a, b []rune) int {
@@ -973,7 +1003,7 @@ func longestCommonSubstringRunes(a, b []rune) int {
 	return best
 }
 
-// truncateRunes 截断字符串到指定 rune 数。
+// truncateRunes cắt ngắn chuỗi còn đúng số rune đã chỉ định.
 func truncateRunes(s string, maxRunes int) string {
 	runes := []rune(s)
 	if len(runes) <= maxRunes {

@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// SaveBookTool 保存作品对外信息，Architect 专用。
+// SaveBookTool lưu thông tin công khai của tác phẩm, dành riêng cho Architect.
 type SaveBookTool struct{ store *store.Store }
 
 func NewSaveBookTool(store *store.Store) *SaveBookTool { return &SaveBookTool{store: store} }

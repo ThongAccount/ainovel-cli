@@ -14,7 +14,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// SaveVolumeSummaryTool 保存卷级摘要，Editor 在卷结束时调用。
+// SaveVolumeSummaryTool lưu tóm tắt cấp tập, biên tập viên gọi khi kết thúc một tập.
 type SaveVolumeSummaryTool struct {
 	store *store.Store
 }
@@ -30,7 +30,7 @@ func (t *SaveVolumeSummaryTool) Description() string {
 }
 func (t *SaveVolumeSummaryTool) Label() string { return t.texts().saveVolumeSummaryLabel }
 
-// 写工具，禁止并发。
+// Công cụ ghi, không cho chạy đồng thời.
 func (t *SaveVolumeSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveVolumeSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
@@ -90,9 +90,11 @@ func (t *SaveVolumeSummaryTool) Execute(_ context.Context, args json.RawMessage)
 	}
 
 	result := map[string]any{"saved": true, "type": "volume_summary", "volume": a.Volume}
-	// 收官主路径的完结触发点：卷末收尾三连的最后一块拼图是卷摘要，落盘后若全书已
-	// 满足完结条件则就地 MarkComplete（完结检查始终发生在最后一块事实落地的工具里，
-	// 与 commit_chapter 同一模式；谓词见 commit_chapter.go 的 layeredComplete）。
+	// Điểm kích hoạt hoàn thành trên đường chính lúc chốt tập: mảnh ghép cuối cùng
+	// của bộ ba phần kết tập chính là tóm tắt tập; sau khi ghi xuống đĩa, nếu cả tác
+	// phẩm đã thoả điều kiện hoàn thành thì tại chỗ gọi MarkComplete (việc kiểm tra
+	// hoàn thành luôn nằm ở công cụ ghi sự thật cuối cùng, cùng kiểu với commit_chapter;
+	// vị từ xem layeredComplete trong commit_chapter.go).
 	complete, err := ReconcileLayeredCompletion(t.store)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile book completion: %w", err)

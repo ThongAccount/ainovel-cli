@@ -16,7 +16,8 @@ import (
 	"github.com/voocel/ainovel-cli/internal/store"
 )
 
-// SaveArcSummaryTool 保存弧级摘要、角色快照和写作规则，Editor 在弧结束时调用。
+// SaveArcSummaryTool lưu tóm tắt cấp cung, ảnh chụp nhân vật và quy tắc viết, biên tập
+// viên gọi khi kết thúc một cung.
 type SaveArcSummaryTool struct {
 	store *store.Store
 }
@@ -32,7 +33,7 @@ func (t *SaveArcSummaryTool) Description() string {
 }
 func (t *SaveArcSummaryTool) Label() string { return t.texts().saveArcSummaryLabel }
 
-// 写工具，禁止并发。
+// Công cụ ghi, không cho chạy đồng thời.
 func (t *SaveArcSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveArcSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
@@ -121,8 +122,9 @@ func (t *SaveArcSummaryTool) Execute(_ context.Context, args json.RawMessage) (j
 			return nil, fmt.Errorf("save style rules: %w: %w", errs.ErrStoreWrite, err)
 		}
 
-		// 弧摘要是 Router 的完成标记，作为最后一个语义工件写入。此前任一步
-		// 失败时摘要保持缺失，恢复后 Router 仍会重派本任务。
+		// Tóm tắt cung là dấu hiệu hoàn thành của bộ định tuyến, được ghi như artifact ngữ
+		// nghĩa cuối cùng. Nếu bước trước đó hỏng thì tóm tắt vẫn còn thiếu, sau khi khôi
+		// phục bộ định tuyến vẫn phân việc lại nhiệm vụ này.
 		if err := t.store.Summaries.SaveArcSummary(arcSummary); err != nil {
 			return nil, fmt.Errorf("save arc summary: %w: %w", errs.ErrStoreWrite, err)
 		}
@@ -148,8 +150,10 @@ func (t *SaveArcSummaryTool) Execute(_ context.Context, args json.RawMessage) (j
 	})
 }
 
-// arcSummaryReplay 只放行内容完全相同的幂等收尾，用于语义工件已落盘但
-// checkpoint 追加失败的重试。任何差异都显式冲突，不能借重试覆盖历史聚合事实。
+// arcSummaryReplay chỉ cho phép phần đuôi idempotent có nội dung hoàn toàn giống nhau,
+// dùng cho lần thử lại khi artifact ngữ nghĩa đã ghi xuống đĩa nhưng thêm checkpoint
+// thất bại. Bất kỳ khác biệt nào đều là xung đột tường minh, không được nhân cơ hội thử
+// lại để ghi đè các sự thật tổng hợp trong lịch sử.
 func (t *SaveArcSummaryTool) arcSummaryReplay(
 	summary domain.ArcSummary,
 	snapshots []domain.CharacterSnapshot,
